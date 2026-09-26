@@ -67,31 +67,46 @@ Vector3 perpendicular(const Vector3& n) {
 
 // ---------------------------------------------------------------------------
 void reduceManifold(std::vector<ContactPoint>& pts, size_t maxPoints) {
+    // As Jolt's PruneContactPoints / Bullet's sortCachedPoints: 1) the deepest point - among
+    // points equally deep (flat contact) the one farthest from the centre of the region, a corner,
+    // 2) the point farthest from it, 3) the point farthest from their line on one side, 4) the
+    // farthest on the other side (signed area about the contact normal) - the quadrilateral keeps
+    // the deepest point and spans the support region whatever order the points came in.
     if (pts.size() <= maxPoints) return;
-    std::vector<ContactPoint> out;
+    Vector3 centre(0.0f);
+    float maxDepth = -kInf;
+    for (const ContactPoint& p : pts) {
+        centre += p.position;
+        maxDepth = std::max(maxDepth, p.depth);
+    }
+    centre /= float(pts.size());
+    const float tie = 1e-4f * std::fabs(maxDepth) + 1e-6f; // equal up to rounding: a flat contact
     size_t i0 = 0;
-    for (size_t i = 1; i < pts.size(); ++i)
-        if (pts[i].depth > pts[i0].depth) i0 = i;
-    out.push_back(pts[i0]);
+    float far0 = -1;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        if (pts[i].depth < maxDepth - tie) continue;
+        const float d = length2(pts[i].position - centre);
+        if (d > far0) { far0 = d; i0 = i; }
+    }
     size_t i1 = i0;
     float best = -1;
     for (size_t i = 0; i < pts.size(); ++i) {
         float d = length2(pts[i].position - pts[i0].position);
         if (d > best) { best = d; i1 = i; }
     }
+    std::vector<ContactPoint> out = {pts[i0]};
     if (i1 != i0) out.push_back(pts[i1]);
-    auto area = [&](const Vector3& a, const Vector3& b, const Vector3& c) { return length(cross(b - a, c - a)); };
-    while (out.size() < maxPoints) {
-        size_t bi = pts.size();
-        float ba = 1e-9f;
+    if (maxPoints >= 4 && i1 != i0) {
+        const Vector3 n = pts[i0].normal, a = pts[i0].position, b = pts[i1].position;
+        size_t left = pts.size(), right = pts.size();
+        float maxLeft = 1e-9f, maxRight = -1e-9f;
         for (size_t i = 0; i < pts.size(); ++i) {
-            float s = 0;
-            for (size_t k = 0; k < out.size(); ++k)
-                s += area(out[k].position, out[(k + 1) % out.size()].position, pts[i].position);
-            if (s > ba) { ba = s; bi = i; }
+            const float s = dot(cross(b - a, pts[i].position - a), n); // twice the signed triangle area
+            if (s > maxLeft) { maxLeft = s; left = i; }
+            if (s < maxRight) { maxRight = s; right = i; }
         }
-        if (bi == pts.size()) break;
-        out.push_back(pts[bi]);
+        if (left != pts.size()) out.push_back(pts[left]);
+        if (right != pts.size()) out.push_back(pts[right]);
     }
     pts.swap(out);
 }
@@ -330,7 +345,6 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
     std::vector<Vector3> inc = refIsB ? fa : fb;
     Vector3 nr = faceNormal(ref);
     if (dot(nr, refIsB ? n : -n) < 0) nr = -nr; // reference normal pointing towards the other shape
-    float offset = dot(nr, ref[0]);
     Vector3 c(0.0f);
     for (const Vector3& r : ref) c += r;
     c /= float(ref.size());
@@ -352,11 +366,15 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
             inc.clear();
         }
     }
+    // Depth of every clipped point along the contact normal n, from the other shape's supporting
+    // plane along n (not along the reference face's own normal, which may differ by up to ~25 deg):
+    // then the deepest point is exactly the EPA penetration, and all depths agree with n.
+    const float planeB = dot(n, B.support(n)), planeA = dot(n, A.support(-n));
     bool any = false;
     for (const Vector3& x : inc) {
-        float sep = dot(nr, x) - offset;
-        if (sep > margin) continue;
-        pts.push_back({x - nr * (0.5f * sep), n, -sep});
+        const float depth = refIsB ? planeB - dot(n, x) : dot(n, x) - planeA; // incident points: A's (ref B) or B's (ref A)
+        if (depth < -margin) continue;
+        pts.push_back({x + n * (refIsB ? 0.5f * depth : -0.5f * depth), n, depth}); // midway between the surfaces
         any = true;
     }
     return any;

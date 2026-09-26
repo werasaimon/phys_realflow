@@ -1927,6 +1927,8 @@ static void testMagnetosphere() {
     CHECK(g.magnetic.maxDivergence() < 1e-5f && std::isfinite(g.magnetic.energy()), "field broken");
 }
 
+#include "HardContactTests.h" // industry-hard contact cases (uses CHECK and maxOverlap above)
+
 static void testSimulationPresets() {
     Simulation sim;
     for (int p = 0; p < int(Preset::Count); ++p) {
@@ -1962,6 +1964,8 @@ int main() {
     run("GJK robustness on thin boxes", testGjkRandomThin);
     run("CCD for a fast-spinning plate", testCcdSpinningPlate);
     run("long beam onto cubes (no pass-through)", testBeamOverCubes);
+    run("hard contacts: edge-edge, rotated faces, 1:1000, deep EPA vs SAT", testHardContacts);
+    run("hard contacts in motion: triangle seams, Jenga tower, edge drop", testHardContactDynamics);
     run("convex hull + convex decomposition (teapot)", testConvexHullAndDecomposition);
     run("100 non-convex teapots", testTeapots);
     run("particles rest", testSPH);
