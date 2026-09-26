@@ -124,11 +124,14 @@ void MagneticField::computeCurrent() {
 
 void MagneticField::computeElectricField(const Field3& u, const Field3& v, const Field3& w, float density) {
     // Ohm's law on every free edge: E = -u x B + eta_eff curl B, with u and B averaged onto the
-    // edge; eta_eff = eta + upwind dissipation (|u| + v_A) dx x factor.
+    // edge; eta_eff = eta + upwind dissipation factor |u| dx (the advection of B by the flow is
+    // what needs it; the Alfven waves are stable without - the Lorentz force and Faraday's law
+    // are stepped one after the other, symplectically). Keeping v_A out of it keeps the field
+    // frozen in near a strong magnet, where v_A is large.
     updateTotal();
     const Field3 &bx = tbx_, &by = tby_, &bz = tbz_; // the whole field B0 + B1 (the current: B1 only)
     const float eta = resistivity(), f = numericalDissipation * dx_;
-    auto etaEff = [&](float speed2, float field2) { return eta + f * (std::sqrt(speed2) + alfvenSpeed(field2, density)); };
+    auto etaEff = [&](float a, float b) { return eta + f * std::sqrt(a * a + b * b); }; // |u| on the edge
     parallelFor(nz_ + 1, [&](int k) {
         for (int j = 0; j <= ny_; ++j)
             for (int i = 0; i <= nx_; ++i) {
@@ -138,9 +141,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float vE = 0.5f * (v.at(i, j, k - 1) + v.at(i, j, k)), ByE = 0.5f * (by.at(i, j, k - 1) + by.at(i, j, k));
                         const float wE = 0.5f * (w.at(i, j - 1, k) + w.at(i, j, k)), BzE = 0.5f * (bz.at(i, j - 1, k) + bz.at(i, j, k));
-                        const float BxE = 0.125f * (bx.at(i, j - 1, k - 1) + bx.at(i, j, k - 1) + bx.at(i, j - 1, k) + bx.at(i, j, k) +
-                                                    bx.at(i + 1, j - 1, k - 1) + bx.at(i + 1, j, k - 1) + bx.at(i + 1, j - 1, k) + bx.at(i + 1, j, k));
-                        ex_.d[e] = -(vE * BzE - wE * ByE) + etaEff(vE * vE + wE * wE, BxE * BxE + ByE * ByE + BzE * BzE) * kMu0 * jx_.d[e];
+                        ex_.d[e] = -(vE * BzE - wE * ByE) + etaEff(vE, wE) * kMu0 * jx_.d[e];
                     }
                 }
                 if (j < ny_) { // y-edge (i, j+1/2, k)
@@ -149,9 +150,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float wE = 0.5f * (w.at(i - 1, j, k) + w.at(i, j, k)), BzE = 0.5f * (bz.at(i - 1, j, k) + bz.at(i, j, k));
                         const float uE = 0.5f * (u.at(i, j, k - 1) + u.at(i, j, k)), BxE = 0.5f * (bx.at(i, j, k - 1) + bx.at(i, j, k));
-                        const float ByE = 0.125f * (by.at(i - 1, j, k - 1) + by.at(i, j, k - 1) + by.at(i - 1, j, k) + by.at(i, j, k) +
-                                                    by.at(i - 1, j + 1, k - 1) + by.at(i, j + 1, k - 1) + by.at(i - 1, j + 1, k) + by.at(i, j + 1, k));
-                        ey_.d[e] = -(wE * BxE - uE * BzE) + etaEff(wE * wE + uE * uE, BxE * BxE + ByE * ByE + BzE * BzE) * kMu0 * jy_.d[e];
+                        ey_.d[e] = -(wE * BxE - uE * BzE) + etaEff(wE, uE) * kMu0 * jy_.d[e];
                     }
                 }
                 if (k < nz_) { // z-edge (i, j, k+1/2)
@@ -160,9 +159,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float uE = 0.5f * (u.at(i, j - 1, k) + u.at(i, j, k)), BxE = 0.5f * (bx.at(i, j - 1, k) + bx.at(i, j, k));
                         const float vE = 0.5f * (v.at(i - 1, j, k) + v.at(i, j, k)), ByE = 0.5f * (by.at(i - 1, j, k) + by.at(i, j, k));
-                        const float BzE = 0.125f * (bz.at(i - 1, j - 1, k) + bz.at(i, j - 1, k) + bz.at(i - 1, j, k) + bz.at(i, j, k) +
-                                                    bz.at(i - 1, j - 1, k + 1) + bz.at(i, j - 1, k + 1) + bz.at(i - 1, j, k + 1) + bz.at(i, j, k + 1));
-                        ez_.d[e] = -(uE * ByE - vE * BxE) + etaEff(uE * uE + vE * vE, BxE * BxE + ByE * ByE + BzE * BzE) * kMu0 * jz_.d[e];
+                        ez_.d[e] = -(uE * ByE - vE * BxE) + etaEff(uE, vE) * kMu0 * jz_.d[e];
                     }
                 }
             }
@@ -192,7 +189,7 @@ void MagneticField::induce(const Field3& u, const Field3& v, const Field3& w, fl
         for (float x : f->d) umax = std::max(umax, std::fabs(x));
     const float B = maxField();
     const float signal = umax + alfvenSpeed(B * B, density);
-    const float etaMax = resistivity() + numericalDissipation * signal * dx_;
+    const float etaMax = resistivity() + numericalDissipation * umax * dx_;
     // Explicit limits: signals cross at most half a cell, diffusion stays below its bound.
     const float hMax = std::min(0.5f * dx_ / std::max(signal, 1e-12f), 0.9f * dx_ * dx_ / (6.0f * std::max(etaMax, 1e-20f)));
     const int steps = std::max(1, int(std::ceil(dt / hMax)));
@@ -251,6 +248,41 @@ void MagneticField::jouleHeating(std::vector<float>& heat, float dt) {
     parallelFor(nz_, [&](int k) {
         for (int j = 0; j < ny_; ++j)
             for (int i = 0; i < nx_; ++i) heat[size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k))] = s * length2(cellCurrent(i, j, k));
+    }, 1);
+}
+
+void MagneticField::borisWeights(Field3& wx, Field3& wy, Field3& wz, float density) const {
+    wx.init(nx_ + 1, ny_, nz_, bx.offset, 1.0f);
+    wy.init(nx_, ny_ + 1, nz_, by.offset, 1.0f);
+    wz.init(nx_, ny_, nz_ + 1, bz.offset, 1.0f);
+    if (speedLimit <= 0) return;
+    const float k = 1.0f / (kMu0 * std::max(density, 1e-12f) * speedLimit * speedLimit); // (v_A / c)^2 per B^2
+    auto ci = [&](int i) { return std::clamp(i, 0, nx_ - 1); };
+    auto cj = [&](int j) { return std::clamp(j, 0, ny_ - 1); };
+    auto ck = [&](int q) { return std::clamp(q, 0, nz_ - 1); };
+    // |B|^2 on a face: its own component there, the other two averaged from the 4 faces around.
+    parallelFor(nz_ + 1, [&](int kk) {
+        for (int j = 0; j <= ny_; ++j)
+            for (int i = 0; i <= nx_; ++i) {
+                if (j < ny_ && kk < nz_) { // x-face (i, j+1/2, k+1/2)
+                    const float Bx = tbx_.at(i, j, kk);
+                    const float By = 0.25f * (tby_.at(ci(i - 1), j, kk) + tby_.at(ci(i), j, kk) + tby_.at(ci(i - 1), j + 1, kk) + tby_.at(ci(i), j + 1, kk));
+                    const float Bz = 0.25f * (tbz_.at(ci(i - 1), j, kk) + tbz_.at(ci(i), j, kk) + tbz_.at(ci(i - 1), j, kk + 1) + tbz_.at(ci(i), j, kk + 1));
+                    wx.at(i, j, kk) = 1.0f / (1.0f + k * (Bx * Bx + By * By + Bz * Bz));
+                }
+                if (i < nx_ && kk < nz_) { // y-face (i+1/2, j, k+1/2)
+                    const float By = tby_.at(i, j, kk);
+                    const float Bx = 0.25f * (tbx_.at(i, cj(j - 1), kk) + tbx_.at(i, cj(j), kk) + tbx_.at(i + 1, cj(j - 1), kk) + tbx_.at(i + 1, cj(j), kk));
+                    const float Bz = 0.25f * (tbz_.at(i, cj(j - 1), kk) + tbz_.at(i, cj(j), kk) + tbz_.at(i, cj(j - 1), kk + 1) + tbz_.at(i, cj(j), kk + 1));
+                    wy.at(i, j, kk) = 1.0f / (1.0f + k * (Bx * Bx + By * By + Bz * Bz));
+                }
+                if (i < nx_ && j < ny_) { // z-face (i+1/2, j+1/2, k)
+                    const float Bz = tbz_.at(i, j, kk);
+                    const float Bx = 0.25f * (tbx_.at(i, j, ck(kk - 1)) + tbx_.at(i, j, ck(kk)) + tbx_.at(i + 1, j, ck(kk - 1)) + tbx_.at(i + 1, j, ck(kk)));
+                    const float By = 0.25f * (tby_.at(i, j, ck(kk - 1)) + tby_.at(i, j, ck(kk)) + tby_.at(i, j + 1, ck(kk - 1)) + tby_.at(i, j + 1, ck(kk)));
+                    wz.at(i, j, kk) = 1.0f / (1.0f + k * (Bx * Bx + By * By + Bz * Bz));
+                }
+            }
     }, 1);
 }
 

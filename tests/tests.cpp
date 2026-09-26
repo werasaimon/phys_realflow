@@ -1922,7 +1922,7 @@ static void testMagnetosphere() {
     std::printf("  magnetosphere after %.2f s: flow slowed to half at %.2f m upstream (theory 0.29-0.37 m), sideways flow at the flank "
                 "%.2f m/s, div B %.1e\n",
                 g.time(), standoff, flank.z, g.magnetic.maxDivergence());
-    CHECK(standoff > 0.25f && standoff < 0.45f, "magnetopause distance %f", standoff);
+    CHECK(standoff > 0.27f && standoff < 0.40f, "magnetopause distance %f", standoff);
     CHECK(flank.z > 0.2f, "the plasma must be deflected around the magnet (%f)", flank.z);
     CHECK(g.magnetic.maxDivergence() < 1e-5f && std::isfinite(g.magnetic.energy()), "field broken");
 }

@@ -210,7 +210,7 @@ void Simulation::loadPreset(Preset p) {
         grid.params.inflowSpeed = 1.5f;
         grid.params.fluidDensity = 1.0f;
         grid.params.pressureTolerance = 1e-3f;
-        grid.params.smokeDissipation = 0.05f;
+        grid.params.smokeDissipation = 0.7f; // the streaks fade in ~1.5 s: fresh wind only, no fog
         grid.params.smokeRake = true;       // plasma streaks from the inflow show the deflection
         grid.magnetic.enabled = true;
         grid.magnetic.conductivity = 1e8f;
@@ -221,7 +221,13 @@ void Simulation::loadPreset(Preset p) {
         vis.showSlice = false;
         vis.showStreamlines = false;
         vis.gridDisplay = 0;
-        vis.vectorDisplay = 0;
+        // Velocity arrows in the equatorial plane (the dipole points along y): the wind slowing at
+        // the magnetopause, turning around the magnetosphere and closing behind it.
+        vis.vectorDisplay = 1;
+        vis.sliceAxis = 1;
+        vis.slicePosition = 0.5f;
+        vis.vectorStride = 2;
+        vis.vectorScale = 1.3f;
         break;
     case Preset::Water:
         particles.params.particleRadius = 0.012f; // ~40 000 particles: a smooth enough surface

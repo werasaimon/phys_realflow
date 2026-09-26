@@ -9,7 +9,7 @@
 | горение газа, радиационное остывание | `Combustion` — [src/grid/Combustion.h](../src/grid/Combustion.h), [Combustion.cpp](../src/grid/Combustion.cpp) |
 | плавучесть, расширение, теплопроводность, излучение пламени | `NSGridSolver` — [src/grid/NSGridSolver.cpp](../src/grid/NSGridSolver.cpp) |
 | нагрев, пиролиз, обугливание и прогорание ткани | `burnCloth` — [src/particles/Cloth.cpp](../src/particles/Cloth.cpp#L256) |
-| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/sim/Simulation.cpp:789](../src/sim/Simulation.cpp#L789) |
+| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/sim/Simulation.cpp:795](../src/sim/Simulation.cpp#L795) |
 
 Все температуры в газе огня — **перегрев в кельвинах над окружающим воздухом** $T_0$ = `ambientTemperature` = 293 K. Абсолютная температура $T + T_0$.
 
@@ -80,7 +80,7 @@ for (int c = b; c < e; ++c) {
 }
 ```
 
-Мощность пламени ([NSGridSolver.cpp:1036](../src/grid/NSGridSolver.cpp#L1036)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
+Мощность пламени ([NSGridSolver.cpp:1066](../src/grid/NSGridSolver.cpp#L1066)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
 
 $$
 \dot Q = \frac{\sum b\cdot H\cdot\rho\,c_p\,\Delta x^3}{\Delta t}\quad[\text{Вт}].
@@ -134,9 +134,9 @@ $$
 
 $\alpha_0$ = `thermalDiffusivity` = 2.2e-5 м²/с (воздух при 293 K). Рост $\propto T^{1.75}$ — из кинетической теории газов ($\alpha \propto \lambda/\rho c_p$, теплопроводность воздуха $\propto T^{0.75}$, плотность $\propto 1/T$).
 
-Дискретизация — в форме потоков через грани, с коэффициентом грани = среднее двух ячеек; через стены и в твёрдые ячейки потока нет. Поэтому тепло сохраняется **точно**. Схема явная, в стольких подшагах, сколько требует устойчивость $6\alpha_{max}h/\Delta x^2 \le 0.9$ ([NSGridSolver.cpp:922](../src/grid/NSGridSolver.cpp#L922)):
+Дискретизация — в форме потоков через грани, с коэффициентом грани = среднее двух ячеек; через стены и в твёрдые ячейки потока нет. Поэтому тепло сохраняется **точно**. Схема явная, в стольких подшагах, сколько требует устойчивость $6\alpha_{max}h/\Delta x^2 \le 0.9$ ([NSGridSolver.cpp:976](../src/grid/NSGridSolver.cpp#L976)):
 
-[src/grid/NSGridSolver.cpp:937](../src/grid/NSGridSolver.cpp#L937)
+[src/grid/NSGridSolver.cpp:964](../src/grid/NSGridSolver.cpp#L964)
 ```cpp
 const int steps = std::max(1, int(std::ceil(6.0f * alphaMax * dt / (dx_ * dx_) / 0.9f)));
 const float h = dt / float(steps) / (dx_ * dx_);
@@ -170,13 +170,13 @@ $$
 P_{cell} = 4\kappa\sigma\,\big((T + T_0)^4 - T_0^4\big)\,\Delta x^3, \qquad \kappa = \texttt{absorptionCoefficient} = 2\ \text{м}^{-1}.
 $$
 
-Ниже 700 K излучение пламени пренебрежимо. Горячие ячейки собираются в список точечных источников (`collectRadiators`, [NSGridSolver.cpp:962](../src/grid/NSGridSolver.cpp#L962)), и облучённость в точке — сумма по ним без затенения:
+Ниже 700 K излучение пламени пренебрежимо. Горячие ячейки собираются в список точечных источников (`collectRadiators`, [NSGridSolver.cpp:989](../src/grid/NSGridSolver.cpp#L989)), и облучённость в точке — сумма по ним без затенения:
 
 $$
 q(\mathbf x) = \sum_{cells}\frac{P_{cell}}{4\pi\max(|\mathbf x - \mathbf x_c|^2,\ \Delta x^2)}\quad[\text{Вт/м}^2].
 $$
 
-[src/grid/NSGridSolver.cpp:976](../src/grid/NSGridSolver.cpp#L976)
+[src/grid/NSGridSolver.cpp:1003](../src/grid/NSGridSolver.cpp#L1003)
 ```cpp
 float NSGridSolver::irradianceAt(const Vector3& world) const {
     const float minR2 = dx_ * dx_; // a point source is only fair from about a cell away
@@ -297,9 +297,9 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 ## 5.6 Связь ткани с газом
 
-`Simulation::stepGasWithBodies` ([Simulation.cpp:749](../src/sim/Simulation.cpp#L749)) один раз за кадр:
+`Simulation::stepGasWithBodies` ([Simulation.cpp:755](../src/sim/Simulation.cpp#L755)) один раз за кадр:
 
-[src/sim/Simulation.cpp:789](../src/sim/Simulation.cpp#L789)
+[src/sim/Simulation.cpp:795](../src/sim/Simulation.cpp#L795)
 ```cpp
 if (grid.combustion.enabled) {
     std::vector<FireOutput> fire;
@@ -309,7 +309,7 @@ if (grid.combustion.enabled) {
 }
 ```
 
-Выбросы добавляются в ячейку в начале следующего шага газа: топливо — $Y \mathrel{+}= V_{fuel}/\Delta x^3$, тепло — $T \mathrel{+}= Q/(\rho\,c_p\,\Delta x^3)$ ([NSGridSolver.cpp:983](../src/grid/NSGridSolver.cpp#L983)). Цикл замыкается: пламя греет ткань → ткань выделяет газ → газ горит над ней → пламя поднимается выше.
+Выбросы добавляются в ячейку в начале следующего шага газа: топливо — $Y \mathrel{+}= V_{fuel}/\Delta x^3$, тепло — $T \mathrel{+}= Q/(\rho\,c_p\,\Delta x^3)$ ([NSGridSolver.cpp:1010](../src/grid/NSGridSolver.cpp#L1010)). Цикл замыкается: пламя греет ткань → ткань выделяет газ → газ горит над ней → пламя поднимается выше.
 
 ---
 
@@ -352,7 +352,7 @@ if (grid.combustion.enabled) {
 
 ## 5.8 Сцена «Огонь» и наблюдаемая физика
 
-Пресет 23 ([Simulation.cpp:230](../src/sim/Simulation.cpp#L230), [Simulation.cpp:524](../src/sim/Simulation.cpp#L524)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
+Пресет 23 ([Simulation.cpp:236](../src/sim/Simulation.cpp#L236), [Simulation.cpp:530](../src/sim/Simulation.cpp#L530)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
 
 Тест `fire: burner ignites a curtain, it burns through` (300 кадров = 5 с):
 

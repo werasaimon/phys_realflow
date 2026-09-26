@@ -14,8 +14,9 @@
 // the velocity), E and J on the cell edges; the flux through a face changes only by the
 // circulation of E around its four edges (Faraday's law in integral form), so div B stays exactly
 // zero, to rounding. The electric field on an edge gets an upwind-type dissipation proportional to
-// the local signal speed |u| + v_A (as the averaged upwind EMFs of Balsara & Spicer 1999), which
-// keeps the central differences stable. The domain walls are perfect conductors: the tangential E
+// the local flow speed |u| (as the averaged upwind EMFs of Balsara & Spicer 1999), which keeps the
+// central differences of the advection stable; the Alfven waves need none (the Lorentz force and
+// Faraday's law are stepped one after the other). The domain walls are perfect conductors: the tangential E
 // on them is zero, so the flux through every wall stays what it was.
 
 #include "grid/Field3.h"
@@ -34,7 +35,7 @@ public:
     bool enabled = false;
     Vector3 applied{0.0f};           // [T] uniform field at the start (of coils around the vessel)
     float conductivity = 1e6f;       // sigma [S/m]: resistivity eta = 1 / (mu0 sigma) [m^2/s]
-    float numericalDissipation = 0.5f; // upwind EMF factor: eta_num = factor (|u| + v_A) dx on an edge
+    float numericalDissipation = 0.5f; // upwind EMF factor: eta_num = factor |u| dx on an edge
     // Boris correction (Boris 1970; Gombosi et al. 2002, "Semirelativistic MHD and the Boris
     // correction", as in magnetosphere codes): the field's inertia caps the Alfven speed at this
     // reduced "speed of light", v_A' = v_A / sqrt(1 + v_A^2 / c^2), so a strong field (near a
@@ -61,6 +62,10 @@ public:
     void applyLorentzForce(Field3& u, Field3& v, Field3& w, const std::vector<uint8_t>& solid, float density, float dt);
     // Joule heating J^2 / sigma of every cell over dt [J/m^3].
     void jouleHeating(std::vector<float>& heat, float dt);
+    // Boris correction: 1 / (1 + v_A^2 / c^2) on every face (x, y, z faces as u, v, w) - the factor
+    // by which the field's inertia slows every acceleration there (the pressure's too: see
+    // NSGridSolver::project). 1 everywhere when speedLimit is 0.
+    void borisWeights(Field3& wx, Field3& wy, Field3& wz, float density) const;
     // Largest stable time step of the gas for the Alfven waves (the fastest signal).
     float maxTimeStep(float maxFlowSpeed, float density) const;
 

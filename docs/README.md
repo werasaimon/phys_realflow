@@ -60,7 +60,7 @@ flowchart TB
     sim --> app
 ```
 
-Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/sim/Simulation.cpp:1006](../src/sim/Simulation.cpp#L1006)):
+Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/sim/Simulation.cpp:1012](../src/sim/Simulation.cpp#L1012)):
 
 | Режим | Что шагает | Связь |
 |---|---|---|

@@ -1361,7 +1361,7 @@ void Viewport::drawVolume(const QMatrix4x4& vp, const QVector3D& eye) {
     volumeProg_.setUniformValue("uFire", mode);
     volumeProg_.setUniformValue("uTempScale", snap_->volumeTemperatureScale);
     volumeProg_.setUniformValue("uAmbient", snap_->ambientTemperature);
-    volumeProg_.setUniformValue("uFlame", mode == 2 ? 6.0f : 12.0f);
+    volumeProg_.setUniformValue("uFlame", mode == 2 ? 3.0f : 12.0f);
     volumeProg_.setUniformValue("uUseDepth", depthOk ? 1 : 0);
     volumeProg_.setUniformValue("uDepth", 1);
     volumeProg_.setUniformValue("uInvVP", vp.inverted());

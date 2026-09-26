@@ -25,7 +25,7 @@ $$
 
 Скаляры (дым $S$, температура $T$, топливо $Y$, продукты сгорания $P$) переносятся потоком: $\partial\phi/\partial t + \mathbf u\cdot\nabla\phi = \text{источники}$.
 
-**Расщепление по физическим процессам** — шаг `NSGridSolver::step` ([NSGridSolver.cpp:1002](../src/grid/NSGridSolver.cpp#L1002)):
+**Расщепление по физическим процессам** — шаг `NSGridSolver::step` ([NSGridSolver.cpp:1029](../src/grid/NSGridSolver.cpp#L1029)):
 
 ```mermaid
 flowchart TB
@@ -209,7 +209,7 @@ $d_c$ — число соседей-газов плюс сторон с усло
 
 Матрица $\mathbf A$ симметрична и положительно (полу)определена — метод сопряжённых градиентов (PCG) в `double` с диагональным предобуславливателем $\mathbf z = \mathbf D^{-1}\mathbf r$:
 
-[src/grid/NSGridSolver.cpp:781](../src/grid/NSGridSolver.cpp#L781)
+[src/grid/NSGridSolver.cpp:808](../src/grid/NSGridSolver.cpp#L808)
 ```cpp
 for (; it < params.maxPressureIterations && rnorm > tol; ++it) {
     applyA(s_, As_);
@@ -225,7 +225,7 @@ for (; it < params.maxPressureIterations && rnorm > tol; ++it) {
         for (int c = c0; c < c1; ++c) {
             q_[c] += alpha * s_[c];
             r_[c] -= alpha * As_[c];
-            z_[c] = diag_[c] ? r_[c] / diag_[c] : 0.0;
+            z_[c] = diagW_[c] > 0 ? r_[c] / diagW_[c] : 0.0;
             x.a += r_[c] * z_[c];
             x.b += r_[c] * r_[c];
         }
@@ -300,7 +300,7 @@ $$
 
 ### Слабая (разнесённая) связь по кадрам
 
-`Simulation::stepGasWithBodies` ([Simulation.cpp:749](../src/sim/Simulation.cpp#L749)), один обмен за кадр:
+`Simulation::stepGasWithBodies` ([Simulation.cpp:755](../src/sim/Simulation.cpp#L755)), один обмен за кадр:
 
 1. **газ → тела**: импульсы давления, накопленные за шаги газа прошлого кадра, плюс **архимедова сила газа** $\rho_{gas}V\,|\mathbf g|\,\Delta t$ — сетка Буссинеска не несёт гидростатического давления, поэтому выталкивающая сила добавляется явно;
 2. подшаги твёрдых тел (с частицами — вперемешку);
@@ -358,13 +358,13 @@ $$
 
 4. Суммы дают силы давления и трения, момент относительно опорной точки и коэффициенты $C_d, C_l, C_s, C_m$ с разделением сопротивления на **форму** и **трение**. `saveSurfaceLoadsCsv` пишет строку на треугольник: центр, нормаль, площадь, $C_p$, $C_f$, сила.
 
-Интегральные коэффициенты решателя ([NSGridSolver.cpp:850](../src/grid/NSGridSolver.cpp#L850)): $C_d = F_x/(q_\infty A_{ref})$, где $A_{ref}$ — площадь проекции вокселизованного тела (лобовая или в плане — `usePlanformArea`). Средние значения `dragCoefficientAvg()` — экспоненциальное скользящее среднее за время прохода потока через домен.
+Интегральные коэффициенты решателя ([NSGridSolver.cpp:877](../src/grid/NSGridSolver.cpp#L877)): $C_d = F_x/(q_\infty A_{ref})$, где $A_{ref}$ — площадь проекции вокселизованного тела (лобовая или в плане — `usePlanformArea`). Средние значения `dragCoefficientAvg()` — экспоненциальное скользящее среднее за время прохода потока через домен.
 
 ---
 
 ## 4.10 Газ ↔ ткань и газ ↔ жидкость
 
-`Simulation::applyGasDragOnCloth` ([Simulation.cpp:654](../src/sim/Simulation.cpp#L654)). Каждая частица ткани — площадка $s^2$ с нормалью из соседей по сетке. Относительный ветер $\mathbf w = \mathbf u_{gas} - \mathbf v$ раскладывается на нормальную и касательную части:
+`Simulation::applyGasDragOnCloth` ([Simulation.cpp:660](../src/sim/Simulation.cpp#L660)). Каждая частица ткани — площадка $s^2$ с нормалью из соседей по сетке. Относительный ветер $\mathbf w = \mathbf u_{gas} - \mathbf v$ раскладывается на нормальную и касательную части:
 
 $$
 \Delta\mathbf v = \mathbf n\,w_n\frac{\kappa_n}{1 + \kappa_n} + \mathbf w_t\frac{\kappa_t}{1 + \kappa_t}, \qquad
@@ -374,7 +374,7 @@ $$
 
 $C_d$ = 1.2 (плоская пластина), $C_f$ = 0.02. Неявная форма не даёт частице обогнать ветер за шаг. Реакция $-m\Delta\mathbf v$ уходит в газ в той же точке (`addImpulse`) — импульс сохраняется.
 
-`applyGasDragOnLiquid` ([Simulation.cpp:684](../src/sim/Simulation.cpp#L684)): частицы жидкости, касающиеся газа (поверхность, брызги, капли), — сферы радиуса $r$ с $C_d = 0.47$. Ветер срывает брызги и тащит поверхность, летящие капли тормозятся.
+`applyGasDragOnLiquid` ([Simulation.cpp:690](../src/sim/Simulation.cpp#L690)): частицы жидкости, касающиеся газа (поверхность, брызги, капли), — сферы радиуса $r$ с $C_d = 0.47$. Ветер срывает брызги и тащит поверхность, летящие капли тормозятся.
 
 ---
 

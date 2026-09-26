@@ -234,6 +234,8 @@ private:
     Field3 u_, v_, w_, u0_, v0_, w0_, t1_, t2_;
     Field3 p_, smoke_, temp_, fuel_, products_; // products: burnt gas, oxygen used up (Combustion)
     std::vector<float> expansion_; // divergence of the burning gas per cell [1/s] (Combustion)
+    Field3 weightU_, weightV_, weightW_; // pressure-equation face weights (Boris correction), see project()
+    std::vector<double> diagW_;          // diagonal of the (weighted) pressure matrix
     float heatReleaseRate_ = 0;
     static constexpr uint8_t kStatic = 1, kMoving = 2;
     std::vector<uint8_t> solid_;           // kStatic | kMoving bits
