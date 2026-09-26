@@ -87,6 +87,7 @@ private:
     void drawBackground();
     void drawLines(const std::vector<float>& data, GLenum mode, const QMatrix4x4& vp, const QVector4D& color, float width);
     void drawObstacle(const QMatrix4x4& view, const QMatrix4x4& proj);
+    void drawVesselGlass(const QMatrix4x4& view, const QMatrix4x4& proj);
     void drawBodies(const QMatrix4x4& view, const QMatrix4x4& proj);
     void drawParticles(const QMatrix4x4& view, const QMatrix4x4& proj);
     void drawCloths(const QMatrix4x4& view, const QMatrix4x4& proj); // cloth sheets + soft body surfaces

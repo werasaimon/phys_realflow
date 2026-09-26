@@ -6,6 +6,7 @@
 #include "core/Mesh.h"
 #include "grid/NSGridSolver.h"
 #include "grid/SurfaceLoads.h"
+#include "grid/Tokamak.h"
 #include "rigid/RigidWorld.h"
 #include "particles/ParticleSystem.h"
 
@@ -21,7 +22,7 @@ enum class SimMode { Fluid, WindTunnel, Rigid };
 enum class Preset {
     DamBreak, FluidObstacle, FloatingBodies, JetOnObject,
     TunnelSphere, TunnelCylinder, TunnelWing, TunnelStreamlined, TunnelCube, SmokePlume, SmokeSphere,
-    RigidFalling, RigidGranular, RigidPyramid, RigidConvex, RigidTower, RigidJoints, RigidCcd, RigidTeapots, SmokeBodies, SoftCloth, GasSoftCloth, Hydro, Fire, Water, Magnetosphere,
+    RigidFalling, RigidGranular, RigidPyramid, RigidConvex, RigidTower, RigidJoints, RigidCcd, RigidTeapots, SmokeBodies, SoftCloth, GasSoftCloth, Hydro, Fire, Water, Magnetosphere, Tokamak,
     Count
 };
 const char* presetName(Preset p);
@@ -56,6 +57,7 @@ struct VisSettings {
     bool liquidSurface = false;  // liquid drawn as a water surface (screen-space) instead of spheres
     bool showFieldLines = true;  // magnetic field lines (plasma scenes)
     bool planetSurface = false;  // draw the (spherical) obstacle as an Earth-like planet
+    bool vesselGlass = false;    // draw the obstacle as a glass vessel (translucent, after the volume)
     bool showStreamlines = true;
     int streamlineSeeds = 12;    // per side
     bool surfacePressure = true; // color the obstacle by Cp
@@ -185,6 +187,7 @@ struct RenderSnapshot {
     Preset preset = Preset::DamBreak;
     ParticleParams particleParams;
     NSParams ns;
+    Tokamak tokamak;
     RigidParams rigid;
     ObstacleSettings obstacleSettings;
     VisSettings vis;
@@ -198,6 +201,7 @@ public:
     ParticleSystem particles;
     NSGridSolver grid;
     RigidWorld rigid;
+    Tokamak tokamak; // the Tokamak scene: its vessel, coils and plasma current (rebuilt by reset())
     ObstacleSettings obstacle;
     VisSettings vis;
     float frameDt = 1.0f / 60.0f;
@@ -261,6 +265,9 @@ private:
     uint64_t frame_ = 0;
     float lastStepMs_ = 0;
     float lastGridDt_ = 0;
+    // Tokamak position control (the vertical field under feedback): its state.
+    void controlTokamakPosition();
+    float tokamakBv_ = 0, tokamakShift_ = 0, tokamakControlTime_ = 0;
     std::vector<Vector3> gasImpulse_, gasAngularImpulse_; // gas -> bodies, accumulated over a frame
     std::vector<Vector3> softGasImpulse_;                  // gas -> soft bodies (their centre of mass)
     float releaseTime_ = 0; // bodies held by the scene (RigidWorld::hold) fall from this time on

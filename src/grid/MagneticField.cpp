@@ -26,9 +26,37 @@ void MagneticField::reset(int nx, int ny, int nz, float dx, const Vector3& origi
     for (Field3* e : {&ey_, &jy_}) e->init(nx + 1, ny, nz + 1, {0.0f, 0.5f, 0.0f});
     for (Field3* e : {&ez_, &jz_}) e->init(nx + 1, ny + 1, nz, {0.0f, 0.0f, 0.5f});
     b0x_ = b0y_ = b0z_ = Field3();
+    etaCell_.clear();
+    etaX_ = etaY_ = etaZ_ = Field3();
+    etaMax_ = 0;
     conductor_.clear();
     markConductorEdges();
     updateTotal();
+}
+
+void MagneticField::setResistivityMap(const std::function<float(const Vector3&)>& eta) {
+    etaCell_.assign(size_t(nx_) * ny_ * nz_, 0.0f);
+    etaMax_ = 0;
+    for (int k = 0; k < nz_; ++k)
+        for (int j = 0; j < ny_; ++j)
+            for (int i = 0; i < nx_; ++i) {
+                const float e = eta(origin_ + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * dx_);
+                etaCell_[size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k))] = e;
+                etaMax_ = std::max(etaMax_, e);
+            }
+    // On an edge: the mean of the 4 cells around it (clamped at the domain walls).
+    auto cell = [&](int i, int j, int k) {
+        i = std::clamp(i, 0, nx_ - 1); j = std::clamp(j, 0, ny_ - 1); k = std::clamp(k, 0, nz_ - 1);
+        return etaCell_[size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k))];
+    };
+    etaX_ = ex_; etaY_ = ey_; etaZ_ = ez_;
+    for (int k = 0; k <= nz_; ++k)
+        for (int j = 0; j <= ny_; ++j)
+            for (int i = 0; i <= nx_; ++i) {
+                if (i < nx_) etaX_.at(i, j, k) = 0.25f * (cell(i, j - 1, k - 1) + cell(i, j, k - 1) + cell(i, j - 1, k) + cell(i, j, k));
+                if (j < ny_) etaY_.at(i, j, k) = 0.25f * (cell(i - 1, j, k - 1) + cell(i, j, k - 1) + cell(i - 1, j, k) + cell(i, j, k));
+                if (k < nz_) etaZ_.at(i, j, k) = 0.25f * (cell(i - 1, j - 1, k) + cell(i, j - 1, k) + cell(i - 1, j, k) + cell(i, j, k));
+            }
 }
 
 void MagneticField::updateTotal() {
@@ -66,6 +94,7 @@ void MagneticField::markConductorEdges() {
 
 void MagneticField::addFromPotential(const std::function<Vector3(const Vector3&)>& A) {
     addCurl(A, bx, by, bz);
+    computeCurrent(); // the diagnostics (currentAt) see it before the first step
     updateTotal();
 }
 
@@ -82,10 +111,11 @@ void MagneticField::addCurl(const std::function<Vector3(const Vector3&)>& A, Fie
     // result is divergence-free to rounding.
     Field3 ax = ex_, ay = ey_, az = ez_;
     auto fill = [&](Field3& f, int comp) {
-        for (int k = 0; k < f.nz; ++k)
+        parallelFor(f.nz, [&](int k) { // A may be costly (a sum of current loops)
             for (int j = 0; j < f.ny; ++j)
                 for (int i = 0; i < f.nx; ++i)
                     f.at(i, j, k) = A(origin_ + (Vector3(float(i), float(j), float(k)) + f.offset) * dx_)[comp];
+        }, 1);
     };
     fill(ax, 0);
     fill(ay, 1);
@@ -122,16 +152,21 @@ void MagneticField::computeCurrent() {
     }, 1);
 }
 
-void MagneticField::computeElectricField(const Field3& u, const Field3& v, const Field3& w, float density) {
+void MagneticField::computeElectricField(const Field3& u, const Field3& v, const Field3& w, float substep) {
     // Ohm's law on every free edge: E = -u x B + eta_eff curl B, with u and B averaged onto the
-    // edge; eta_eff = eta + upwind dissipation factor |u| dx (the advection of B by the flow is
-    // what needs it; the Alfven waves are stable without - the Lorentz force and Faraday's law
-    // are stepped one after the other, symplectically). Keeping v_A out of it keeps the field
-    // frozen in near a strong magnet, where v_A is large.
+    // edge; eta_eff = eta + the dissipation of the centred advection (numericalDissipation):
+    // max(f |u| dx, |u|^2 h). The advection of B by the flow is what needs it; the Alfven waves
+    // are stable without - the Lorentz force and Faraday's law are stepped one after the other,
+    // symplectically. Keeping v_A out of it keeps the field frozen in near a strong magnet, where
+    // v_A is large.
     updateTotal();
     const Field3 &bx = tbx_, &by = tby_, &bz = tbz_; // the whole field B0 + B1 (the current: B1 only)
-    const float eta = resistivity(), f = numericalDissipation * dx_;
-    auto etaEff = [&](float a, float b) { return eta + f * std::sqrt(a * a + b * b); }; // |u| on the edge
+    const float eta0 = resistivity(), f = numericalDissipation * dx_;
+    const bool mapped = !etaCell_.empty();
+    auto etaEff = [&](float eta, float a, float b) { // (a, b): the flow components on the edge
+        const float u2 = a * a + b * b;
+        return eta + std::max(f * std::sqrt(u2), u2 * substep);
+    };
     parallelFor(nz_ + 1, [&](int k) {
         for (int j = 0; j <= ny_; ++j)
             for (int i = 0; i <= nx_; ++i) {
@@ -141,7 +176,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float vE = 0.5f * (v.at(i, j, k - 1) + v.at(i, j, k)), ByE = 0.5f * (by.at(i, j, k - 1) + by.at(i, j, k));
                         const float wE = 0.5f * (w.at(i, j - 1, k) + w.at(i, j, k)), BzE = 0.5f * (bz.at(i, j - 1, k) + bz.at(i, j, k));
-                        ex_.d[e] = -(vE * BzE - wE * ByE) + etaEff(vE, wE) * kMu0 * jx_.d[e];
+                        ex_.d[e] = -(vE * BzE - wE * ByE) + etaEff(mapped ? etaX_.d[e] : eta0, vE, wE) * kMu0 * jx_.d[e];
                     }
                 }
                 if (j < ny_) { // y-edge (i, j+1/2, k)
@@ -150,7 +185,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float wE = 0.5f * (w.at(i - 1, j, k) + w.at(i, j, k)), BzE = 0.5f * (bz.at(i - 1, j, k) + bz.at(i, j, k));
                         const float uE = 0.5f * (u.at(i, j, k - 1) + u.at(i, j, k)), BxE = 0.5f * (bx.at(i, j, k - 1) + bx.at(i, j, k));
-                        ey_.d[e] = -(wE * BxE - uE * BzE) + etaEff(wE, uE) * kMu0 * jy_.d[e];
+                        ey_.d[e] = -(wE * BxE - uE * BzE) + etaEff(mapped ? etaY_.d[e] : eta0, wE, uE) * kMu0 * jy_.d[e];
                     }
                 }
                 if (k < nz_) { // z-edge (i, j, k+1/2)
@@ -159,7 +194,7 @@ void MagneticField::computeElectricField(const Field3& u, const Field3& v, const
                     else {
                         const float uE = 0.5f * (u.at(i, j - 1, k) + u.at(i, j, k)), BxE = 0.5f * (bx.at(i, j - 1, k) + bx.at(i, j, k));
                         const float vE = 0.5f * (v.at(i - 1, j, k) + v.at(i, j, k)), ByE = 0.5f * (by.at(i - 1, j, k) + by.at(i, j, k));
-                        ez_.d[e] = -(uE * ByE - vE * BxE) + etaEff(uE, vE) * kMu0 * jz_.d[e];
+                        ez_.d[e] = -(uE * ByE - vE * BxE) + etaEff(mapped ? etaZ_.d[e] : eta0, uE, vE) * kMu0 * jz_.d[e];
                     }
                 }
             }
@@ -189,13 +224,13 @@ void MagneticField::induce(const Field3& u, const Field3& v, const Field3& w, fl
         for (float x : f->d) umax = std::max(umax, std::fabs(x));
     const float B = maxField();
     const float signal = umax + alfvenSpeed(B * B, density);
-    const float etaMax = resistivity() + numericalDissipation * umax * dx_;
+    const float etaMax = maxResistivity() + numericalDissipation * umax * dx_;
     // Explicit limits: signals cross at most half a cell, diffusion stays below its bound.
     const float hMax = std::min(0.5f * dx_ / std::max(signal, 1e-12f), 0.9f * dx_ * dx_ / (6.0f * std::max(etaMax, 1e-20f)));
     const int steps = std::max(1, int(std::ceil(dt / hMax)));
     for (int s = 0; s < steps; ++s) {
         computeCurrent();
-        computeElectricField(u, v, w, density);
+        computeElectricField(u, v, w, dt / float(steps));
         applyFaraday(dt / float(steps));
     }
     computeCurrent();
@@ -243,11 +278,15 @@ void MagneticField::applyLorentzForce(Field3& u, Field3& v, Field3& w, const std
 }
 
 void MagneticField::jouleHeating(std::vector<float>& heat, float dt) {
-    const float s = dt / conductivity;
+    // J^2 / sigma = mu0 eta J^2 per cell.
     heat.assign(size_t(nx_) * ny_ * nz_, 0.0f);
     parallelFor(nz_, [&](int k) {
         for (int j = 0; j < ny_; ++j)
-            for (int i = 0; i < nx_; ++i) heat[size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k))] = s * length2(cellCurrent(i, j, k));
+            for (int i = 0; i < nx_; ++i) {
+                const size_t c = size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k));
+                const float eta = etaCell_.empty() ? resistivity() : etaCell_[c];
+                heat[c] = dt * kMu0 * eta * length2(cellCurrent(i, j, k));
+            }
     }, 1);
 }
 

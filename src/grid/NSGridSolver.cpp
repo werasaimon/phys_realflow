@@ -68,6 +68,15 @@ void NSGridSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
                 }
         }, 1);
     }
+    if (vessel) { // a closed vessel: everything outside it is wall
+        parallelFor(int(nz_), [&](int k) {
+            for (int j = 0; j < ny_; ++j)
+                for (int i = 0; i < nx_; ++i) {
+                    const Vector3 c = origin_ + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * dx_;
+                    if (!vessel(c)) solid_[cidx(i, j, k)] = kStatic;
+                }
+        }, 1);
+    }
     solidCount_ = 0;
     for (uint8_t s : solid_) solidCount_ += s != 0;
     owner_.assign(n, -1);
@@ -1150,6 +1159,16 @@ float NSGridSolver::step(float maxDt) {
     else { cdAvg_ += a * (cd_ - cdAvg_); clAvg_ += a * (cl_ - clAvg_); }
     time_ += dt;
     return dt;
+}
+
+void NSGridSolver::setTracer(const std::function<float(const Vector3&)>& density) {
+    parallelFor(int(nz_), [&](int k) {
+        for (int j = 0; j < ny_; ++j)
+            for (int i = 0; i < nx_; ++i) {
+                const size_t c = cidx(i, j, k);
+                smoke_.d[c] = solid_[c] ? 0.0f : density(origin_ + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * dx_);
+            }
+    }, 1);
 }
 
 void NSGridSolver::applyDisturbance(const Disturbance& d) {

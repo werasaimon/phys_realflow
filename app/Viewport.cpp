@@ -80,6 +80,7 @@ void main() {
 static const char* kMeshFS = R"(
 in vec3 vN; in vec3 vPosV; in float vS;
 uniform vec3 uColor; uniform int uUseScalar; uniform float uMin, uMax; uniform int uCmap;
+uniform float uAlpha = 1.0; // < 1: glass (drawn blended, after the volume)
 out vec4 o;
 void main() {
     vec3 n = normalize(vN);
@@ -100,7 +101,9 @@ void main() {
     vec3 h = normalize(l + v);
     float spec = pow(max(dot(n, h), 0.0), 48.0) * 0.3;
     vec3 c = base * (0.18 + 0.55 * diff + 0.35 * fill) + vec3(spec) + ember;
-    o = vec4(c, 1.0);
+    // Glass: the rim (grazing view) is brighter, the face almost clear (Schlick's Fresnel).
+    float alpha = uAlpha < 1.0 ? uAlpha + (1.0 - uAlpha) * pow(1.0 - max(dot(n, v), 0.0), 4.0) : 1.0;
+    o = vec4(c, alpha);
 })";
 
 static const char* kSphereVS = R"(in vec3 aPos;
@@ -824,8 +827,40 @@ void Viewport::drawLines(const std::vector<float>& data, GLenum mode, const QMat
     lines_.vao.release();
 }
 
+void Viewport::drawVesselGlass(const QMatrix4x4& view, const QMatrix4x4& proj) {
+    // The vessel (a tokamak's torus) as glass: blended over the plasma volume, no depth write,
+    // far side first so both walls show.
+    if (!snap_->vis.vesselGlass || !snap_->obstacle || snap_->obstacle->empty()) return;
+    if (snap_->obstacleVersion != obstacleVersion_) {
+        uploadObstacle(*snap_->obstacle);
+        obstacleVersion_ = snap_->obstacleVersion;
+    }
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_CULL_FACE);
+    meshProg_.bind();
+    meshProg_.setUniformValue("uModel", QMatrix4x4());
+    meshProg_.setUniformValue("uView", view);
+    meshProg_.setUniformValue("uProj", proj);
+    meshProg_.setUniformValue("uColor", QVector3D(0.72f, 0.82f, 0.95f));
+    meshProg_.setUniformValue("uUseScalar", 0);
+    meshProg_.setUniformValue("uAlpha", 0.12f);
+    obstacle_.vao.bind();
+    glCullFace(GL_FRONT);
+    glDrawArrays(GL_TRIANGLES, 0, obstacle_.count);
+    glCullFace(GL_BACK);
+    glDrawArrays(GL_TRIANGLES, 0, obstacle_.count);
+    obstacle_.vao.release();
+    meshProg_.setUniformValue("uAlpha", 1.0f);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+}
+
 void Viewport::drawObstacle(const QMatrix4x4& view, const QMatrix4x4& proj) {
-    if (!snap_->obstacle || snap_->obstacle->empty()) return;
+    if (!snap_->obstacle || snap_->obstacle->empty() || snap_->vis.vesselGlass) return;
     if (snap_->obstacleVersion != obstacleVersion_) {
         uploadObstacle(*snap_->obstacle);
         obstacleVersion_ = snap_->obstacleVersion;
@@ -1461,6 +1496,7 @@ void Viewport::paintGL() {
     drawHeatSource(vp);
     drawSlice(vp);
     drawVolume(vp, eyePosition());
+    drawVesselGlass(view, proj);
     // Diagnostic overlays go on top of the smoke so they stay readable.
     drawVoxelGrid(vp);
     drawVectors(vp, eyePosition());

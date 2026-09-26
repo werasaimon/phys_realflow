@@ -33,6 +33,7 @@ add_library(rfcore STATIC
   src/grid/Combustion.h      src/grid/Combustion.cpp
   src/grid/Field3.h          src/grid/Field3.cpp
   src/grid/MagneticField.h   src/grid/MagneticField.cpp
+  src/grid/Tokamak.h         src/grid/Tokamak.cpp
   src/rigid/Shapes.h         src/rigid/Shapes.cpp
   src/rigid/GjkEpa.h         src/rigid/GjkEpa.cpp
   src/rigid/Narrowphase.h    src/rigid/Narrowphase.cpp

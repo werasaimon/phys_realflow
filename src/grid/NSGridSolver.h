@@ -111,8 +111,14 @@ public:
     // the flow, Joule heating (off by default). The static obstacle cells are perfect conductors.
     MagneticField magnetic;
 
+    // A closed vessel (a tokamak's torus): when set, every cell outside it is wall - a perfect
+    // conductor for the magnetic field. The gas lives inside. Set before reset().
+    std::function<bool(const Vector3&)> vessel;
+
     // origin = lower corner of the domain in world space.
     void reset(const Vector3& origin, const MeshBVH* obstacle);
+    // The smoke (the tracer: plasma, dye) set from a function of the world point, gas cells only.
+    void setTracer(const std::function<float(const Vector3&)>& density);
     // Advances by an adaptive CFL time step <= maxDt; returns the step used.
     float step(float maxDt);
     void applyDisturbance(const Disturbance& d);

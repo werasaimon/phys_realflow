@@ -293,6 +293,24 @@ ParamForm* MainWindow::buildFluidForm() {
     return f;
 }
 
+ParamForm* MainWindow::buildTokamakForm() {
+    auto* f = new ParamForm(ctrl_.get());
+    f->addDouble("Запас устойчивости q(a) *", 0.2, 8, 0.1, 2, [](const Snap& s) { return s.tokamak.safetyFactorEdge; },
+                 [](Simulation& s, double v) { s.tokamak.safetyFactorEdge = float(v); s.reset(); },
+                 "Ток плазмы I_p = 2π a² B0 / (μ0 R0 q(a)). Между 2a²/(a²+b²) = 0.4 и 1 шнур скручивается в винт — "
+                 "кинк-неустойчивость (Крускал–Шафранов); выше 1 держит натяжение линий, ниже 0.4 — стенка");
+    f->addDouble("Тороидальное поле B0 *", 0.5, 20, 0.5, 1, [](const Snap& s) { return s.tokamak.toroidalField * 1000; },
+                 [](Simulation& s, double v) { s.tokamak.toroidalField = float(v) / 1000; s.reset(); },
+                 "Поле катушек на магнитной оси; B_φ = B0 R0 / R. Скорость Альфвена растёт с ним, шаг по времени падает", "мТл");
+    f->addBool("Вертикальное поле Шафранова *", [](const Snap& s) { return s.tokamak.verticalField; },
+               [](Simulation& s, bool v) { s.tokamak.verticalField = v; s.reset(); },
+               "Держит кольцо от расширения по большому радиусу; без него его держат только токи изображения в стенке");
+    f->addDouble("Затравка кинка *", 0, 0.2, 0.01, 2, [](const Snap& s) { return s.tokamak.seedDisplacement; },
+                 [](Simulation& s, double v) { s.tokamak.seedDisplacement = float(v); s.reset(); },
+                 "Винтовое смещение шнура в начале (m = 1, n = 1), доля малого радиуса a");
+    return f;
+}
+
 ParamForm* MainWindow::buildGasForm() {
     auto* f = new ParamForm(ctrl_.get());
     f->addDouble("Скорость потока U", 0, 100, 1, 2, [](const Snap& s) { return s.ns.inflowSpeed; },
@@ -599,6 +617,7 @@ void MainWindow::buildParameterDock() {
     col->setSpacing(8);
 
     gasBox_ = addGroup(col, "Газ / поток — сетка Навье–Стокса", buildGasForm());
+    tokamakBox_ = addGroup(col, "Токамак", buildTokamakForm());
     brushBox_ = addGroup(col, "Кисть возмущения", buildBrushForm());
     fluidBox_ = addGroup(col, "Жидкость — частицы SPH", buildFluidForm());
     objectBox_ = addGroup(col, "Объект / препятствие", buildObjectForm());
@@ -823,6 +842,7 @@ void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
         lastParamsVersion_ = s->paramsVersion;
         for (ParamForm* f : forms_) f->refresh(*s);
         updateModeVisibility(s->mode);
+        tokamakBox_->setVisible(s->preset == Preset::Tokamak);
         int idx = presetCombo_->findData(int(s->preset));
         if (idx >= 0) presetCombo_->setCurrentIndex(idx);
     }

@@ -230,6 +230,26 @@ TriMesh cone(float radius, float length, int seg) {
     return revolve(prof, seg);
 }
 
+TriMesh torus(float major, float minor, int seg, int rings) {
+    TriMesh m;
+    for (int i = 0; i < seg; ++i) {
+        const float phi = 2.0f * kPi * i / seg; // around the axis
+        for (int j = 0; j < rings; ++j) {
+            const float th = 2.0f * kPi * j / rings; // around the tube
+            const float R = major + minor * std::cos(th);
+            m.positions.push_back({R * std::cos(phi), minor * std::sin(th), R * std::sin(phi)});
+        }
+    }
+    auto id = [&](int i, int j) { return uint32_t((i % seg) * rings + (j % rings)); };
+    for (int i = 0; i < seg; ++i)
+        for (int j = 0; j < rings; ++j) {
+            m.triangles.push_back({id(i, j), id(i + 1, j), id(i + 1, j + 1)});
+            m.triangles.push_back({id(i, j), id(i + 1, j + 1), id(i, j + 1)});
+        }
+    m.orientOutward();
+    return m;
+}
+
 TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
     float mC = 0.02f, pC = 0.4f, tC = 0.12f; // 2412, also for a code that is not four digits
     const bool digits = code.size() == 4 && std::all_of(code.begin(), code.end(), [](char c) { return c >= '0' && c <= '9'; });

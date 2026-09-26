@@ -35,7 +35,13 @@ public:
     bool enabled = false;
     Vector3 applied{0.0f};           // [T] uniform field at the start (of coils around the vessel)
     float conductivity = 1e6f;       // sigma [S/m]: resistivity eta = 1 / (mu0 sigma) [m^2/s]
-    float numericalDissipation = 0.5f; // upwind EMF factor: eta_num = factor |u| dx on an edge
+    // Dissipation of the centred advection of B on an edge: eta_num = max(f |u| dx, |u|^2 h) with
+    // this factor f and the substep h. The second term is twice the Lax-Wendroff amount
+    // |u|^2 h / 2 that keeps a centred, forward-stepped advection stable - the least there is
+    // (with f = 0 that is all); the first adds a margin independent of the step (f = 0.5: the
+    // averaged upwind EMF of Balsara & Spicer 1999). Where the flow is slow next to the Alfven
+    // speed the first is many times the second, and eats a current profile in seconds.
+    float numericalDissipation = 0.5f;
     // Boris correction (Boris 1970; Gombosi et al. 2002, "Semirelativistic MHD and the Boris
     // correction", as in magnetosphere codes): the field's inertia caps the Alfven speed at this
     // reduced "speed of light", v_A' = v_A / sqrt(1 + v_A^2 / c^2), so a strong field (near a
@@ -54,6 +60,12 @@ public:
     // current. On the grid the curl of a steep field such as a dipole's (~1/r^3) is not exactly
     // zero; taken as current it would drive spurious flows next to the magnet.
     void setBackgroundFromPotential(const std::function<Vector3(const Vector3&)>& A);
+    // Resistivity per cell [m^2/s] (world point of the cell centre) instead of the uniform
+    // 1 / (mu0 sigma): the resistive "vacuum" around a tokamak's plasma, a cold edge. On an edge
+    // the mean of its 4 cells. Set after reset(); reset() clears it.
+    void setResistivityMap(const std::function<float(const Vector3&)>& eta);
+    // The largest resistivity of any cell (the uniform one without a map): the diffusion limit.
+    float maxResistivity() const { return etaCell_.empty() ? resistivity() : etaMax_; }
 
     // Faraday's law over dt with the face velocities u, v, w [m/s] (the gas at `density`), in as
     // many substeps as the Alfven speed and the diffusion need.
@@ -95,7 +107,7 @@ private:
         return speedLimit > 0 ? std::sqrt(vA2 / (1.0f + vA2 / (speedLimit * speedLimit))) : std::sqrt(vA2);
     }
     void computeCurrent();                                                // J = curl B / mu0 on the edges
-    void computeElectricField(const Field3& u, const Field3& v, const Field3& w, float density);
+    void computeElectricField(const Field3& u, const Field3& v, const Field3& w, float substep);
     void applyFaraday(float dt);                                          // B -= dt curl E
     int nx_ = 0, ny_ = 0, nz_ = 0;
     float dx_ = 1;
@@ -103,6 +115,9 @@ private:
     Field3 ex_, ey_, ez_; // edges: x-edges at (i+1/2, j, k), y-edges at (i, j+1/2, k), z-edges at (i, j, k+1/2)
     Field3 jx_, jy_, jz_;
     Field3 b0x_, b0y_, b0z_;         // background B0 (empty = none)
+    std::vector<float> etaCell_;     // resistivity map per cell (empty = uniform)
+    Field3 etaX_, etaY_, etaZ_;      // the map on the edges
+    float etaMax_ = 0;
     Field3 tbx_, tby_, tbz_;         // total B = B0 + B1, refreshed before it is used
     void updateTotal();
     void addCurl(const std::function<Vector3(const Vector3&)>& A, Field3& fx, Field3& fy, Field3& fz) const;

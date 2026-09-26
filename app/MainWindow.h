@@ -37,6 +37,7 @@ private:
     ParamForm* buildGasForm();
     ParamForm* buildBrushForm();
     ParamForm* buildRigidForm();
+    ParamForm* buildTokamakForm();
     QGroupBox* addGroup(class QVBoxLayout* col, const QString& title, ParamForm* form);
 
     // Runtime
@@ -66,7 +67,7 @@ private:
     QAction* playAct_ = nullptr;
     std::vector<ParamForm*> forms_;
     QGroupBox *objectBox_ = nullptr, *fluidBox_ = nullptr, *gasBox_ = nullptr, *brushBox_ = nullptr,
-              *rigidBox_ = nullptr, *fieldBox_ = nullptr, *particleBox_ = nullptr;
+              *rigidBox_ = nullptr, *fieldBox_ = nullptr, *particleBox_ = nullptr, *tokamakBox_ = nullptr;
     QTableWidget* info_ = nullptr;
     PlotPanel* plots_ = nullptr;
     QLabel* status_ = nullptr;

@@ -37,6 +37,7 @@ const char* presetName(Preset p) {
     case Preset::Fire: return "Огонь: горелка, горящая штора, тела";
     case Preset::Water: return "Вода: волна в бассейне, плавающие тела (шейдер)";
     case Preset::Magnetosphere: return "Плазма: магнит отклоняет поток (магнитосфера)";
+    case Preset::Tokamak: return "Плазма: токамак (кольцо плазмы в тороидальном поле)";
     default: return "?";
     }
 }
@@ -48,7 +49,7 @@ SimMode presetMode(Preset p) {
         return SimMode::Fluid;
     case Preset::TunnelSphere: case Preset::TunnelCylinder: case Preset::TunnelWing: case Preset::TunnelStreamlined:
     case Preset::TunnelCube: case Preset::SmokePlume: case Preset::SmokeSphere: case Preset::SmokeBodies:
-    case Preset::GasSoftCloth: case Preset::Hydro: case Preset::Fire: case Preset::Magnetosphere:
+    case Preset::GasSoftCloth: case Preset::Hydro: case Preset::Fire: case Preset::Magnetosphere: case Preset::Tokamak:
         return SimMode::WindTunnel;
     default:
         return SimMode::Rigid;
@@ -91,6 +92,8 @@ void Simulation::loadPreset(Preset p) {
     grid.source = HeatSource();
     grid.combustion = Combustion();
     grid.magnetic = MagneticField();
+    grid.vessel = nullptr;
+    tokamak = Tokamak();
     rigid.params = RigidParams();
 
     switch (p) {
@@ -233,6 +236,39 @@ void Simulation::loadPreset(Preset p) {
         vis.vectorStride = 2;
         vis.vectorScale = 1.3f;
         break;
+    case Preset::Tokamak: {
+        // A ring of plasma in a toroidal vessel (Tokamak.h): the coils' toroidal field, the plasma
+        // current's poloidal field and Shafranov's vertical field hold it; the field lines wind
+        // with the safety factor q. With q_a = 0.7 (default) the column kinks into a helix within
+        // a couple of seconds; set tokamak.safetyFactorEdge above 1 (or below the wall limit 0.4)
+        // and reset to see it stay a ring. Scaled to millitesla: the Alfven speed is a few m/s, so
+        // the kink takes seconds instead of microseconds.
+        const Tokamak& t = tokamak; // R0 = 0.4 m, a = 0.12 m, b = 0.24 m, B0 = 2.5 mT, q_a = 0.7
+        obstacle.shape = ObstacleShape::Custom;
+        obstacle.customMesh = std::make_shared<TriMesh>(primitives::torus(t.majorRadius, t.vesselRadius));
+        obstacle.customName = "торовый сосуд";
+        obstacle.size = 2.0f * (t.majorRadius + t.vesselRadius); // the mesh as built
+        grid.params.domainSize = {1.4f, 0.6f, 1.4f};
+        grid.params.resolutionX = 56; // dx = 2.5 cm: 5 cells across the current channel's radius
+        grid.params.inflowSpeed = 0.0f;
+        for (BoundaryType& b : grid.params.bc) b = BoundaryType::Wall;
+        grid.params.fluidDensity = 1.0f;
+        grid.params.pressureTolerance = 1e-3f;
+        grid.params.smokeRake = false;
+        grid.params.wallFriction = false; // no boundary layer of a gas: the plasma slips along the wall
+        grid.magnetic.enabled = true;
+        grid.magnetic.conductivity = 1e10f;      // the current outlives the scene: tau = a^2 / (5.8 eta) ~ 30 s
+        grid.magnetic.numericalDissipation = 0.0f; // only the Lax-Wendroff amount: f |u| dx would eat the current
+        vis.sliceField = GridField::CurrentDensity;
+        vis.sliceAxis = 2;
+        vis.slicePosition = 0.5f; // the poloidal cross-section at z = 0
+        vis.showSlice = false;
+        vis.showStreamlines = false;
+        vis.surfacePressure = false;
+        vis.gridDisplay = 0;
+        vis.vesselGlass = true;
+        break;
+    }
     case Preset::Water:
         particles.params.particleRadius = 0.012f; // ~40 000 particles: a smooth enough surface
         vis.liquidSurface = true;
@@ -480,12 +516,17 @@ void Simulation::setupTunnelScene() {
     Vector3 size = grid.params.domainSize;
     Vector3 origin;
     if (preset_ == Preset::SmokePlume || preset_ == Preset::SmokeSphere || preset_ == Preset::SmokeBodies ||
-        preset_ == Preset::GasSoftCloth || preset_ == Preset::Fire)
+        preset_ == Preset::GasSoftCloth || preset_ == Preset::Fire || preset_ == Preset::Tokamak)
         origin = Vector3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z);
     else if (preset_ == Preset::Hydro)
         origin = Vector3(-0.5f * size.x, 0.0f, -0.5f * size.z); // floor at y = 0
     else origin = Vector3(-0.3f * size.x, -0.5f * size.y, -0.5f * size.z); // body at 30% of the length
-    grid.reset(origin, &obstacleBVH_);
+    if (preset_ == Preset::Tokamak) {
+        // The torus is a vessel: the plasma fills it and everything outside is its conducting
+        // wall. The mesh is only drawn (as glass), not voxelised as a body.
+        grid.vessel = [t = tokamak](const Vector3& x) { return t.inside(x); };
+        grid.reset(origin, nullptr);
+    } else grid.reset(origin, &obstacleBVH_);
 
     // Rigid bodies live in the gas box (walls = domain, the tunnel obstacle is static geometry).
     rigid.clear();
@@ -530,6 +571,21 @@ void Simulation::setupTunnelScene() {
             const float d = std::max(length(r), 0.08f); // inside the magnet (a conductor): no singularity
             return cross(moment, r) * (1e-7f / (d * d * d));
         });
+    }
+    if (preset_ == Preset::Tokamak) {
+        // The coils' fields (toroidal B0 R0 / R and the vertical field) are current-free: the
+        // background B0. The plasma current's poloidal field is the evolving part B1. The glowing
+        // plasma sits where the current flows.
+        const Tokamak t = tokamak;
+        grid.magnetic.setBackgroundFromPotential([t](const Vector3& x) { return t.coilPotential(x); });
+        grid.magnetic.addFromPotential([t](const Vector3& x) { return t.plasmaPotential(x); });
+        // The resistive "vacuum" between the channel and the wall (see Tokamak.h).
+        const float etaPlasma = grid.magnetic.resistivity();
+        grid.magnetic.setResistivityMap([t, etaPlasma](const Vector3& x) { return t.resistivityAt(x, etaPlasma); });
+        grid.setTracer([t](const Vector3& x) { return t.tracer(x); });
+        tokamakBv_ = t.verticalFieldStrength();
+        tokamakShift_ = 0;
+        tokamakControlTime_ = 0;
     }
     if (preset_ == Preset::Fire) {
         const float floor = grid.domain().lo.y;
@@ -754,6 +810,28 @@ void Simulation::stepBodiesAndParticles(bool gasDrag) {
         }
         particles.step(hp);
     }
+}
+
+void Simulation::controlTokamakPosition() {
+    // Radial position control, as the vertical-field coils of a real machine: a PD law on the
+    // measured outward shift of the ring (the n = 0 part of its current centroid) around the
+    // vertical field of the equilibrium in the shell (Tokamak.h). Without it the ring, never
+    // quite in the equilibrium of the formulas on a grid, swings in and out for seconds, and the
+    // swing's flow eats the current through the dissipation of the induction step.
+    const Tokamak& t = tokamak;
+    if (!t.positionControl || !t.verticalField) return;
+    const float shift = t.measuredShift(grid.magnetic, grid.dx());
+    const float dt = grid.time() - tokamakControlTime_;
+    const float rate = tokamakControlTime_ > 0 && dt > 1e-5f ? (shift - tokamakShift_) / dt : 0.0f;
+    tokamakShift_ = shift;
+    tokamakControlTime_ = grid.time();
+    float gain, damping;
+    t.controlGains(grid.params.fluidDensity, gain, damping);
+    const float bv = t.verticalFieldStrength() + gain * shift + damping * rate;
+    if (std::fabs(bv - tokamakBv_) < 0.002f * std::fabs(t.verticalFieldStrength())) return; // unchanged: keep the field
+    tokamakBv_ = bv;
+    const Tokamak tc = t;
+    grid.magnetic.setBackgroundFromPotential([tc, bv](const Vector3& x) { return tc.coilPotential(x, bv); });
 }
 
 void Simulation::stepGasWithBodies() {
@@ -1015,6 +1093,7 @@ void Simulation::stepFrame() {
             for (int extra = 0; extra < 3 && grid.magnetic.enabled && grid.time() - time_ < frameDt; ++extra)
                 lastGridDt_ = grid.step(frameDt - (grid.time() - time_));
             time_ = grid.time();
+            if (preset_ == Preset::Tokamak) controlTokamakPosition();
         } else {
             stepGasWithBodies();
             time_ += frameDt;
@@ -1128,7 +1207,16 @@ void Simulation::computeFieldLines(RenderSnapshot& s) const {
     const float dx = grid.dx();
     const AABB dom = grid.domain();
     std::vector<Vector3> seeds;
-    if (grid.hasObstacle() && obstacleMesh_ && !obstacleMesh_->empty()) {
+    if (preset_ == Preset::Tokamak) {
+        // Seeds in the poloidal plane phi = 0 at a few minor radii: the lines wind around the
+        // torus and show the twist, q(r) toroidal turns per poloidal turn.
+        const Tokamak& t = tokamak;
+        for (float f : {0.35f, 0.7f, 1.0f, 1.5f})
+            for (int q = 0; q < 4; ++q) {
+                const float th = 0.5f * kPi * float(q);
+                seeds.push_back(t.centre + Vector3(t.majorRadius + f * t.minorRadius * std::cos(th), f * t.minorRadius * std::sin(th), 0.0f));
+            }
+    } else if (grid.hasObstacle() && obstacleMesh_ && !obstacleMesh_->empty()) {
         const AABB ob = obstacleMesh_->bounds();
         const Vector3 c = ob.center();
         const float r = 0.5f * maxComp(ob.extent()) + 2.0f * dx;
@@ -1293,6 +1381,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
     s.paramsVersion = paramsVersion_;
     s.particleParams = particles.params;
     s.ns = grid.params;
+    s.tokamak = tokamak;
     s.rigid = rigid.params;
     s.obstacleSettings = obstacle;
     s.vis = vis;
@@ -1429,6 +1518,20 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
             s.info.push_back({"Маг. число Рейнольдса Rm", fmt("%.3g", grid.params.inflowSpeed * L / m.resistivity())});
             s.info.push_back({"Энергия поля", fmt("%.3g Дж", m.energy())});
             s.info.push_back({"div B (отн.)", fmt("%.1e", m.maxDivergence())});
+            if (preset_ == Preset::Tokamak) {
+                const Tokamak& t = tokamak;
+                s.info.push_back({"Ток плазмы I_p", fmt("%.0f А (задано %.0f А)", t.measuredCurrent(m, grid.dx()), t.plasmaCurrent())});
+                s.info.push_back({"Запас устойчивости q(0) / q(a)", fmt("%.2f / %.2f", t.safetyFactor(0), t.safetyFactor(t.minorRadius))});
+                s.info.push_back({"Кинк m = 1, n = 1",
+                                  t.kinkUnstable() ? fmt("растёт: %.2f < q(a) < 1, γ = %.2f 1/с", t.wallLimit(), t.kinkGrowthRate(grid.params.fluidDensity))
+                                  : t.safetyFactorEdge >= 1 ? "устойчив: q(a) ≥ 1 (предел Крускала–Шафранова)"
+                                                            : fmt("устойчив: стенка держит шнур при q(a) < %.2f", t.wallLimit())});
+                s.info.push_back({"Вертикальное поле B_v", fmt("%.3f мТл (равновесие в оболочке %.3f)", tokamakBv_ * 1000,
+                                                                t.verticalFieldStrength() * 1000)});
+                s.info.push_back({"Сдвиг кольца наружу", fmt("%.1f мм (без B_v по Шафранову %.1f мм)", t.measuredShift(m, grid.dx()) * 1000,
+                                                              t.equilibriumShift() * 1000)});
+                s.plots.push_back({"Амплитуда кинка, мм", t.kinkAmplitude(m, grid.dx()) * 1000});
+            }
         }
         s.gridNx = grid.nx();
         s.gridNy = grid.ny();
