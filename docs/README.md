@@ -76,6 +76,17 @@ flowchart TB
 
 Везде **СИ**: метры, секунды, килограммы, кельвины, тесла. Ось **y смотрит вверх**, гравитация $\mathbf g = (0, -9.81, 0)$ м/с².
 
+Гравитация в сцене **одна**. `Simulation::setGravity` передаёт один и тот же $\mathbf g$ всем трём решателям. Газу огня нужен только модуль $|\mathbf g|$: горячий газ поднимается против $\mathbf g$ с плавучестью $|\mathbf g|\,\Delta T/(T_0 + \Delta T)$ (глава 5). Загрузка сцены возвращает $\mathbf g = (0, -9.81, 0)$ везде.
+
+[src/sim/Simulation.cpp:74](../src/sim/Simulation.cpp#L74)
+```cpp
+void Simulation::setGravity(const Vector3& g) {
+    rigid.params.gravity = g;
+    particles.params.gravity = g;
+    grid.combustion.gravity = length(g); // the hot gas rises against it (along +y)
+}
+```
+
 | Символ | Смысл | Единицы |
 |---|---|---|
 | $\mathbf x, \mathbf v, \boldsymbol\omega$ | положение, скорость, угловая скорость | м, м/с, рад/с |

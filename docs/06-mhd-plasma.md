@@ -194,6 +194,63 @@ $$
 
 и скорость на грани поправляется на $-\Delta t\,w\,\nabla p/\rho$. Веса считает `MagneticField::borisWeights`; без коррекции все $w = 1$, и проекция совпадает с обычной.
 
+**Вес грани.** На грани, нормальной к $x$, своя компонента $B_x$ берётся прямо с грани, а $B_y$ и $B_z$ усредняются по 4 окружающим граням. Затем
+
+$$
+w_f = \frac{1}{1 + k\,\lvert\mathbf B_f\rvert^2}, \qquad k = \frac{1}{\mu_0\,\rho\,c_B^2} \quad\Big(\text{то есть } k\,B^2 = v_A^2/c_B^2\Big).
+$$
+
+[src/grid/MagneticField.cpp:254](../src/grid/MagneticField.cpp#L254)
+```cpp
+void MagneticField::borisWeights(Field3& wx, Field3& wy, Field3& wz, float density) const {
+    wx.init(nx_ + 1, ny_, nz_, bx.offset, 1.0f);
+    wy.init(nx_, ny_ + 1, nz_, by.offset, 1.0f);
+    wz.init(nx_, ny_, nz_ + 1, bz.offset, 1.0f);
+    if (speedLimit <= 0) return;
+    const float k = 1.0f / (kMu0 * std::max(density, 1e-12f) * speedLimit * speedLimit); // (v_A / c)^2 per B^2
+    auto ci = [&](int i) { return std::clamp(i, 0, nx_ - 1); };
+    auto cj = [&](int j) { return std::clamp(j, 0, ny_ - 1); };
+    auto ck = [&](int q) { return std::clamp(q, 0, nz_ - 1); };
+    // |B|^2 on a face: its own component there, the other two averaged from the 4 faces around.
+    parallelFor(nz_ + 1, [&](int kk) {
+        for (int j = 0; j <= ny_; ++j)
+            for (int i = 0; i <= nx_; ++i) {
+                if (j < ny_ && kk < nz_) { // x-face (i, j+1/2, k+1/2)
+                    const float Bx = tbx_.at(i, j, kk);
+                    const float By = 0.25f * (tby_.at(ci(i - 1), j, kk) + tby_.at(ci(i), j, kk) + tby_.at(ci(i - 1), j + 1, kk) + tby_.at(ci(i), j + 1, kk));
+                    const float Bz = 0.25f * (tbz_.at(ci(i - 1), j, kk) + tbz_.at(ci(i), j, kk) + tbz_.at(ci(i - 1), j, kk + 1) + tbz_.at(ci(i), j, kk + 1));
+                    wx.at(i, j, kk) = 1.0f / (1.0f + k * (Bx * Bx + By * By + Bz * Bz));
+                }
+```
+
+**Матрица с весами.** Дискретный $-\nabla\cdot(w\nabla p)$ в ячейке $c$ — сумма по её 6 граням $f$:
+
+$$
+(A\,p)_c = \Big(\sum_{f\ \text{открыта}} w_f\Big)\,p_c \;-\; \sum_{f\ \text{к газу}} w_f\,p_{n(f)} .
+$$
+
+Грань «открыта», если за ней газ или открытая (outflow) граница. Твёрдая стенка в сумму не входит, потому что там задана скорость, а не давление. Диагональ $\sum w_f$ хранится в `diagW_`. Она же служит предобуславливателем Якоби в методе сопряжённых градиентов. При $w_f \equiv 1$ получается обычный лапласиан, поэтому без коррекции Бориса путь не меняется.
+
+[src/grid/NSGridSolver.cpp:800](../src/grid/NSGridSolver.cpp#L800)
+```cpp
+    auto applyA = [&](const std::vector<double>& x, std::vector<double>& out) {
+        parallelFor(int(NZ), [&](int k_) {
+            int k = k_;
+            for (int j = 0; j < NY; ++j)
+                for (int i = 0; i < NX; ++i) {
+                    size_t c = cidx(i, j, k);
+                    if (solid_[c] || diag_[c] == 0) { out[c] = 0; continue; }
+                    double s = diagW_[c] * x[c];
+                    if (i > 0 && !solid_[c - 1]) s -= wu(i, j, k) * x[c - 1];
+                    if (i < NX - 1 && !solid_[c + 1]) s -= wu(i + 1, j, k) * x[c + 1];
+                    if (j > 0 && !solid_[c - NX]) s -= wv(i, j, k) * x[c - NX];
+                    if (j < NY - 1 && !solid_[c + NX]) s -= wv(i, j + 1, k) * x[c + NX];
+                    size_t sl = size_t(NX) * NY;
+                    if (k > 0 && !solid_[c - sl]) s -= ww(i, j, k) * x[c - sl];
+                    if (k < NZ - 1 && !solid_[c + sl]) s -= ww(i, j, k + 1) * x[c + sl];
+                    out[c] = s;
+```
+
 Равновесия (стационарные состояния, баланс давлений) при этом **не меняются** — меняется только то, как быстро на них реагируют области сильного поля. Та же ограниченная $v_A'$ используется в шаге по времени (`alfvenSpeed`).
 
 ---

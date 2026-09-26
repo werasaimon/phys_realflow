@@ -182,6 +182,41 @@ $$
 
 Для оси грани: инцидентная грань второго бокса (наиболее антипараллельная) отсекается четырьмя боковыми плоскостями опорной грани алгоритмом Сазерленда–Ходжмана; остаются точки не выше плоскости опорной грани (+ зазор). Для оси рёбер — одна точка, середина между ближайшими точками двух рёбер ([Narrowphase.cpp:212](../src/rigid/Narrowphase.cpp#L212)).
 
+**Почему хватает 15 осей.** Два выпуклых многогранника пересекаются тогда и только тогда, когда их разность Минковского $A \ominus B = \{\mathbf a - \mathbf b\}$ содержит начало координат. Глубина проникновения — расстояние от начала координат до границы этой разности, а направление — **минимальный вектор выталкивания** (MTV). Разность — тоже выпуклый многогранник, и каждая его грань параллельна одному из трёх объектов: грани $A$, грани $B$ или паре рёбер $(\mathbf a_i, \mathbf b_j)$. Поэтому минимум перекрытия по **всем** направлениям достигается на одной из нормалей этих граней:
+
+$$
+\text{overlap}(\mathbf L) = r_A(\mathbf L) + r_B(\mathbf L) - \big|(\mathbf p_A - \mathbf p_B)\cdot\mathbf L\big|,
+\qquad
+d_{\min} = \min_{\mathbf L \,\in\, \{\mathbf a_i,\ \mathbf b_j,\ \widehat{\mathbf a_i\times\mathbf b_j}\}} \text{overlap}(\mathbf L).
+$$
+
+У двух боксов это 3 + 3 + 9 = 15 направлений; параллельные рёбра ($\mathbf a_i\times\mathbf b_j \approx 0$) новых граней не дают и пропускаются. Тест считает эталон этим перебором, независимо от движка:
+
+[tests/HardContactTests.h:142](../tests/HardContactTests.h#L142)
+```cpp
+inline float satReference(const Vector3& ha, const Matrix3x3& Ra, const Vector3& pa, const Vector3& hb, const Matrix3x3& Rb,
+                          const Vector3& pb, Vector3& normal, float& secondBest) {
+    std::vector<Vector3> axes;
+    for (int i = 0; i < 3; ++i) {
+        axes.push_back(Ra.col(i));
+        axes.push_back(Rb.col(i));
+    }
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) {
+            const Vector3 c = cross(Ra.col(i), Rb.col(j));
+            if (length(c) > 1e-4f) axes.push_back(normalize(c));
+        }
+    float best = 1e9f;
+    secondBest = 1e9f;
+    for (const Vector3& L : axes) {
+        const float ra = ha.x * std::fabs(dot(Ra.col(0), L)) + ha.y * std::fabs(dot(Ra.col(1), L)) + ha.z * std::fabs(dot(Ra.col(2), L));
+        const float rb = hb.x * std::fabs(dot(Rb.col(0), L)) + hb.y * std::fabs(dot(Rb.col(1), L)) + hb.z * std::fabs(dot(Rb.col(2), L));
+        const float d = dot(pa - pb, L);
+        const float overlap = ra + rb - std::fabs(d);
+```
+
+`secondBest` — наименьшее перекрытие на **другой** оси. Если оно почти равно `best`, MTV неоднозначен, и такие позы тест не сравнивает. На 216 случайных глубоко вложенных парах путь GJK/EPA совпал с эталоном без единой ошибки (глубина до 3·10⁻⁷ м). SAT узкой фазы намеренно отдаёт предпочтение граням: его глубина может превышать минимум не больше чем на 5 %.
+
 ### Выпуклое–выпуклое: опорные грани
 
 GJK/EPA даёт нормаль и глубину, но только одну точку. Многообразие строится **отсечением опорных граней** обоих тел вдоль нормали (Jolt, `ManifoldBetweenTwoFaces`):
@@ -216,6 +251,57 @@ $$
 4. самая дальняя — по другую сторону (знаковая площадь относительно нормали).
 
 Четырёхугольник всегда охватывает опору, в каком бы порядке ни пришли точки. Прежний жадный выбор зависел от порядка: у куба, повёрнутого на 10°, он давал опору 0.658 м² вместо 0.852 м², и тело могло раскачиваться.
+
+**Формулы.** Пусть $\mathbf x_i$ — точки, $d_i$ — их глубины, $\mathbf c$ — центр, $\mathbf n$ — нормаль контакта. Сначала выбираются две точки, образующие диагональ:
+
+$$
+i_0 = \arg\max_{i:\; d_i \,\ge\, d_{\max} - \tau} \lVert \mathbf x_i - \mathbf c\rVert^2, \qquad
+\tau = 10^{-4}\,|d_{\max}| + 10^{-6}, \qquad
+i_1 = \arg\max_i \lVert \mathbf x_i - \mathbf x_{i_0}\rVert^2 .
+$$
+
+Допуск $\tau$ нужен, потому что «равные» глубины плоского контакта различаются на ошибку округления. Затем для диагонали $\mathbf a = \mathbf x_{i_0}$, $\mathbf b = \mathbf x_{i_1}$ считается удвоенная знаковая площадь треугольника $(\mathbf a, \mathbf b, \mathbf x_i)$:
+
+$$
+s_i = \big((\mathbf b - \mathbf a)\times(\mathbf x_i - \mathbf a)\big)\cdot \mathbf n,
+\qquad
+i_L = \arg\max_{s_i > 0} s_i, \qquad i_R = \arg\min_{s_i < 0} s_i .
+$$
+
+Площадь четырёхугольника $\mathbf a, \mathbf x_{i_L}, \mathbf b, \mathbf x_{i_R}$ равна $\tfrac12\,(s_{i_L} - s_{i_R})$. Слагаемые независимы, поэтому лучшая точка слева и лучшая справа вместе дают **наибольшую площадь при заданной диагонали**. Диагональ $i_0 i_1$ соединяет самые далёкие друг от друга точки, и в тестах результат совпал с перебором всех четвёрок (рисунок ниже).
+
+[src/rigid/Narrowphase.cpp:83](../src/rigid/Narrowphase.cpp#L83)
+```cpp
+    const float tie = 1e-4f * std::fabs(maxDepth) + 1e-6f; // equal up to rounding: a flat contact
+    size_t i0 = 0;
+    float far0 = -1;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        if (pts[i].depth < maxDepth - tie) continue;
+        const float d = length2(pts[i].position - centre);
+        if (d > far0) { far0 = d; i0 = i; }
+    }
+    size_t i1 = i0;
+    float best = -1;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        float d = length2(pts[i].position - pts[i0].position);
+        if (d > best) { best = d; i1 = i; }
+    }
+    std::vector<ContactPoint> out = {pts[i0]};
+    if (i1 != i0) out.push_back(pts[i1]);
+    if (maxPoints >= 4 && i1 != i0) {
+        const Vector3 n = pts[i0].normal, a = pts[i0].position, b = pts[i1].position;
+        size_t left = pts.size(), right = pts.size();
+        float maxLeft = 1e-9f, maxRight = -1e-9f;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            const float s = dot(cross(b - a, pts[i].position - a), n); // twice the signed triangle area
+            if (s > maxLeft) { maxLeft = s; left = i; }
+            if (s < maxRight) { maxRight = s; right = i; }
+        }
+```
+
+![Опора куба на повёрнутом кубе: 8 точек отсечения и 4 точки reduceManifold](img/contact-support-area.svg)
+
+При 10° общая область — восьмиугольник площадью 0.927 м². Выбранные 4 точки охватывают 0.852 м² — столько же, сколько лучшая из 70 четвёрок при переборе. При 45° восьмиугольник правильный ($8a^2\tan\frac{\pi}{8} = 0.828$ м² при $a = 0.5$ м), и лучшая четвёрка — квадрат через его вершины, 0.586 м². Четыре точки больше не охватят. Тест — `rotatedFaceOnFace` в [tests/HardContactTests.h](../tests/HardContactTests.h).
 
 ---
 
@@ -394,9 +480,61 @@ Guendelman, Bridson, Fedkiw (2003). После обычных итераций �
 
 В последнем проходе верхнее тело ещё и увлекается опорой трением (без вращения), с изменением скорости не больше $\mu|\mathbf g|\Delta t$ за шаг. Это независимо от высоты столба: в равновесии нормальный импульс равен весу всего столба над контактом. Без этого боковой толчок доходил бы до вершины по уровню за итерацию, и стопка сдвигалась бы «лесенкой».
 
+**Бюджет Кулона.** Обычные итерации уже приложили к этому контакту импульс трения $\mathbf j_t$ (накопленные `jt1`, `jt2`). Проход удара может добавить только то, что ещё осталось в конусе Кулона $|\mathbf j_t| \le \mu \sum_k j_{n,k}$:
+
+$$
+\Delta v = \min\Big(\,|\mathbf v_t|,\ \ \mu\,|\mathbf g|\,\Delta t,\ \ \frac{1}{m_U}\max\big(0,\ \mu\textstyle\sum_k j_{n,k} - |\mathbf j_t|\big)\Big),
+\qquad
+\mathbf v_U \leftarrow \mathbf v_U - \Delta v\,\frac{\mathbf v_t}{|\mathbf v_t|}.
+$$
+
+Здесь $\mathbf v_t$ — касательная скорость верхнего тела $U$ относительно опоры, $\mu$ — статический коэффициент при $|\mathbf v_t| <$ `stickVelocity`, иначе кинетический.
+
+[src/rigid/RigidWorld.cpp:1148](../src/rigid/RigidWorld.cpp#L1148)
+```cpp
+    const float mu = vtl < params.stickVelocity ? m.staticFriction : m.friction;
+    const float used = length(m.t1 * m.jt1 + m.t2 * m.jt2);
+    const float budget = std::max(0.0f, mu * normalTotal - used);
+    const float dv = std::min({vtl, mu * length(params.gravity) * lastDt_, budget * U.invMass});
+    U.vel -= t * dv;
+```
+
+Без третьего предела проход брал $\mu|\mathbf g|\Delta t$ **сверх** уже израсходованного бюджета, и трение скольжения удваивалось на каждом контакте с землёй: ящик, пущенный со скоростью 3 м/с, останавливался через 0.415 м вместо $v_0^2/(2\mu g) = 0.837$ м.
+
+![Скорость скользящего ящика: Кулон, до и после исправления](img/friction-sliding.svg)
+
+Теперь торможение $5.42$ м/с² при $\mu g = 5.37$ м/с² (1 %), путь 0.830 м. Проверка — пункт 3 теста `coherence` в [tests/tests.cpp](../tests/tests.cpp).
+
 ### Сон островов
 
 Острова — компоненты связности графа контактов и сочленений между динамическими телами (union-find, [RigidWorld.cpp:213](../src/rigid/RigidWorld.cpp#L213)). Если все тела острова медленнее `sleepLinear` и `sleepAngular` дольше `sleepTime`, остров засыпает целиком. Спящие тела на время шага получают нулевую обратную массу (`freezeSleepers`) — все пути решателя видят их статичными. Касание движущимся телом будит весь остров сразу (как в Box2D), и импульсы спящих пар сохраняются в кэше: разбуженная стопка сразу держит свой вес.
+
+### Удержание тел (`hold`)
+
+Иногда тело нужно подвесить до какого-то момента: в сцене «Огонь» чайник и кролик висят, пока не поднимется дым, и падают через 1.5 с. `hold` делает тело статическим тем же механизмом, что и сон, — на время удержания
+
+$$
+m^{-1} \to 0, \qquad \mathbf I^{-1}_{local} \to 0,
+$$
+
+а `releaseHeld` возвращает сохранённые значения и будит тело. Отдельного флага «кинематическое» в решателе нет: все пути (импульсы, блочный LCP, CCD, частицы) уже правильно обрабатывают нулевую обратную массу.
+
+[src/rigid/RigidWorld.cpp:174](../src/rigid/RigidWorld.cpp#L174)
+```cpp
+void RigidWorld::hold(int i) {
+    if (i < 0 || i >= int(bodies_.size()) || bodies_[i].invMass == 0) return; // static already
+    held_.push_back(makeStatic(i));
+}
+
+void RigidWorld::releaseHeld() {
+    for (const Frozen& f : held_) {
+        if (f.body >= int(bodies_.size())) continue;
+        restore(f);
+        wake(f.body);
+    }
+    held_.clear();
+}
+```
 
 ---
 
@@ -622,4 +760,6 @@ $$
 - K. Mamou. *V-HACD: Volumetric Hierarchical Approximate Convex Decomposition.* Game Engine Gems 3, 2016.
 - D. Eberly. *Polyhedral Mass Properties (Revisited).* Geometric Tools, 2002.
 - M. Müller et al. *Detailed Rigid Body Simulation with Extended Position Based Dynamics.* SCA 2020.
-- J. Rouwé. Jolt Physics — `ManifoldBetweenTwoFaces`, `GetSupportingFace` (открытый исходный код).
+- J. Rouwé. Jolt Physics — `ManifoldBetweenTwoFaces`, `GetSupportingFace`, `PruneContactPoints` (открытый исходный код).
+- E. Coumans. Bullet Physics — `btPersistentManifold::sortCachedPoints` (открытый исходный код).
+- C. Ericson. *Real-Time Collision Detection.* Morgan Kaufmann 2005 (гл. 4.4 и 5.2: SAT, разность Минковского).

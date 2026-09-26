@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 230" width="680" height="230" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="230" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Один кадр frameDt: 10 шагов твёрдых тел и 3 шага частиц</text>
+<text x="110" y="79" text-anchor="end" fill="#111827">rigid.step(hr)</text>
+<text x="110" y="149" text-anchor="end" fill="#111827">particles.step(hp)</text>
+<rect x="121" y="58" width="51.6" height="34" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/><text x="146.8" y="79" text-anchor="middle" fill="#111827">1</text>
+<rect x="174.6" y="58" width="51.6" height="34" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/><text x="200.4" y="79" text-anchor="middle" fill="#111827">2</text>
+<rect x="228.2" y="58" width="51.6" height="34" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/><text x="254" y="79" text-anchor="middle" fill="#111827">3</text>
+<rect x="121" y="128" width="176.7" height="34" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/><text x="209.3" y="149" text-anchor="middle" fill="#111827">шаг частиц 1, rEnd = 3</text>
+<line x1="298.7" y1="50" x2="298.7" y2="170" stroke="#9ca3af" stroke-dasharray="3 3"/>
+<rect x="281.8" y="58" width="51.6" height="34" rx="4" fill="#ffedd5" stroke="#ea580c" stroke-width="1.2"/><text x="307.6" y="79" text-anchor="middle" fill="#111827">4</text>
+<rect x="335.4" y="58" width="51.6" height="34" rx="4" fill="#ffedd5" stroke="#ea580c" stroke-width="1.2"/><text x="361.2" y="79" text-anchor="middle" fill="#111827">5</text>
+<rect x="389" y="58" width="51.6" height="34" rx="4" fill="#ffedd5" stroke="#ea580c" stroke-width="1.2"/><text x="414.8" y="79" text-anchor="middle" fill="#111827">6</text>
+<rect x="299.7" y="128" width="176.7" height="34" rx="4" fill="#ffedd5" stroke="#ea580c" stroke-width="1.2"/><text x="388" y="149" text-anchor="middle" fill="#111827">шаг частиц 2, rEnd = 6</text>
+<line x1="477.3" y1="50" x2="477.3" y2="170" stroke="#9ca3af" stroke-dasharray="3 3"/>
+<rect x="442.6" y="58" width="51.6" height="34" rx="4" fill="#dcfce7" stroke="#15803d" stroke-width="1.2"/><text x="468.4" y="79" text-anchor="middle" fill="#111827">7</text>
+<rect x="496.2" y="58" width="51.6" height="34" rx="4" fill="#dcfce7" stroke="#15803d" stroke-width="1.2"/><text x="522" y="79" text-anchor="middle" fill="#111827">8</text>
+<rect x="549.8" y="58" width="51.6" height="34" rx="4" fill="#dcfce7" stroke="#15803d" stroke-width="1.2"/><text x="575.6" y="79" text-anchor="middle" fill="#111827">9</text>
+<rect x="603.4" y="58" width="51.6" height="34" rx="4" fill="#dcfce7" stroke="#15803d" stroke-width="1.2"/><text x="629.2" y="79" text-anchor="middle" fill="#111827">10</text>
+<rect x="478.3" y="128" width="176.7" height="34" rx="4" fill="#dcfce7" stroke="#15803d" stroke-width="1.2"/><text x="566.7" y="149" text-anchor="middle" fill="#111827">шаг частиц 3, rEnd = 10</text>
+<text x="120" y="192" fill="#374151">rEnd = ⌊(p+1)·nr / np⌋ = 3, 6, 10: перед каждым шагом частиц — rigid-шаги,</text>
+<text x="120" y="210" fill="#374151">которые заканчиваются внутри него (группы 3, 3, 4); длина rigid-шага всегда frameDt / nr</text>
+</svg>

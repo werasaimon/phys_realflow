@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" width="680" height="420" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="420" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Ящик пущен по полу со скоростью 3 м/с, μ = 0.548</text>
+<line x1="76" y1="48" x2="76" y2="358" stroke="#e5e7eb"/><text x="76" y="376" text-anchor="middle" fill="#374151">0.0</text>
+<line x1="158.9" y1="48" x2="158.9" y2="358" stroke="#e5e7eb"/><text x="158.9" y="376" text-anchor="middle" fill="#374151">0.1</text>
+<line x1="241.7" y1="48" x2="241.7" y2="358" stroke="#e5e7eb"/><text x="241.7" y="376" text-anchor="middle" fill="#374151">0.2</text>
+<line x1="324.6" y1="48" x2="324.6" y2="358" stroke="#e5e7eb"/><text x="324.6" y="376" text-anchor="middle" fill="#374151">0.3</text>
+<line x1="407.4" y1="48" x2="407.4" y2="358" stroke="#e5e7eb"/><text x="407.4" y="376" text-anchor="middle" fill="#374151">0.4</text>
+<line x1="490.3" y1="48" x2="490.3" y2="358" stroke="#e5e7eb"/><text x="490.3" y="376" text-anchor="middle" fill="#374151">0.5</text>
+<line x1="573.1" y1="48" x2="573.1" y2="358" stroke="#e5e7eb"/><text x="573.1" y="376" text-anchor="middle" fill="#374151">0.6</text>
+<line x1="656" y1="48" x2="656" y2="358" stroke="#e5e7eb"/><text x="656" y="376" text-anchor="middle" fill="#374151">0.7</text>
+<line x1="76" y1="358" x2="656" y2="358" stroke="#e5e7eb"/><text x="68" y="362" text-anchor="end" fill="#374151">0.0</text>
+<line x1="76" y1="309.6" x2="656" y2="309.6" stroke="#e5e7eb"/><text x="68" y="313.6" text-anchor="end" fill="#374151">0.5</text>
+<line x1="76" y1="261.1" x2="656" y2="261.1" stroke="#e5e7eb"/><text x="68" y="265.1" text-anchor="end" fill="#374151">1.0</text>
+<line x1="76" y1="212.7" x2="656" y2="212.7" stroke="#e5e7eb"/><text x="68" y="216.7" text-anchor="end" fill="#374151">1.5</text>
+<line x1="76" y1="164.3" x2="656" y2="164.3" stroke="#e5e7eb"/><text x="68" y="168.3" text-anchor="end" fill="#374151">2.0</text>
+<line x1="76" y1="115.8" x2="656" y2="115.8" stroke="#e5e7eb"/><text x="68" y="119.8" text-anchor="end" fill="#374151">2.5</text>
+<line x1="76" y1="67.4" x2="656" y2="67.4" stroke="#e5e7eb"/><text x="68" y="71.4" text-anchor="end" fill="#374151">3.0</text>
+<rect x="76" y="48" width="580" height="310" fill="none" stroke="#9ca3af"/>
+<text x="366" y="404" text-anchor="middle" fill="#111827">время t, с</text>
+<text transform="translate(20 203) rotate(-90)" text-anchor="middle" fill="#111827">скорость v, м/с</text>
+<polyline fill="none" stroke="#ea580c" stroke-width="2.2" points="76,67.4 305.2,358 656,358"/>
+<polyline fill="none" stroke="#374151" stroke-width="2" stroke-dasharray="6 4" points="76,67.4 538.6,358 656,358"/>
+<circle cx="76" cy="67.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="92.6" cy="77.9" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="109.1" cy="88.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="125.7" cy="98.9" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="142.3" cy="109.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="158.9" cy="119.9" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="175.4" cy="130.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="192" cy="140.9" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="208.6" cy="151.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="225.1" cy="161.8" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="241.7" cy="172.3" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="258.3" cy="182.8" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="274.9" cy="193.3" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="291.4" cy="203.7" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="308" cy="214.2" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="324.6" cy="224.6" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="341.1" cy="235.1" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="357.7" cy="245.5" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="374.3" cy="256" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="390.9" cy="266.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="407.4" cy="276.9" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="424" cy="287.3" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="440.6" cy="297.7" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="457.1" cy="308.1" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="473.7" cy="318.6" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="490.3" cy="329" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="506.9" cy="339.4" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="523.4" cy="349.8" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="540" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="556.6" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="573.1" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="589.7" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="606.3" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="622.9" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="639.4" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="656" cy="358" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+<text x="299.2" y="346" text-anchor="end" fill="#111827" font-size="12">до: стоп через 0.415 м</text>
+<text x="548.6" y="328" fill="#111827" font-size="12">после: 0.830 м</text>
+<text x="548.6" y="344" fill="#111827" font-size="12">Кулон: 0.837 м</text>
+<rect x="356" y="58" width="290" height="68" fill="#ffffff" fill-opacity="0.92" stroke="#d1d5db" rx="4"/>
+<line x1="366" y1="74" x2="392" y2="74" stroke="#374151" stroke-width="2" stroke-dasharray="6 4"/><text x="400" y="78" fill="#111827">Кулон: v = v₀ − μ g t</text>
+<circle cx="379" cy="94" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/><text x="400" y="98" fill="#111827">RigidWorld, после исправления</text>
+<line x1="366" y1="114" x2="392" y2="114" stroke="#ea580c" stroke-width="2.2"/><text x="400" y="118" fill="#111827">до: трение ≈ 2 μ g (бюджет дважды)</text>
+</svg>

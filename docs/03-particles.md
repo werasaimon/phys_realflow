@@ -45,6 +45,37 @@ flowchart TB
     K --> L["смещения тел → изменение их скорости"]
 ```
 
+### Подшаги в кадре: твёрдые тела и частицы
+
+Твёрдым телам и частицам нужно разное число подшагов на кадр: $n_r$ = `rigid.params.substeps` и $n_p$ = `particles.params.substeps`. `Simulation::stepBodiesAndParticles` чередует их так, чтобы длина шага каждого решателя не зависела от другого:
+
+$$
+h_r = \frac{\Delta t_{frame}}{n_r}, \qquad h_p = \frac{\Delta t_{frame}}{n_p}, \qquad
+r_{end}(p) = \left\lfloor \frac{(p+1)\,n_r}{n_p} \right\rfloor .
+$$
+
+Перед шагом частиц $p$ выполняются все шаги тел, которые заканчиваются внутри него. Когда шаг частиц начинается, тела уже стоят там, где будут к его концу. При $n_r = 10$, $n_p = 3$ получаются группы 3, 3, 4.
+
+[src/sim/Simulation.cpp:745](../src/sim/Simulation.cpp#L745)
+```cpp
+    const int nr = std::max(1, rigid.params.substeps), np = std::max(1, particles.params.substeps);
+    const float hr = frameDt / float(nr), hp = frameDt / float(np);
+    int r = 0;
+    for (int p = 0; p < np; ++p) {
+        const int rEnd = (p + 1) * nr / np; // rigid steps done by the end of this particle step
+        for (; r < rEnd; ++r) rigid.step(hr);
+        if (gasDrag) {
+            applyGasDragOnCloth(hp);
+            applyGasDragOnLiquid(hp);
+        }
+        particles.step(hp);
+    }
+```
+
+![Распределение подшагов твёрдых тел по шагам частиц](img/substeps-timeline.svg)
+
+Раньше на каждый шаг частиц приходилось $\lfloor n_r/n_p\rfloor$ шагов тел: при 10 и 3 — 9 шагов по 1/9 кадра вместо 10 по 1/10. Длина шага тел зависела от того, есть ли в сцене частицы, и одна и та же стопка вела себя по-разному. Теперь тела шагают одинаково в любом режиме. Шаги частиц в сцене без частиц почти ничего не стоят: работает только эмиттер.
+
 ---
 
 ## 3.2 Position Based Fluids
@@ -93,12 +124,14 @@ $$
 Множитель Лагранжа (одна итерация Ньютона по $C_i$):
 
 $$
-\lambda_i = -\frac{C_i}{\sum_j \left|\nabla_{\mathbf p_j} C_i\right|^2 + \varepsilon}, \qquad
+\lambda_i = -\frac{C_i}{\displaystyle\sum_{j \ne i} \frac{w_j}{w_0}\left|\nabla_{\mathbf p_j} C_i\right|^2 + \left|\nabla_{\mathbf p_i} C_i\right|^2 + \varepsilon}, \qquad
 \nabla_{\mathbf p_j}C_i = -\frac{m_j}{\rho_0}\nabla W_{ij}, \quad
 \nabla_{\mathbf p_i}C_i = \sum_j \frac{m_j}{\rho_0}\nabla W_{ij} + \nabla\Phi_{wall}.
 $$
 
 $\varepsilon$ = `relaxation`$/h^2$ — регуляризация (constraint force mixing), которая не даёт делить на ноль у одиноких частиц.
+
+**Обобщённые массы** (Macklin et al. 2014, *Unified Particle Physics*). $w_j$ — обратная масса соседа, $w_0 = 1/m$ — обратная масса частицы жидкости. Поправка положения сдвигает соседа пропорционально $w_j/w_0$ (`computeDeltaP`), поэтому в знаменателе шага Ньютона он весит столько же. Лёгкая ткань ($w_j/w_0 \approx 100$) не отлетает в 100 раз дальше, чем нужно ограничению. Закреплённая частица ($w_j = 0$) не двигается и в сумму не входит. В коде это множитель `invMass_[nb[k]] * mass_` в строке `sum2 += …` ниже.
 
 [src/particles/ParticleSystem.cpp:412](../src/particles/ParticleSystem.cpp#L412)
 ```cpp
@@ -348,6 +381,20 @@ for (SoftCluster& cl : body.clusters) {
 | `Bend` | через одну частицу | `bendCompliance` | не рвутся |
 
 Нить между соседями представляет полоску ширины $s$ и длины $s$, поэтому её пружина $k = $ `tensileStiffness` [Н/м], а натяжение нити — просто $T = k\cdot\Delta l$.
+
+**Площадь и масса частицы.** Лист со сторонами $\mathbf u$, $\mathbf v$ покрыт $W\times H$ частицами, и каждая представляет одинаковую долю ткани:
+
+$$
+A_p = \frac{\lvert \mathbf u\times\mathbf v\rvert}{W\,H}, \qquad m_p = \sigma\,A_p, \qquad \sum_p m_p = \sigma\,\lvert\mathbf u\times\mathbf v\rvert ,
+$$
+
+где $\sigma$ = `areaDensity` [кг/м²]. Через ту же $A_p$ = `Cloth::particleArea` считаются тепло и топливо при горении и сопротивление ткани в газе ([Cloth.cpp:262](../src/particles/Cloth.cpp#L262)). Масса, горение и сопротивление поэтому согласованы, а сумма масс частиц в точности равна массе листа. Раньше масса считалась по $A_p$, а тепло и топливо — по $s^2$ с шагом сетки $s = |\mathbf u|/(W-1)$. Для квадратного листа из 11×11 частиц это $1/100$ против $1/121$ площади листа, то есть расхождение 21 %.
+
+[src/particles/ParticleSystem.cpp:131](../src/particles/ParticleSystem.cpp#L131)
+```cpp
+    c.particleArea = length(cross(u, v)) / float(c.width * c.height);
+    const float invMass = 1.0f / (material.areaDensity * c.particleArea);
+```
 
 ### XPBD (Macklin, Müller, Chentanez 2016)
 
