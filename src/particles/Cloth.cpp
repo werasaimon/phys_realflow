@@ -77,7 +77,7 @@ static void measureTethers(Cloth& cloth) {
     if (per == 0) return;
     const bool tearable = cloth.material.strengthWarp > 0 || cloth.material.strengthWeft > 0;
     const float slack = tearable ? 1.15f : 1.0f;
-    if (cloth.tornThreads == 0) {
+    if (cloth.tornThreads == 0 && cloth.burntThreads == 0) { // intact (threads also break by burning)
         for (int i = 0; i < count; ++i)
             for (int k = 0; k < per; ++k) {
                 Tether& t = cloth.tethers[size_t(i) * per + k];
@@ -257,8 +257,9 @@ int burnCloth(Cloth& cloth, const std::vector<float>& gasTemperature, const std:
               float ambientTemperature, float dt, std::vector<float>& heatToGas, std::vector<float>& fuelToGas) {
     const ClothMaterial& m = cloth.material;
     if (!m.flammable) return 0;
-    const float sigma = 5.670e-8f;                    // Stefan-Boltzmann [W/(m^2 K^4)]
-    const float area = cloth.spacing * cloth.spacing; // the patch of fabric one particle stands for
+    const float sigma = 5.670e-8f; // Stefan-Boltzmann [W/(m^2 K^4)]
+    // The patch of fabric one particle stands for (the same share of the sheet as its mass).
+    const float area = cloth.particleArea > 0 ? cloth.particleArea : cloth.spacing * cloth.spacing;
     const float freshMass = m.areaDensity * area;
     const float hA = 2.0f * m.heatTransfer * area;    // convection [W/K], both faces
     const float T0 = ambientTemperature;

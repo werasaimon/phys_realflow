@@ -22,7 +22,8 @@ void ParticleSystem::reset(const AABB& domain) {
     deltaQW_ = W(0.04f * h2_); // |dq| = 0.2 h
 
     x_.clear(); v_.clear(); p_.clear(); dp_.clear(); omega_.clear(); vtmp_.clear();
-    phase_.clear(); object_.clear(); invMass_.clear(); volume_.clear(); rest_.clear(); color_.clear();
+    phase_.clear(); object_.clear(); invMass_.clear(); volume_.clear(); rest_.clear();
+    contacts_.clear();
     softBodies_.clear(); cloths_.clear();
     grab_ = ParticleGrab();
     nextObject_ = 0;
@@ -44,7 +45,10 @@ static bool blockedBySolid(const Vector3& p, float r, const MeshBVH* mesh, const
         AABB mb = mesh->bounds();
         mb.lo -= Vector3(r);
         mb.hi += Vector3(r);
-        if (mb.contains(p) && mesh->signedDistance(p, 2 * r) < r) return true;
+        // Unbounded closest-point query: deep inside the obstacle is blocked too (a bounded
+        // signedDistance reports "far outside" there).
+        ClosestHit hit;
+        if (mb.contains(p) && mesh->closestPoint(p, kInf, hit) && hit.signedDistance < r) return true;
     }
     if (rigid)
         for (const RigidBody& b : rigid->bodies()) {
@@ -67,12 +71,11 @@ void ParticleSystem::addBlock(const AABB& box, const Vector3& vel) {
                 if (int(x_.size()) >= params.maxParticles) return;
                 Vector3 p = b.lo + Vector3(float(i), float(j), float(k)) * s + Vector3(rnd(), rnd(), rnd()) * (0.02f * s);
                 if (blockedBySolid(p, r, mesh_, rigid_)) continue;
-                addParticle(p, vel, ParticlePhase::Fluid, -1, 1.0f / mass_, Vector3(0.0f));
+                addParticle(p, vel, ParticlePhase::Fluid, -1, 1.0f / mass_);
             }
 }
 
-void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass,
-                            const Vector3& color, float volume) {
+void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, float volume) {
     x_.push_back(x);
     v_.push_back(v);
     phase_.push_back(uint8_t(phase));
@@ -80,7 +83,6 @@ void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePha
     invMass_.push_back(invMass);
     volume_.push_back(volume);
     rest_.push_back(x);
-    color_.push_back(color);
     if (phase == ParticlePhase::Fluid) ++fluidCount_;
 }
 
@@ -102,7 +104,7 @@ int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiff
                 if (int(x_.size()) >= params.maxParticles || !domain_.contains(p) || !bvh.isInside(p)) continue;
                 body.particles.push_back(int(x_.size()));
                 rest.push_back(p);
-                addParticle(p, velocity, ParticlePhase::Soft, body.object, invMass, color);
+                addParticle(p, velocity, ParticlePhase::Soft, body.object, invMass);
             }
     if (body.particles.empty()) return -1;
     // Clusters every 3 particle spacings, overlapping (radius 4 spacings): the body can bend.
@@ -124,7 +126,10 @@ int ParticleSystem::addCloth(const Vector3& origin, const Vector3& u, const Vect
     c.height = std::max(2, int(std::lround(length(v) / s)) + 1);
     c.spacing = length(u) / float(c.width - 1);
     c.firstParticle = int(x_.size());
-    const float invMass = float(c.width * c.height) / (material.areaDensity * length(cross(u, v)));
+    // Every particle stands for the same share of the sheet: its area (for the fire's heat and fuel
+    // and the gas drag) and its mass come from the same number.
+    c.particleArea = length(cross(u, v)) / float(c.width * c.height);
+    const float invMass = 1.0f / (material.areaDensity * c.particleArea);
     std::vector<Vector3> rest;
     for (int y = 0; y < c.height; ++y)
         for (int x = 0; x < c.width; ++x) {
@@ -135,7 +140,7 @@ int ParticleSystem::addCloth(const Vector3& origin, const Vector3& u, const Vect
                           (corner11 && (pinMask & 8)) || (y == 0 && (pinMask & 16)) || (y == c.height - 1 && (pinMask & 32)) ||
                           (x == 0 && (pinMask & 64)) || (x == c.width - 1 && (pinMask & 128));
             rest.push_back(p);
-            addParticle(p, Vector3(0.0f), ParticlePhase::Cloth, c.object, pinned ? 0.0f : invMass, color, sheetVolume);
+            addParticle(p, Vector3(0.0f), ParticlePhase::Cloth, c.object, pinned ? 0.0f : invMass, sheetVolume);
         }
     buildClothConstraints(c, rest);
     buildTethers(c, invMass_);
@@ -197,6 +202,10 @@ void ParticleSystem::burnCloths(float dt, const std::function<GasHeat(const Vect
                 const float before = m.charMassFraction + (1.0f - m.charMassFraction) * unburntBefore[k];
                 const float now = m.charMassFraction + (1.0f - m.charMassFraction) * c.unburnt[k];
                 invMass_[i] *= before / now;
+                // A particle held by the mouse has inverse mass 0 until release: its real one waits
+                // in the grab record and must get lighter too.
+                for (size_t g = 0; g < grab_.particles.size(); ++g)
+                    if (grab_.particles[g] == i) grab_.savedInvMass[g] *= before / now;
             }
             if (heat[k] != 0 || fuel[k] != 0) out.push_back({x_[i], heat[k], fuel[k]});
         }
@@ -220,7 +229,6 @@ void ParticleSystem::stepClothsInSmallSteps(float dt) {
         }
         for (int s = 0; s < m; ++s) {
             if (s == m / 2) updateTethers(c); // torn during the first half: re-measure mid-step
-            const float f = float(s + 1) / float(m);
             for (int k = 0; k < count; ++k) {
                 const int i = first + k;
                 if (invMass_[i] == 0) {
@@ -230,14 +238,13 @@ void ParticleSystem::stepClothsInSmallSteps(float dt) {
                 u[k] += g * h;
                 p_[i] = q[k] + u[k] * h;
             }
-            (void)f;
             for (DistanceConstraint& dc : c.constraints) dc.lambda = 0;
             solveCloth(c, p_, invMass_, h);
             if (tearCloth(c, p_, h) > 0 && s + 1 == m) updateTethers(c);
             for (int k = 0; k < count; ++k) {
                 const int i = first + k;
                 if (invMass_[i] > 0) {
-                    collide(i, p_[i], false, h); // walls, obstacle, rigid bodies
+                    collide(i, p_[i], q[k], false, h); // walls, obstacle, rigid bodies (friction on this small step)
                     u[k] = (p_[i] - q[k]) / h;
                 }
                 q[k] = p_[i];
@@ -314,7 +321,7 @@ void ParticleSystem::emitParticles(float dt) {
                 if (int(x_.size()) >= params.maxParticles) return;
                 Vector3 p = c + u * (a * s) + w * (b * s);
                 if (!domain_.contains(p)) continue;
-                addParticle(p, d * emitter.speed, ParticlePhase::Fluid, -1, 1.0f / mass_, Vector3(0.0f));
+                addParticle(p, d * emitter.speed, ParticlePhase::Fluid, -1, 1.0f / mass_);
             }
     }
 }
@@ -414,7 +421,11 @@ void ParticleSystem::computeLambda() {
                 const float mj = mass_ * volume_[nb[k]];
                 rho += mj * W(length2(r));
                 Vector3 g = gradW(r) * (mj * invRho0);
-                sum2 += length2(g);
+                // Generalized masses (Macklin et al. 2014): a neighbour moves by its inverse mass
+                // relative to a fluid particle's (computeDeltaP), so it weighs that much here - a
+                // light cloth is not pushed 100x further than the constraint needs, a pinned one
+                // not at all.
+                sum2 += length2(g) * (invMass_[nb[k]] * mass_);
                 gi += g;
             }
             Vector3 gWall;
@@ -459,7 +470,7 @@ void ParticleSystem::computeDeltaP() {
             float q = W(length2(r)) * invDq;
             float q2 = q * q;
             float scorr = -tk * q2 * q2;
-            d += gradW(r) * (lambda_[i] + lambda_[j] + scorr);
+            d += gradW(r) * ((lambda_[i] + lambda_[j] + scorr) * volume_[j]); // m_j = mass_ * volume_j, as in the density
         }
         Vector3 gWall;
         wallVolume(pi, gWall);
@@ -490,7 +501,7 @@ void ParticleSystem::solveBodyContacts(float dt) {
             const float depth = contactDepth_[i] + dot(moved, n);
             if (depth <= 0) continue;
             // Generalized inverse masses (Mueller et al. 2020, eq. 2-3): the particle, the body at c.
-            const float wp = invMass_[i] > 0 ? 1.0f / particleMass(i) : 0.0f;
+            const float wp = invMass_[i];
             const Vector3 rn = cross(rc, n);
             const float wb = body.invMass + dot(rn, body.applyInvInertiaWorld(rn));
             const float lambda = depth / (wp + wb); // [kg m]
@@ -511,7 +522,7 @@ void ParticleSystem::solveBodyContacts(float dt) {
     }
 }
 
-void ParticleSystem::collide(int i, Vector3& p, bool record, float dt) {
+void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool record, float dt) {
     const float r = params.particleRadius;
     // Domain walls.
     p = vmax(domain_.lo + Vector3(r), vmin(p, domain_.hi - Vector3(r)));
@@ -526,7 +537,7 @@ void ParticleSystem::collide(int i, Vector3& p, bool record, float dt) {
             if (mesh_->closestPoint(p, 3 * r, hit) && hit.signedDistance < r) {
                 Vector3 n = hit.normal;
                 p += n * (r - hit.signedDistance);
-                Vector3 dx = p - x_[i];
+                Vector3 dx = p - start;
                 p -= (dx - n * dot(dx, n)) * params.wallFriction;
             }
         }
@@ -556,7 +567,7 @@ void ParticleSystem::collide(int i, Vector3& p, bool record, float dt) {
                 continue;
             }
             p += n * (r - sd);
-            const Vector3 rel = (p - x_[i]) - body.velocityAt(p) * dt;
+            const Vector3 rel = (p - start) - body.velocityAt(p) * dt;
             p -= (rel - n * dot(rel, n)) * params.wallFriction;
         }
     }
@@ -623,7 +634,7 @@ void ParticleSystem::step(float dt) {
         }
         v_[i] += g * dt;
         Vector3 p = x_[i] + v_[i] * dt;
-        collide(i, p, true, dt);
+        collide(i, p, x_[i], true, dt);
         p_[i] = p;
     });
     solveBodyContacts(dt);
@@ -642,7 +653,7 @@ void ParticleSystem::step(float dt) {
         parallelFor(n, [&](int i) {
             if (invMass_[i] == 0) return;
             Vector3 p = p_[i] + dp_[i];
-            collide(i, p, true, dt);
+            collide(i, p, x_[i], true, dt);
             p_[i] = p;
         });
         solveBodyContacts(dt);
@@ -656,7 +667,7 @@ void ParticleSystem::step(float dt) {
             solveShapeMatching(softBodies_, p_, invMass_);
             parallelFor(n, [&](int i) {
                 if (invMass_[i] == 0 || isFluid(i)) return;
-                collide(i, p_[i], true, dt);
+                collide(i, p_[i], x_[i], true, dt);
             });
             solveBodyContacts(dt);
         }

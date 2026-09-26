@@ -28,7 +28,7 @@ for (int s = 0; s < ps.params.substeps; ++s) { world.step(dt); ps.step(dt); }
 
 ## 3.1 Шаг решателя
 
-`ParticleSystem::step` ([ParticleSystem.cpp:604](../src/particles/ParticleSystem.cpp#L604)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
+`ParticleSystem::step` ([ParticleSystem.cpp:615](../src/particles/ParticleSystem.cpp#L615)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
 
 ```mermaid
 flowchart TB
@@ -100,7 +100,7 @@ $$
 
 $\varepsilon$ = `relaxation`$/h^2$ — регуляризация (constraint force mixing), которая не даёт делить на ноль у одиноких частиц.
 
-[src/particles/ParticleSystem.cpp:405](../src/particles/ParticleSystem.cpp#L405)
+[src/particles/ParticleSystem.cpp:412](../src/particles/ParticleSystem.cpp#L412)
 ```cpp
 const Vector3 pi = p_[i];
 float rho = mass_ * W(0);
@@ -114,7 +114,11 @@ for (int k = 0; k < nbrCount_[i]; ++k) {
     const float mj = mass_ * volume_[nb[k]];
     rho += mj * W(length2(r));
     Vector3 g = gradW(r) * (mj * invRho0);
-    sum2 += length2(g);
+    // Generalized masses (Macklin et al. 2014): a neighbour moves by its inverse mass
+    // relative to a fluid particle's (computeDeltaP), so it weighs that much here - a
+    // light cloth is not pushed 100x further than the constraint needs, a pinned one
+    // not at all.
+    sum2 += length2(g) * (invMass_[nb[k]] * mass_);
     gi += g;
 }
 Vector3 gWall;
@@ -136,11 +140,11 @@ $$
 
 $s_{corr}$ (`tensileK` = $k$ = 1e-4) — искусственное давление: слабое отталкивание на малых расстояниях против кластеризации частиц при отрицательном давлении; заодно даёт эффект поверхностного натяжения.
 
-Твёрдая частица получает долю поправок давления соседей-жидкостей, масштабированную её обратной массой ([ParticleSystem.cpp:442](../src/particles/ParticleSystem.cpp#L442)): так вода двусторонне давит на мягкие тела и ткань.
+Твёрдая частица получает долю поправок давления соседей-жидкостей, масштабированную её обратной массой ([ParticleSystem.cpp:453](../src/particles/ParticleSystem.cpp#L453)): так вода двусторонне давит на мягкие тела и ткань.
 
 ### Вязкость XSPH и vorticity confinement
 
-После получения скоростей ([ParticleSystem.cpp:565](../src/particles/ParticleSystem.cpp#L565)):
+После получения скоростей ([ParticleSystem.cpp:576](../src/particles/ParticleSystem.cpp#L576)):
 
 $$
 \mathbf v_i \leftarrow \mathbf v_i + c\sum_j V_j\,(\mathbf v_j - \mathbf v_i)\,W_{ij}
@@ -177,7 +181,7 @@ $$
 
 Первообразная $(h^2 - z^2)^4$ — многочлен $F(z) = z\big(h^8 - \tfrac43 h^6 z^2 + \tfrac65 h^4 z^4 - \tfrac47 h^2 z^6 + \tfrac19 z^8\big)$, поэтому ничего не табулируется:
 
-[src/particles/ParticleSystem.cpp:371](../src/particles/ParticleSystem.cpp#L371)
+[src/particles/ParticleSystem.cpp:378](../src/particles/ParticleSystem.cpp#L378)
 ```cpp
 float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
     const float h = h_, h2 = h2_;
@@ -212,13 +216,13 @@ float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
 
 ## 3.4 Столкновения частиц
 
-`collide(i, p, record, dt)` ([ParticleSystem.cpp:514](../src/particles/ParticleSystem.cpp#L514)):
+`collide(i, p, start, record, dt)` ([ParticleSystem.cpp:525](../src/particles/ParticleSystem.cpp#L525); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
 
 1. **Стенки домена** — отсечение положения в бокс, уменьшенный на $r$.
 2. **Статический меш** — ближайшая точка через `MeshBVH` (гл. 1.7); если знаковое расстояние $< r$, частица выталкивается вдоль псевдонормали, касательное смещение гасится на долю `wallFriction`.
 3. **Твёрдые тела** — через `RigidBody::signedDistance`. Для закреплённых тел частица просто выталкивается. Для подвижных тел контакт **только записывается** (нормаль, глубина, точка) и решается вместе с телом в `solveBodyContacts` (раздел 3.5).
 
-**Контакты между частицами разных фаз** (ткань–мягкое тело, мягкое–мягкое, несоседние частицы одной ткани) держат расстояние $2r$. Пары собираются один раз за подшаг, нормаль фиксируется по положениям **в начале** шага: пара не может поменяться сторонами внутри шага, даже если ткань отпружинит или тяжёлое тело продавит частицу ([ParticleSystem.cpp:249](../src/particles/ParticleSystem.cpp#L249)). Решаются Гауссом–Зейделем с делением коррекции по обратным массам ([ParticleSystem.cpp:279](../src/particles/ParticleSystem.cpp#L279)).
+**Контакты между частицами разных фаз** (ткань–мягкое тело, мягкое–мягкое, несоседние частицы одной ткани) держат расстояние $2r$. Пары собираются один раз за подшаг, нормаль фиксируется по положениям **в начале** шага: пара не может поменяться сторонами внутри шага, даже если ткань отпружинит или тяжёлое тело продавит частицу ([ParticleSystem.cpp:256](../src/particles/ParticleSystem.cpp#L256)). Решаются Гауссом–Зейделем с делением коррекции по обратным массам ([ParticleSystem.cpp:286](../src/particles/ParticleSystem.cpp#L286)).
 
 > **Ограничение всех позиционных решателей (FleX тоже):** при большом отношении масс соприкасающихся частиц (тяжёлое тело на очень лёгкой ткани, больше ~1:10) лёгкая сторона забирает почти всю коррекцию, опора сходится медленно. Используйте реалистичные материалы (холст 1–2 кг/м² под поролоном) или больше `solidIterations`.
 
@@ -250,7 +254,7 @@ $$
 
 И главное — контакты одного тела решаются **по очереди** (Гаусс–Зейдель). Каждый следующий контакт видит тело, уже сдвинутое предыдущими: текущая глубина равна исходной минус то, насколько тело с тех пор ушло от частицы.
 
-[src/particles/ParticleSystem.cpp:481](../src/particles/ParticleSystem.cpp#L481)
+[src/particles/ParticleSystem.cpp:492](../src/particles/ParticleSystem.cpp#L492)
 ```cpp
 for (size_t b = 0; b < bodies.size(); ++b) {
     if (contacts[b].empty()) continue;
@@ -264,7 +268,7 @@ for (size_t b = 0; b < bodies.size(); ++b) {
         const float depth = contactDepth_[i] + dot(moved, n);
         if (depth <= 0) continue;
         // Generalized inverse masses (Mueller et al. 2020, eq. 2-3): the particle, the body at c.
-        const float wp = invMass_[i] > 0 ? 1.0f / particleMass(i) : 0.0f;
+        const float wp = invMass_[i];
         const Vector3 rn = cross(rc, n);
         const float wb = body.invMass + dot(rn, body.applyInvInertiaWorld(rn));
         const float lambda = depth / (wp + wb); // [kg m]
@@ -289,7 +293,7 @@ for (size_t b = 0; b < bodies.size(); ++b) {
 
 Müller, Heidelberger, Teschner, Gross 2005, *Meshless Deformations Based on Shape Matching*; кластеры — как в FleX.
 
-Мягкое тело заполняется частицами на решётке с шагом $2r$ внутри замкнутого меша (`addSoftBody`, [ParticleSystem.cpp:87](../src/particles/ParticleSystem.cpp#L87)). Частицы группируются в **перекрывающиеся кластеры**: центры на решётке с шагом $3\cdot 2r$, радиус $4\cdot 2r$. Один большой кластер — твёрдое тело; много маленьких — тело гнётся и сминается.
+Мягкое тело заполняется частицами на решётке с шагом $2r$ внутри замкнутого меша (`addSoftBody`, [ParticleSystem.cpp:89](../src/particles/ParticleSystem.cpp#L89)). Частицы группируются в **перекрывающиеся кластеры**: центры на решётке с шагом $3\cdot 2r$, радиус $4\cdot 2r$. Один большой кластер — твёрдое тело; много маленьких — тело гнётся и сминается.
 
 Для каждого кластера с частицами $\mathbf p_i$ и положениями покоя $\mathbf q_i$ относительно центра масс покоя:
 
@@ -381,7 +385,7 @@ $$
 
 ### Малые шаги (Macklin et al. 2019)
 
-*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:206](../src/particles/ParticleSystem.cpp#L206)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
+*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:215](../src/particles/ParticleSystem.cpp#L215)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
 
 Это важно для **разрыва**: натяжения нитей становятся физическими, а не отставанием недосошедшегося решателя. Иначе ткань рвалась бы под собственным весом.
 

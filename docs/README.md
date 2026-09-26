@@ -60,7 +60,7 @@ flowchart TB
     sim --> app
 ```
 
-Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/sim/Simulation.cpp:1012](../src/sim/Simulation.cpp#L1012)):
+Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/sim/Simulation.cpp:1002](../src/sim/Simulation.cpp#L1002)):
 
 | Режим | Что шагает | Связь |
 |---|---|---|
@@ -104,7 +104,7 @@ build-core/rf_tests            # код возврата = число прова
 RF_TEST=MHD build-core/rf_tests   # только тесты, в имени которых есть подстрока "MHD"
 ```
 
-Фильтр `RF_TEST=<подстрока>` сравнивает подстроку с именем теста ([tests/tests.cpp:37](../tests/tests.cpp#L37)). Имена — в `main()` файла [tests/tests.cpp](../tests/tests.cpp#L1945), например `"gjk / epa / sat"`, `"fire: burner ignites a curtain, it burns through"`, `"MHD: resistive decay, Alfven wave, div B = 0"`.
+Фильтр `RF_TEST=<подстрока>` сравнивает подстроку с именем теста ([tests/tests.cpp:37](../tests/tests.cpp#L37)). Имена — в `main()` файла [tests/tests.cpp](../tests/tests.cpp#L1946), например `"gjk / epa / sat"`, `"fire: burner ignites a curtain, it burns through"`, `"MHD: resistive decay, Alfven wave, div B = 0"`.
 
 ### Приложение (Qt 6.7.3, MinGW)
 

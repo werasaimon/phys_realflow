@@ -150,11 +150,11 @@ c = \frac{1}{\sqrt{t^2+1}},\ s = t\,c,
 \qquad \mathbf A \leftarrow \mathbf J^{\mathsf T}\mathbf A\,\mathbf J,\ \ \mathbf V \leftarrow \mathbf V\mathbf J .
 $$
 
-[src/math/Matrix3x3.h:119](../src/math/Matrix3x3.h#L119)
+[src/math/Matrix3x3.h:123](../src/math/Matrix3x3.h#L123)
 ```cpp
 for (auto& pq : pairs) {
     int p = pq[0], q = pq[1];
-    if (std::fabs(a[p][q]) < 1e-30) continue;
+    if (a[p][q] * a[p][q] <= 1e-30 * scale) continue;
     double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
     double t = (theta >= 0 ? 1.0 : -1.0) / (std::fabs(theta) + std::sqrt(theta * theta + 1.0));
     double c = 1.0 / std::sqrt(t * t + 1.0), s = t * c;
@@ -257,7 +257,7 @@ $$
 
 где $N$ — число примитивов, $S$ — площадь поверхности бокса. Перебирать все возможные разрезы дорого, поэтому центроиды раскладываются по **12 корзинам** вдоль каждой оси, и оцениваются 11 разрезов между корзинами за один проход вперёд и один назад:
 
-[src/spatial/BVH.cpp:57](../src/spatial/BVH.cpp#L57)
+[src/spatial/BVH.cpp:65](../src/spatial/BVH.cpp#L65)
 ```cpp
 for (int b = 0; b < kBins - 1; ++b) {
     acc.expand(binBox[b]);
@@ -288,7 +288,7 @@ for (int b = kBins - 1; b > 0; --b) {
 
 С такими нормалями знак $\operatorname{sign}\big((\mathbf p - \mathbf p_{closest})\cdot\mathbf n_{pseudo}\big)$ точен для замкнутого меша. Функция `closestPtTri` (Ericson, *Real-Time Collision Detection*, §5.1.5) возвращает, какой элемент ближайший: грань, одна из вершин или одно из рёбер.
 
-[src/spatial/BVH.cpp:262](../src/spatial/BVH.cpp#L262)
+[src/spatial/BVH.cpp:269](../src/spatial/BVH.cpp#L269)
 ```cpp
 Vector3 N;
 const auto& tri = tris_[bestTri];

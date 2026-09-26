@@ -270,8 +270,9 @@ ParamForm* MainWindow::buildFluidForm() {
     f->addRow(addBlock);
 
     f->beginAdvanced();
-    f->addDouble("Плотность ρ0", 1, 20000, 50, 0, [](const Snap& s) { return s.particleParams.restDensity; },
-                 [](Simulation& s, double v) { s.particles.params.restDensity = float(v); }, {}, "кг/м³");
+    // The particle mass is calibrated from ρ0 when the scene is built: a new density needs a rebuild.
+    f->addDouble("Плотность ρ0 *", 1, 20000, 50, 0, [](const Snap& s) { return s.particleParams.restDensity; },
+                 [](Simulation& s, double v) { s.particles.params.restDensity = float(v); s.reset(); }, {}, "кг/м³");
     f->addInt("Итерации несжимаемости", 1, 30, [](const Snap& s) { return s.particleParams.solverIterations; },
               [](Simulation& s, int v) { s.particles.params.solverIterations = v; });
     f->addInt("Подшагов на кадр", 1, 20, [](const Snap& s) { return s.particleParams.substeps; },
@@ -282,8 +283,9 @@ ParamForm* MainWindow::buildFluidForm() {
                  [](Simulation& s, double v) { s.particles.params.tensileK = float(v); });
     f->addDouble("Трение о стенки", 0, 1, 0.05, 2, [](const Snap& s) { return s.particleParams.wallFriction; },
                  [](Simulation& s, double v) { s.particles.params.wallFriction = float(v); });
-    f->addDouble("Гравитация g", -30, 30, 0.5, 2, [](const Snap& s) { return -s.particleParams.gravity.y; },
-                 [](Simulation& s, double v) { s.particles.params.gravity.y = float(-v); s.rigid.params.gravity.y = float(-v); }, {}, "м/с²");
+    f->addDouble("Гравитация g", -30, 30, 0.5, 2, [](const Snap& s) { return -s.rigid.gravity.y; },
+                 [](Simulation& s, double v) { s.setGravity({0.0f, float(-v), 0.0f}); s.touchParams(); }, "Одна для всей сцены",
+                 "м/с²");
     f->addDouble("Скорость струи", 0.1, 20, 0.5, 2, [](const Snap& s) { return s.emitter.speed; },
                  [](Simulation& s, double v) { s.particles.emitter.speed = float(v); }, {}, "м/с");
     f->addDouble("Радиус струи", 0.01, 0.3, 0.01, 3, [](const Snap& s) { return s.emitter.radius; },
@@ -318,8 +320,10 @@ ParamForm* MainWindow::buildGasForm() {
         f->addDouble(names[a], -20, 20, 0.05, 3, [a](const Snap& s) { return s.heat.center[a]; },
                      [a](Simulation& s, double v) { s.grid.source.center[a] = float(v); }, "Центр сферы-источника", "м");
     }
-    f->addDouble("Температура источника", 0, 10, 0.1, 2, [](const Snap& s) { return s.heat.temperature; },
-                 [](Simulation& s, double v) { s.grid.source.temperature = float(v); });
+    // Smoke scenes: relative units (~1); fire: kelvin above the air (the burner is 400 K).
+    f->addDouble("Температура источника", 0, 3000, 0.1, 2, [](const Snap& s) { return s.heat.temperature; },
+                 [](Simulation& s, double v) { s.grid.source.temperature = float(v); },
+                 "Дым: относительные единицы (~1); огонь: кельвины над температурой воздуха");
     f->addDouble("Плотность дыма источника", 0, 5, 0.1, 2, [](const Snap& s) { return s.heat.smoke; },
                  [](Simulation& s, double v) { s.grid.source.smoke = float(v); });
     f->addDouble("Вес дыма", -50, 50, 0.1, 2, [](const Snap& s) { return s.ns.smokeBuoyancy; },
@@ -414,7 +418,7 @@ ParamForm* MainWindow::buildRigidForm() {
     auto* bBullet = new QPushButton("Пуля");
     bBullet->setToolTip("Маленький шар на 150 м/с — проверка CCD");
     auto* bHull = new QPushButton("+ Многогранник");
-    bHull->setToolTip("Выпуклый многогранник (цилиндр/конус/тетраэдр); столкновения через GJK-EPA");
+    bHull->setToolTip("Выпуклый многогранник (цилиндр/конус/гранёный шар по очереди); столкновения через GJK-EPA");
     auto* bTeapot = new QPushButton("+ Чайник");
     auto* bBunny = new QPushButton("+ Кролик");
     bTeapot->setToolTip("Невыпуклое тело: чайник, разбитый на выпуклые части");
@@ -453,10 +457,11 @@ ParamForm* MainWindow::buildRigidForm() {
     connect(bHull, &QPushButton::clicked, this, [this, spawnPos] {
         ctrl_->post([spawnPos](Simulation& s) {
             static int k = 0;
+            const int kind = k++ % 3; // cylinder, cone, faceted ball in turn
             float sc = s.mode() == SimMode::Rigid ? 1.0f : s.mode() == SimMode::Fluid ? 0.5f : 0.7f;
-            TriMesh m = (k++ % 3 == 0) ? primitives::cylinder(0.14f * sc, 0.3f * sc, 12)
-                        : (k % 3 == 1) ? primitives::cone(0.16f * sc, 0.35f * sc, 12)
-                                       : primitives::sphere(0.16f * sc, 8, 5);
+            TriMesh m = kind == 0   ? primitives::cylinder(0.14f * sc, 0.3f * sc, 12)
+                        : kind == 1 ? primitives::cone(0.16f * sc, 0.35f * sc, 12)
+                                    : primitives::sphere(0.16f * sc, 8, 5);
             s.rigid.addConvex(m, spawnPos(s), Quaternion::fromAxisAngle({1, 0.3f, 0.2f}, 0.9f), 600.0f, {0.8f, 0.8f, 0.3f});
         });
     });
@@ -568,14 +573,17 @@ ParamForm* MainWindow::buildRigidForm() {
                "Покоящиеся острова (граф контактов) перестают считаться до касания; рисуются темнее");
     f->addInt("Итерации контактов", 1, 100, [](const Snap& s) { return s.rigid.iterations; },
               [](Simulation& s, int v) { s.rigid.params.iterations = v; });
-    f->addInt("Подшагов", 1, 20, [](const Snap& s) { return s.rigid.substeps; },
+    f->addInt("Подшагов", 1, 60, [](const Snap& s) { return s.rigid.substeps; }, // XPBD uses 30
               [](Simulation& s, int v) { s.rigid.params.substeps = v; });
     f->addDouble("Лин. демпфирование", 0, 5, 0.01, 3, [](const Snap& s) { return s.rigid.linearDamping; },
                  [](Simulation& s, double v) { s.rigid.params.linearDamping = float(v); }, {}, "1/с");
     f->addDouble("Угл. демпфирование", 0, 5, 0.01, 3, [](const Snap& s) { return s.rigid.angularDamping; },
                  [](Simulation& s, double v) { s.rigid.params.angularDamping = float(v); }, {}, "1/с");
+    // One gravity for bodies, particles and the flame (Simulation::setGravity); the same row as in
+    // the liquid form - touchParams refreshes both.
     f->addDouble("Гравитация g", -30, 30, 0.5, 2, [](const Snap& s) { return -s.rigid.gravity.y; },
-                 [](Simulation& s, double v) { s.rigid.params.gravity.y = float(-v); }, {}, "м/с²");
+                 [](Simulation& s, double v) { s.setGravity({0.0f, float(-v), 0.0f}); s.touchParams(); }, "Одна для всей сцены",
+                 "м/с²");
     return f;
 }
 
@@ -629,8 +637,6 @@ void MainWindow::buildVisualDock() {
                    [](Simulation& s, bool v) { s.vis.showSlice = v; });
         f->addBool("Дым (объёмный рендер)", [](const Snap& s) { return s.vis.showSmoke; },
                    [](Simulation& s, bool v) { s.vis.showSmoke = v; });
-        f->addBool("Поверхность воды (шейдер)", [](const Snap& s) { return s.vis.liquidSurface; },
-                   [](Simulation& s, bool v) { s.vis.liquidSurface = v; });
         f->addBool("Силовые линии магнитного поля", [](const Snap& s) { return s.vis.showFieldLines; },
                    [](Simulation& s, bool v) { s.vis.showFieldLines = v; });
         f->addCombo("Сетка вокселей", {"Скрыть", "В плоскости сечения", "Вся 3D-сетка"},
@@ -696,6 +702,9 @@ void MainWindow::buildVisualDock() {
         parts->setToolTip("Показывать невыпуклые тела как набор выпуклых оболочек, с которыми работает коллизия");
         connect(parts, &QCheckBox::toggled, view_, &Viewport::setShowConvexParts);
         f->addRow(parts);
+        // Liquid exists in every mode (pool scenes, water in the gas): the switch is always shown.
+        f->addBool("Поверхность воды (шейдер)", [](const Snap& s) { return s.vis.liquidSurface; },
+                   [](Simulation& s, bool v) { s.vis.liquidSurface = v; });
         f->beginAdvanced();
         auto* dom = new QCheckBox("Границы области");
         dom->setChecked(true);

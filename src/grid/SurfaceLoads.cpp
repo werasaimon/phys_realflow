@@ -1,6 +1,8 @@
 #include "grid/SurfaceLoads.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 namespace rf {
 
@@ -38,8 +40,8 @@ SurfaceLoads computeSurfaceLoads(const NSGridSolver& gas, const TriMesh& surface
         float mag = length(ut);
         Vector3 tau(0.0f);
         if (prm.wallFriction && mag > 1e-6f) {
-            float Re = std::max(mag * refLength / nu, 1.0f);
-            float cfLocal = Re < 5e5f ? 1.328f / std::sqrt(Re) : 0.074f * std::pow(Re, -0.2f);
+            // Same wall function and running length as the solver's own skin friction.
+            const float cfLocal = skinFrictionCoefficient(mag * gas.wallLength() / nu);
             tau = ut * (0.5f * rho * cfLocal * mag);
         }
         L.cf = length(tau) / q;
@@ -64,17 +66,22 @@ SurfaceLoads computeSurfaceLoads(const NSGridSolver& gas, const TriMesh& surface
 }
 
 bool saveSurfaceLoadsCsv(const std::string& path, const SurfaceLoads& loads) {
-    FILE* f = std::fopen(path.c_str(), "w");
+    // The path is UTF-8 (as loadMesh's): u8path keeps Cyrillic folder names working on Windows.
+    std::ofstream f(std::filesystem::u8path(path));
     if (!f) return false;
-    std::fprintf(f, "# Cd=%.5f (pressure %.5f, friction %.5f) Cl=%.5f Cs=%.5f Cm=%.5f wetted_area=%.6f\n", loads.cd,
-                 loads.cdPressure, loads.cdFriction, loads.cl, loads.cs, loads.cm, loads.wettedArea);
-    std::fprintf(f, "triangle,cx,cy,cz,nx,ny,nz,area,Cp,Cf,Fx,Fy,Fz\n");
+    char line[512];
+    std::snprintf(line, sizeof(line), "# Cd=%.5f (pressure %.5f, friction %.5f) Cl=%.5f Cs=%.5f Cm=%.5f wetted_area=%.6f\n",
+                  loads.cd, loads.cdPressure, loads.cdFriction, loads.cl, loads.cs, loads.cm, loads.wettedArea);
+    f << line << "triangle,cx,cy,cz,nx,ny,nz,area,Cp,Cf,Fx,Fy,Fz\n";
     for (size_t i = 0; i < loads.triangles.size(); ++i) {
         const TriangleLoad& t = loads.triangles[i];
-        std::fprintf(f, "%zu,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g\n", i, t.centroid.x, t.centroid.y,
-                     t.centroid.z, t.normal.x, t.normal.y, t.normal.z, t.area, t.cp, t.cf, t.force.x, t.force.y, t.force.z);
+        std::snprintf(line, sizeof(line), "%zu,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g\n", i, t.centroid.x,
+                      t.centroid.y, t.centroid.z, t.normal.x, t.normal.y, t.normal.z, t.area, t.cp, t.cf, t.force.x, t.force.y,
+                      t.force.z);
+        f << line;
     }
-    return std::fclose(f) == 0;
+    f.close();
+    return bool(f);
 }
 
 } // namespace rf

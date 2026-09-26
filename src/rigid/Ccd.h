@@ -14,14 +14,21 @@ namespace rf {
 
 struct SweptPose {
     const ConvexShape* shape = nullptr;
-    Vector3 p0, p1;   // positions at s = 0 and s = 1
+    Vector3 p0, p1;   // positions of the body at s = 0 and s = 1
     Quaternion q0;       // orientation at s = 0
     Vector3 dTheta;   // rotation vector over the whole step (q1 = exp(dTheta) q0)
+    // A convex part of a compound body: its pose in the body frame (identity: the whole body).
+    Matrix3x3 partR;
+    Vector3 partT;
     PosedShape at(float s) const {
-        return {shape, q0.integrated(dTheta, s).toMatrix3x3(), p0 + (p1 - p0) * s};
+        const Matrix3x3 R = q0.integrated(dTheta, s).toMatrix3x3();
+        return {shape, R * partR, p0 + (p1 - p0) * s + R * partT};
     }
-    // How far a surface point can move by the rotation; a sphere looks the same at any orientation.
-    float angularReach() const { return shape->type() == ShapeType::Sphere ? 0.0f : length(dTheta) * shape->boundingRadius(); }
+    // How far a surface point can move by the rotation; a centred sphere looks the same at any orientation.
+    float angularReach() const {
+        if (shape->type() == ShapeType::Sphere && length2(partT) == 0) return 0.0f;
+        return length(dTheta) * (length(partT) + shape->boundingRadius());
+    }
 };
 
 struct ToiResult {

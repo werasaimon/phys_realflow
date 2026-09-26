@@ -115,6 +115,7 @@ struct RenderSnapshot {
         std::shared_ptr<const TriMesh> mesh; // convex polyhedra (local, principal frame)
         bool sleeping = false;
         std::shared_ptr<const ConvexShape> collisionShape; // for ray picking in the GUI (immutable)
+        bool movable = true; // not static (nor held by the scene): the mouse can grab it
     };
     std::vector<Body> bodies;
     // Joints
@@ -209,6 +210,10 @@ public:
 
     SimMode mode() const { return mode_; }
     Preset preset() const { return preset_; }
+    // One gravity for the whole scene: rigid bodies, particles (liquid, soft bodies, cloth) and the
+    // buoyancy of the flame. Each solver keeps its own copy (it can run alone); set it here.
+    void setGravity(const Vector3& g);
+    Vector3 gravity() const { return rigid.params.gravity; }
     void loadPreset(Preset p);
     void reset();                    // rebuild the current preset with the current parameters
     void rebuildObstacle();          // regenerate geometry from `obstacle`, then reset()
@@ -229,7 +234,11 @@ private:
     void setupTunnelScene();
     void setupRigidScene();
     void stepGasWithBodies();
-    void stepParticlesInGas();
+    // Rigid bodies and particles over one frame, interleaved (floating and every contact between
+    // them needs it): rigid.params.substeps rigid steps and particles.params.substeps particle
+    // steps, in time order. gasDrag: the gas acts on cloth and liquid before each particle step.
+    void stepBodiesAndParticles(bool gasDrag);
+    void applyGasOnSoftBodies();
     void applyGasDragOnCloth(float dt);
     void applyGasDragOnLiquid(float dt);
     void passLiquidToGas();
@@ -254,10 +263,7 @@ private:
     float lastGridDt_ = 0;
     std::vector<Vector3> gasImpulse_, gasAngularImpulse_; // gas -> bodies, accumulated over a frame
     std::vector<Vector3> softGasImpulse_;                  // gas -> soft bodies (their centre of mass)
-    // Bodies held in place (static obstacles for the gas) until releaseTime_.
-    struct Held { int body; float invMass; Vector3 invInertiaLocal; };
-    std::vector<Held> held_;
-    float releaseTime_ = 0;
+    float releaseTime_ = 0; // bodies held by the scene (RigidWorld::hold) fall from this time on
     float gasForceMax_ = 0;
     SurfaceLoads surfaceLoads_;
     void updateSurfaceLoads();

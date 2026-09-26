@@ -7,7 +7,8 @@ namespace rf {
 // Cell index and weight along one axis of a trilinear lookup (clamped to the samples).
 static inline void axisCoord(float f, int n, int& i0, int& i1, float& t) {
     if (n <= 1) { i0 = i1 = 0; t = 0; return; }
-    f = clampv(f, 0.0f, float(n - 1));
+    if (!(f >= 0.0f)) f = 0.0f; // also NaN (a particle that blew up): clampv would pass it on to int()
+    f = std::min(f, float(n - 1));
     i0 = std::min(int(f), n - 2);
     i1 = i0 + 1;
     t = f - float(i0);

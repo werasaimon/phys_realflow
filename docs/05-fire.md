@@ -9,7 +9,7 @@
 | горение газа, радиационное остывание | `Combustion` — [src/grid/Combustion.h](../src/grid/Combustion.h), [Combustion.cpp](../src/grid/Combustion.cpp) |
 | плавучесть, расширение, теплопроводность, излучение пламени | `NSGridSolver` — [src/grid/NSGridSolver.cpp](../src/grid/NSGridSolver.cpp) |
 | нагрев, пиролиз, обугливание и прогорание ткани | `burnCloth` — [src/particles/Cloth.cpp](../src/particles/Cloth.cpp#L256) |
-| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/sim/Simulation.cpp:795](../src/sim/Simulation.cpp#L795) |
+| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/sim/Simulation.cpp:785](../src/sim/Simulation.cpp#L785) |
 
 Все температуры в газе огня — **перегрев в кельвинах над окружающим воздухом** $T_0$ = `ambientTemperature` = 293 K. Абсолютная температура $T + T_0$.
 
@@ -80,7 +80,7 @@ for (int c = b; c < e; ++c) {
 }
 ```
 
-Мощность пламени ([NSGridSolver.cpp:1066](../src/grid/NSGridSolver.cpp#L1066)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
+Мощность пламени ([NSGridSolver.cpp:1100](../src/grid/NSGridSolver.cpp#L1100)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
 
 $$
 \dot Q = \frac{\sum b\cdot H\cdot\rho\,c_p\,\Delta x^3}{\Delta t}\quad[\text{Вт}].
@@ -108,7 +108,7 @@ $$
 
 ## 5.2 Расширение и плавучесть идеального газа
 
-**Расширение** $e$ из реакции добавляется в правую часть проекции: $b_c = -\operatorname{div}_c + e_c\Delta x$ ([NSGridSolver.cpp:708](../src/grid/NSGridSolver.cpp#L708)). В закрытой области среднее вычитается (гл. 4.5) — иначе горение в закрытом ящике не имело бы решения.
+**Расширение** $e$ из реакции добавляется в правую часть проекции: $b_c = -\operatorname{div}_c + e_c\Delta x$ ([NSGridSolver.cpp:742](../src/grid/NSGridSolver.cpp#L742)). В закрытой области среднее вычитается (гл. 4.5) — иначе горение в закрытом ящике не имело бы решения.
 
 **Плавучесть.** Сетка несжимаемая: каждая ячейка несёт массу $\rho_0\Delta x^3$. Горячий газ при том же давлении легче: $\rho = \rho_0 T_0/(T_0 + T)$. Архимедова сила на объём $(\rho_0 - \rho)g$, отнесённая к массе ячейки $\rho_0$, даёт ускорение
 
@@ -134,9 +134,9 @@ $$
 
 $\alpha_0$ = `thermalDiffusivity` = 2.2e-5 м²/с (воздух при 293 K). Рост $\propto T^{1.75}$ — из кинетической теории газов ($\alpha \propto \lambda/\rho c_p$, теплопроводность воздуха $\propto T^{0.75}$, плотность $\propto 1/T$).
 
-Дискретизация — в форме потоков через грани, с коэффициентом грани = среднее двух ячеек; через стены и в твёрдые ячейки потока нет. Поэтому тепло сохраняется **точно**. Схема явная, в стольких подшагах, сколько требует устойчивость $6\alpha_{max}h/\Delta x^2 \le 0.9$ ([NSGridSolver.cpp:976](../src/grid/NSGridSolver.cpp#L976)):
+Дискретизация — в форме потоков через грани, с коэффициентом грани = среднее двух ячеек; через стены и в твёрдые ячейки потока нет. Поэтому тепло сохраняется **точно**. Схема явная, в стольких подшагах, сколько требует устойчивость $6\alpha_{max}h/\Delta x^2 \le 0.9$ ([NSGridSolver.cpp:1010](../src/grid/NSGridSolver.cpp#L1010)):
 
-[src/grid/NSGridSolver.cpp:964](../src/grid/NSGridSolver.cpp#L964)
+[src/grid/NSGridSolver.cpp:998](../src/grid/NSGridSolver.cpp#L998)
 ```cpp
 const int steps = std::max(1, int(std::ceil(6.0f * alphaMax * dt / (dx_ * dx_) / 0.9f)));
 const float h = dt / float(steps) / (dx_ * dx_);
@@ -170,13 +170,13 @@ $$
 P_{cell} = 4\kappa\sigma\,\big((T + T_0)^4 - T_0^4\big)\,\Delta x^3, \qquad \kappa = \texttt{absorptionCoefficient} = 2\ \text{м}^{-1}.
 $$
 
-Ниже 700 K излучение пламени пренебрежимо. Горячие ячейки собираются в список точечных источников (`collectRadiators`, [NSGridSolver.cpp:989](../src/grid/NSGridSolver.cpp#L989)), и облучённость в точке — сумма по ним без затенения:
+Ниже 700 K излучение пламени пренебрежимо. Горячие ячейки собираются в список точечных источников (`collectRadiators`, [NSGridSolver.cpp:1023](../src/grid/NSGridSolver.cpp#L1023)), и облучённость в точке — сумма по ним без затенения:
 
 $$
 q(\mathbf x) = \sum_{cells}\frac{P_{cell}}{4\pi\max(|\mathbf x - \mathbf x_c|^2,\ \Delta x^2)}\quad[\text{Вт/м}^2].
 $$
 
-[src/grid/NSGridSolver.cpp:1003](../src/grid/NSGridSolver.cpp#L1003)
+[src/grid/NSGridSolver.cpp:1037](../src/grid/NSGridSolver.cpp#L1037)
 ```cpp
 float NSGridSolver::irradianceAt(const Vector3& world) const {
     const float minR2 = dx_ * dx_; // a point source is only fair from about a cell away
@@ -208,7 +208,7 @@ $$
 Q_{a\leftarrow b} = k\,t\,(T_b - T_a)\,\Delta t .
 $$
 
-Через прожжённую дыру тепло не идёт. Схема явная: $kt\Delta t/C \ll 1$ ([Cloth.cpp:269](../src/particles/Cloth.cpp#L269)).
+Через прожжённую дыру тепло не идёт. Схема явная: $kt\Delta t/C \ll 1$ ([Cloth.cpp:270](../src/particles/Cloth.cpp#L270)).
 
 ### Шаг 2 — нагрев излучением и конвекцией (точно за шаг)
 
@@ -225,7 +225,7 @@ $$
 T_{heated} = T_g + \frac{R}{hA_2} + \left(T - T_g - \frac{R}{hA_2}\right)e^{-hA_2\Delta t/C}.
 $$
 
-[src/particles/Cloth.cpp:298](../src/particles/Cloth.cpp#L298)
+[src/particles/Cloth.cpp:299](../src/particles/Cloth.cpp#L299)
 ```cpp
 const float Tabs = T + T0;
 const float radiation = m.emissivity * area * (irradiance[k] - 2.0f * sigma * (Tabs * Tabs * Tabs * Tabs - T0 * T0 * T0 * T0));
@@ -252,7 +252,7 @@ $$
 
 $g$ монотонно растёт, $g(T_{heated}) \ge 0$, а при $T_{end} = T_{heated} - H_p m_v/C$ (всё разложилось) $g \le 0$. Корень ищется **бисекцией**, 30 шагов:
 
-[src/particles/Cloth.cpp:308](../src/particles/Cloth.cpp#L308)
+[src/particles/Cloth.cpp:309](../src/particles/Cloth.cpp#L309)
 ```cpp
 const float volatileMass = freshMass * (1.0f - m.charMassFraction) * unburnt; // [kg] left to decompose
 float decomposed = 0;                                                         // fraction of `unburnt`
@@ -276,9 +276,9 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 ### Шаг 4 — обугливание и прогорание нитей
 
-- Нить, у которой **оба конца** прогорели, распадается (`breakThread`, [Cloth.cpp:331](../src/particles/Cloth.cpp#L331)).
+- Нить, у которой **оба конца** прогорели, распадается (`breakThread`, [Cloth.cpp:332](../src/particles/Cloth.cpp#L332)).
 - Обугленная ткань слабеет: прочность нити умножается на $c_{char} + (1 - c_{char})\min(u_a, u_b)$, $c_{char}$ = `charStrength` = 0.001 ([Cloth.cpp:239](../src/particles/Cloth.cpp#L239)). Прогоревшая ткань рвётся под собственным весом.
-- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:195](../src/particles/ParticleSystem.cpp#L195)).
+- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:200](../src/particles/ParticleSystem.cpp#L200)).
 
 ### Порога воспламенения нет — он получается сам
 
@@ -297,9 +297,9 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 ## 5.6 Связь ткани с газом
 
-`Simulation::stepGasWithBodies` ([Simulation.cpp:755](../src/sim/Simulation.cpp#L755)) один раз за кадр:
+`Simulation::stepGasWithBodies` ([Simulation.cpp:759](../src/sim/Simulation.cpp#L759)) один раз за кадр:
 
-[src/sim/Simulation.cpp:795](../src/sim/Simulation.cpp#L795)
+[src/sim/Simulation.cpp:785](../src/sim/Simulation.cpp#L785)
 ```cpp
 if (grid.combustion.enabled) {
     std::vector<FireOutput> fire;
@@ -309,7 +309,7 @@ if (grid.combustion.enabled) {
 }
 ```
 
-Выбросы добавляются в ячейку в начале следующего шага газа: топливо — $Y \mathrel{+}= V_{fuel}/\Delta x^3$, тепло — $T \mathrel{+}= Q/(\rho\,c_p\,\Delta x^3)$ ([NSGridSolver.cpp:1010](../src/grid/NSGridSolver.cpp#L1010)). Цикл замыкается: пламя греет ткань → ткань выделяет газ → газ горит над ней → пламя поднимается выше.
+Выбросы добавляются в ячейку в начале следующего шага газа: топливо — $Y \mathrel{+}= V_{fuel}/\Delta x^3$, тепло — $T \mathrel{+}= Q/(\rho\,c_p\,\Delta x^3)$ ([NSGridSolver.cpp:1044](../src/grid/NSGridSolver.cpp#L1044)). Цикл замыкается: пламя греет ткань → ткань выделяет газ → газ горит над ней → пламя поднимается выше.
 
 ---
 
@@ -352,17 +352,17 @@ if (grid.combustion.enabled) {
 
 ## 5.8 Сцена «Огонь» и наблюдаемая физика
 
-Пресет 23 ([Simulation.cpp:236](../src/sim/Simulation.cpp#L236), [Simulation.cpp:530](../src/sim/Simulation.cpp#L530)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
+Пресет 23 ([Simulation.cpp:240](../src/sim/Simulation.cpp#L240), [Simulation.cpp:534](../src/sim/Simulation.cpp#L534)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
 
 Тест `fire: burner ignites a curtain, it burns through` (300 кадров = 5 с):
 
 | Величина | Значение |
 |---|---|
-| штора воспламеняется | через **1.77 с** |
+| штора воспламеняется | через **1.78 с** |
 | огонь поднимается | до штанги |
-| прогоревших нитей | **64** |
-| максимальная температура пламени | **1519 K** (кислородный предел не даёт перегреться) |
-| пиковая мощность | **278 кВт** |
+| прогоревших нитей | **74** |
+| максимальная температура пламени | **1542 K** (кислородный предел не даёт перегреться) |
+| пиковая мощность | **270 кВт** |
 
 ### Снизу загорается, выше прогорает
 
@@ -402,7 +402,7 @@ if (grid.combustion.enabled) {
 | `heat conduction` — газ | $d\langle r^2\rangle/dt$ = **6.006e-3** при $6\alpha$ = 6.000e-3 м²/с; тепло 105.859468 → 105.859469 |
 | `heat conduction` — ткань | теплопроводность только по нитям сохраняет тепло (< 1e-2), нагревает соседей; при +100 K пиролиза нет |
 | `cotton pyrolysis` | 100 кВт/м²: половина за 2.43 с при 688 K; 8 кВт/м²: цела 30 с при 369 K |
-| `fire: burner ignites a curtain` | воспламенение 1.77 с, 64 нити прогорели, $T_{max}$ = 1519 K, пик 278 кВт, всё конечно (нет NaN) |
+| `fire: burner ignites a curtain` | воспламенение 1.78 с, 74 нити прогорели, $T_{max}$ = 1542 K, пик 270 кВт, всё конечно (нет NaN) |
 
 ## Литература
 

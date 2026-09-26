@@ -78,6 +78,7 @@ struct Cloth {
     int firstParticle = 0;    // particle (x, y) = firstParticle + x + width * y
     int width = 0, height = 0;
     float spacing = 0;
+    float particleArea = 0;   // fabric one particle stands for [m^2]: its mass = areaDensity * this
     ClothMaterial material;
     // Constraints sorted into independent batches (no shared particle within a batch), batch b =
     // constraints[batchStart[b] .. batchStart[b + 1]): a batch is solved in parallel, the batches

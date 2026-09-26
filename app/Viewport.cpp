@@ -634,6 +634,10 @@ bool Viewport::pickBody(const Ray& ray, int& body, Vector3& hit) const {
         }
     }
     if (body >= 0) {
+        if (!snap_->bodies[body].movable) { // a static wall (or a body the scene holds): nothing to grab
+            body = -1;
+            return false;
+        }
         hit = ray.at(best);
         return true;
     }
@@ -643,6 +647,7 @@ bool Viewport::pickBody(const Ray& ray, int& body, Vector3& hit) const {
     float bestRatio = 1.0f;
     for (int i = 0; i < int(snap_->bodies.size()); ++i) {
         const auto& b = snap_->bodies[i];
+        if (!b.movable) continue;
         float t = rf::dot(b.pos - ray.origin, ray.dir);
         if (t <= 0) continue;
         float perp = rf::length(b.pos - ray.at(t));
@@ -752,6 +757,7 @@ void Viewport::drawProbe(const QMatrix4x4& vp) {
 // ---------------------------------------------------------------------------
 void Viewport::setSnapshot(std::shared_ptr<const rf::RenderSnapshot> s) {
     snap_ = std::move(s);
+    ++snapSerial_;
     if (snap_ && (!framedOnce_ || snap_->preset != lastPreset_)) {
         framedOnce_ = true;
         lastPreset_ = snap_->preset;
@@ -868,9 +874,18 @@ void Viewport::drawObstacle(const QMatrix4x4& view, const QMatrix4x4& proj) {
     obstacle_.vao.release();
 }
 
+void Viewport::pruneHullCache() {
+    // Meshes of bodies that are gone (reset, other scene): only the cache still holds them.
+    for (auto it = hullCache_.begin(); it != hullCache_.end();) {
+        if (it->second.mesh.use_count() == 1) it = hullCache_.erase(it);
+        else ++it;
+    }
+}
+
 Viewport::GpuMesh& Viewport::hullMesh(const std::shared_ptr<const rf::TriMesh>& m, bool smooth) {
     GpuMesh& g = hullCache_[m.get()];
     if (g.vao) return g;
+    g.mesh = m;
     std::vector<float> v;
     std::vector<Vector3> vn;
     if (smooth) vn = m->vertexNormals();
@@ -901,6 +916,7 @@ Viewport::GpuMesh& Viewport::hullMesh(const std::shared_ptr<const rf::TriMesh>& 
 }
 
 void Viewport::drawBodies(const QMatrix4x4& view, const QMatrix4x4& proj) {
+    pruneHullCache();
     bool anyHull = false;
     auto meshBody = [](const auto& b) { return (b.shape == rf::ShapeType::ConvexHull || b.shape == rf::ShapeType::Compound) && b.mesh; };
     for (const auto& b : snap_->bodies) anyHull |= meshBody(b);
@@ -1054,7 +1070,7 @@ void Viewport::drawParticles(const QMatrix4x4& view, const QMatrix4x4& proj) {
     for (const auto& b : snap_->bodies) nSph += b.shape == rf::ShapeType::Sphere;
     const size_t total = P.size() + nSph;
     if (total == 0) return;
-    if (particleFrame_ != snap_->frame || particleCount_ != int(total)) {
+    if (particleSerial_ != snapSerial_) {
         std::vector<float> v;
         v.reserve(total * 8);
         const bool own = snap_->particleColor.size() == P.size();
@@ -1071,8 +1087,7 @@ void Viewport::drawParticles(const QMatrix4x4& view, const QMatrix4x4& proj) {
             }
         particles_.vbo.bind();
         particles_.vbo.allocate(v.data(), int(v.size() * sizeof(float)));
-        particleFrame_ = snap_->frame;
-        particleCount_ = int(total);
+        particleSerial_ = snapSerial_;
     }
     const float pointScale = height() / (2.0f * std::tan(qDegreesToRadians(camera_.fovDeg() * 0.5f)));
     sphereProg_.bind();
@@ -1099,9 +1114,7 @@ void Viewport::drawParticles(const QMatrix4x4& view, const QMatrix4x4& proj) {
 
 void Viewport::drawSlice(const QMatrix4x4& vp) {
     if (!snap_->hasSlice || snap_->sliceW <= 0) return;
-    if (sliceFrame_ != snap_->frame + snap_->paramsVersion * 1000003ull + uint64_t(snap_->sliceW) * 7 +
-                           uint64_t(snap_->vis.sliceField) * 131 + uint64_t(snap_->vis.sliceAxis) * 17 +
-                           uint64_t(snap_->vis.slicePosition * 1000)) {
+    if (sliceSerial_ != snapSerial_) { // a new snapshot (also a paused reset at frame 0)
         std::vector<float> tex(size_t(snap_->sliceW) * snap_->sliceH * 2);
         for (size_t i = 0; i < snap_->slice.size(); ++i) {
             tex[2 * i] = snap_->slice[i];
@@ -1116,9 +1129,7 @@ void Viewport::drawSlice(const QMatrix4x4& vp) {
                      p0.x, p0.y, p0.z, 0, 0, p2.x, p2.y, p2.z, 1, 1, p3.x, p3.y, p3.z, 0, 1};
         slice_.vbo.bind();
         slice_.vbo.allocate(q, sizeof(q));
-        sliceFrame_ = snap_->frame + snap_->paramsVersion * 1000003ull + uint64_t(snap_->sliceW) * 7 +
-                      uint64_t(snap_->vis.sliceField) * 131 + uint64_t(snap_->vis.sliceAxis) * 17 +
-                      uint64_t(snap_->vis.slicePosition * 1000);
+        sliceSerial_ = snapSerial_;
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1333,14 +1344,14 @@ void Viewport::drawVolume(const QMatrix4x4& vp, const QVector3D& eye) {
     if (!snap_->hasVolume || snap_->volume.empty()) return;
     const int W = int(width() * devicePixelRatioF()), H = int(height() * devicePixelRatioF());
     const bool depthOk = copySceneDepth(W, H);
-    if (volumeFrame_ != snap_->frame + snap_->paramsVersion * 1000003ull) {
+    if (volumeSerial_ != snapSerial_) {
         glBindTexture(GL_TEXTURE_3D, volumeTex_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         const bool fire = snap_->volumeChannels == 2; // smoke + temperature
         glTexImage3D(GL_TEXTURE_3D, 0, fire ? GL_RG8 : GL_R8, snap_->volX, snap_->volY, snap_->volZ, 0, fire ? GL_RG : GL_RED,
                      GL_UNSIGNED_BYTE, snap_->volume.data());
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        volumeFrame_ = snap_->frame + snap_->paramsVersion * 1000003ull;
+        volumeSerial_ = snapSerial_;
     }
     const rf::AABB& d = snap_->domain;
     glEnable(GL_BLEND);

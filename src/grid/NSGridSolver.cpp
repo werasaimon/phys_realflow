@@ -22,6 +22,15 @@ void NSGridSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     dx_ = params.domainSize.x / float(nx_);
     ny_ = std::max(4, int(std::lround(params.domainSize.y / dx_)));
     nz_ = std::max(4, int(std::lround(params.domainSize.z / dx_)));
+    // At most 16 million cells (~3 GB with all fields, as 400 x 200 x 200): a thin, tall domain would
+    // otherwise ask for 10^8 cells and fail to allocate. The spacing then grows to fit.
+    const double kMaxCells = 16e6, cells = double(nx_) * ny_ * nz_;
+    if (cells > kMaxCells) {
+        nx_ = std::max(8, int(float(nx_) / float(std::cbrt(cells / kMaxCells))));
+        dx_ = params.domainSize.x / float(nx_);
+        ny_ = std::max(4, int(std::lround(params.domainSize.y / dx_)));
+        nz_ = std::max(4, int(std::lround(params.domainSize.z / dx_)));
+    }
 
     float u0 = (params.bc[0] == BoundaryType::Inflow) ? params.inflowSpeed : 0.0f;
     u_.init(nx_ + 1, ny_, nz_, {0, 0.5f, 0.5f}, u0);
@@ -37,8 +46,16 @@ void NSGridSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     const size_t n = size_t(nx_) * ny_ * nz_;
     expansion_.assign(n, 0.0f);
     heatReleaseRate_ = 0;
+    // Everything handed in for the old scene goes: the bodies, the liquid, pending impulses and
+    // emissions (a later scene without bodies would otherwise keep the old water as solid cells).
     pendingEmissions_.clear();
+    pendingImpulses_.clear();
     radiators_.clear();
+    moving_.clear();
+    liquidPos_.clear();
+    liquidVelIn_.clear();
+    liquidVel_.clear();
+    liquidCells_ = 0;
     solid_.assign(n, 0);
     if (obstacle && !obstacle->empty()) {
         AABB mb = obstacle->bounds();
@@ -77,7 +94,9 @@ void NSGridSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
             for (int j = 0; j < ny_; ++j)
                 for (int i = 0; i < nx_; ++i)
                     if (solid(i, j, k)) sb.expand(Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * dx_);
-        staticLength_ = sb.valid() ? maxComp(sb.extent()) + dx_ : 1.0f;
+        // Running length of the boundary layer: the extent along the flow (x), not the largest
+        // extent (that is the span of a cylinder or a wing).
+        staticLength_ = sb.valid() ? sb.extent().x + dx_ : 1.0f;
     }
     staticFriction_ = Vector3(0.0f);
     movFricForce_.clear();
@@ -174,9 +193,11 @@ void NSGridSolver::voxelizeMovingSolids() {
     //    the cells of its last voxelisation - no inside tests at all. Then the liquid: the cells
     //    holding at least one particle, with the particles' mean velocity (list nb).
     std::vector<std::vector<size_t>> cells(nb + 1);
+    // Cell lists are matched by index: reuse them only while the set of solids is the same size.
+    const bool sameSolids = solidCells_.size() == nb + 1; // (the last list is the liquid)
     for (size_t b = 0; b < nb; ++b) {
         const MovingSolid& s = moving_[b];
-        if (s.resting && b + 1 < solidCells_.size()) { // (the last list is the liquid)
+        if (s.resting && sameSolids) {
             cells[b] = solidCells_[b];
             continue;
         }
@@ -276,22 +297,36 @@ bool NSGridSolver::solidFaceVelocity(long ca, long cb, const Vector3& fw, int co
 }
 
 void NSGridSolver::applyPendingImpulses() {
-    // Velocity change of the faces around the point, trilinear weights (they sum to 1, so the
-    // momentum put in is exactly the impulse: every face stands for one cell of gas).
+    // The momentum goes to the gas cells around the point - the cells the drag read the gas
+    // velocity from (fluidStencil, weights summing to 1) - and in each cell to its faces that the
+    // boundary conditions leave free: a face next to a solid, the liquid or the domain boundary is
+    // overwritten by applyVelocityBC and would lose it. Every face stands for one cell of gas, so
+    // the momentum put in is exactly the impulse.
     const float cellMass = params.fluidDensity * dx_ * dx_ * dx_;
     Field3* comps[3] = {&u_, &v_, &w_};
+    const int size[3] = {nx_, ny_, nz_};
     for (const auto& [x, J] : pendingImpulses_) {
-        const Vector3 dv = J / cellMass;
-        for (int a = 0; a < 3; ++a) {
-            Field3& F = *comps[a];
-            const Vector3 g = (x - origin_) / dx_ - F.offset;
-            const int i0 = int(std::floor(g.x)), j0 = int(std::floor(g.y)), k0 = int(std::floor(g.z));
-            const float tx = g.x - i0, ty = g.y - j0, tz = g.z - k0;
-            for (int c = 0; c < 8; ++c) {
-                int i = i0 + (c & 1), j = j0 + ((c >> 1) & 1), k = k0 + ((c >> 2) & 1);
-                if (i < 0 || j < 0 || k < 0 || i >= F.nx || j >= F.ny || k >= F.nz) continue;
-                float w = ((c & 1) ? tx : 1 - tx) * (((c >> 1) & 1) ? ty : 1 - ty) * (((c >> 2) & 1) ? tz : 1 - tz);
-                F.at(i, j, k) += dv[a] * w;
+        size_t cells[8];
+        float weights[8];
+        const int count = fluidStencil(x, cells, weights);
+        for (int m = 0; m < count; ++m) {
+            const size_t c = cells[m];
+            const int cell[3] = {int(c % nx_), int((c / nx_) % ny_), int(c / (size_t(nx_) * ny_))};
+            const Vector3 dv = J * (weights[m] / cellMass);
+            for (int a = 0; a < 3; ++a) {
+                bool faceFree[2]; // the cell's lower and upper face along axis a: gas on the other side?
+                for (int side = 0; side < 2; ++side) {
+                    int nb[3] = {cell[0], cell[1], cell[2]};
+                    nb[a] += side ? 1 : -1;
+                    faceFree[side] = nb[a] >= 0 && nb[a] < size[a] && !solid(nb[0], nb[1], nb[2]);
+                }
+                const int nfree = int(faceFree[0]) + int(faceFree[1]);
+                for (int side = 0; side < 2; ++side) {
+                    if (!faceFree[side]) continue;
+                    int f[3] = {cell[0], cell[1], cell[2]};
+                    f[a] += side; // index of the face along axis a
+                    comps[a]->at(f[0], f[1], f[2]) += dv[a] / float(nfree);
+                }
             }
         }
     }
@@ -380,8 +415,7 @@ void NSGridSolver::applyWallFriction(float dt) {
             const float mag = length(rel);
             if (mag < 1e-6f) continue;
             const float L = owner >= 0 ? moving_[owner].length : staticLength_;
-            const float Re = std::max(mag * L / nu, 1.0f);
-            const float cf = Re < 5e5f ? 1.328f / std::sqrt(Re) : 0.074f * std::pow(Re, -0.2f);
+            const float cf = skinFrictionCoefficient(mag * L / nu);
             // tau dA dt / (rho dx^3) = k u_t, taken implicitly (never reverses the flow).
             const float kk = 0.5f * cf * mag * dt / dx_;
             const Vector3 delta = rel * (-kk / (1.0f + kk));
@@ -1066,6 +1100,11 @@ float NSGridSolver::step(float maxDt) {
         heatReleaseRate_ = float(burnt * combustion.heatRelease * cellHeatCapacity / dt);
         conductHeat(dt);
         collectRadiators();
+    } else if (heatReleaseRate_ != 0 || !radiators_.empty()) {
+        // The fire was switched off: its last expansion must not stay a source of the projection.
+        std::fill(expansion_.begin(), expansion_.end(), 0.0f);
+        heatReleaseRate_ = 0;
+        radiators_.clear();
     }
     applyVelocityBC();
 
@@ -1168,11 +1207,13 @@ void NSGridSolver::computeDiagnostics() {
                     acc.smoke += smoke_.at(i, j, k);
                     if (diag_[cidx(i, j, k)] == 0) continue;
                     // The uniform part of a closed region (gas squeezed by a moving body) cannot be
-                    // projected away; measure the part the projection is responsible for.
-                    int r = region_[cidx(i, j, k)];
+                    // projected away, and burning gas expands on purpose (its target divergence):
+                    // measure the part the projection is responsible for.
+                    const size_t c = cidx(i, j, k);
+                    int r = region_[c];
                     double m = (r >= 0 && r < int(regionMeanB_.size())) ? regionMeanB_[r] : 0.0;
                     float div = float(u_.at(i + 1, j, k) - u_.at(i, j, k) + v_.at(i, j + 1, k) - v_.at(i, j, k) +
-                                      w_.at(i, j, k + 1) - w_.at(i, j, k) + m) / dx_;
+                                      w_.at(i, j, k + 1) - w_.at(i, j, k) + m - double(expansion_[c]) * dx_) / dx_;
                     acc.maxDiv = std::max(acc.maxDiv, std::fabs(div));
                 }
         return acc;

@@ -100,7 +100,6 @@ public:
     const std::vector<float>& densities() const { return rho_; }
     const std::vector<uint8_t>& phases() const { return phase_; }
     const std::vector<float>& invMasses() const { return invMass_; }
-    const std::vector<Vector3>& particleColors() const { return color_; }
     const std::vector<SoftBody>& softBodies() const { return softBodies_; }
     const std::vector<Cloth>& cloths() const { return cloths_; }
     // Surface of a soft body now (its mesh skinned to the clusters).
@@ -135,10 +134,12 @@ private:
     void findNeighbors();
     void computeLambda();
     void computeDeltaP();
-    void collide(int i, Vector3& p, bool recordImpulse, float dt);
+    // Walls, obstacle mesh, rigid bodies. `start`: where the particle was at the start of the step
+    // of length dt that moved it to p (the friction acts on that motion).
+    void collide(int i, Vector3& p, const Vector3& start, bool recordImpulse, float dt);
     void applyViscosityAndVorticity(float dt);
-    void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, const Vector3& color,
-                     float volume = 1.0f);
+    // (Colours live on the objects: SoftBody::color, Cloth::color.)
+    void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, float volume = 1.0f);
     // Particles of different phases (and non-adjacent particles of one cloth) keep 2r apart:
     // the candidate pairs are collected once per substep, then projected Gauss-Seidel style.
     struct ParticleContact {
@@ -159,7 +160,6 @@ private:
         Vector3 target;
     } grab_;
     bool isFluid(int i) const { return phase_[i] == uint8_t(ParticlePhase::Fluid); }
-    float particleMass(int i) const { return invMass_[i] > 0 ? 1.0f / invMass_[i] : 0.0f; }
 
     inline float W(float r2) const {
         if (r2 >= h2_) return 0.0f;
@@ -179,13 +179,13 @@ private:
 
     std::vector<Vector3> x_, v_, p_, dp_, omega_, vtmp_;
     std::vector<float> rho_, lambda_;
-    // per particle: phase, object id (-1 = fluid), inverse mass (0 = pinned), rest position
-    // (cloth self-collision filter) and display colour
+    // per particle: phase, object id (-1 = fluid), inverse mass (0 = pinned) and rest position
+    // (cloth self-collision filter)
     std::vector<uint8_t> phase_;
     std::vector<int> object_;
     std::vector<float> invMass_;
     std::vector<float> volume_; // volume relative to a fluid particle (cloth sheets are thinner)
-    std::vector<Vector3> rest_, color_;
+    std::vector<Vector3> rest_;
     std::vector<SoftBody> softBodies_;
     std::vector<Cloth> cloths_;
     int nextObject_ = 0;

@@ -117,8 +117,12 @@ private:
         std::unique_ptr<QOpenGLVertexArrayObject> vao;
         std::unique_ptr<QOpenGLBuffer> vbo;
         int count = 0;
+        // Hull cache: the mesh is held here too, so its address (the cache key) cannot be taken by a
+        // new mesh while the entry exists; the entry is dropped once only the cache holds the mesh.
+        std::shared_ptr<const rf::TriMesh> mesh;
     };
     std::map<const rf::TriMesh*, GpuMesh> hullCache_;
+    void pruneHullCache(); // needs the GL context current (paintGL)
     GpuMesh clothMesh_; // rebuilt every frame
     FluidSurfaceRenderer fluidSurface_; // liquid as a water surface (screen space)
     GpuMesh& hullMesh(const std::shared_ptr<const rf::TriMesh>& m, bool smooth = false);
@@ -128,8 +132,9 @@ private:
     GLuint depthTex_ = 0, depthFbo_ = 0;
     int depthW_ = 0, depthH_ = 0;
     bool copySceneDepth(int w, int h);
-    uint64_t sliceFrame_ = ~0ull, volumeFrame_ = ~0ull, particleFrame_ = ~0ull;
-    int particleCount_ = 0;
+    // Every snapshot gets a new serial; the sprite, slice and smoke buffers are rebuilt once per new
+    // snapshot (the frame number is no key: a paused reset or preset switch stays at frame 0).
+    uint64_t snapSerial_ = 0, particleSerial_ = ~0ull, sliceSerial_ = ~0ull, volumeSerial_ = ~0ull;
 
     QString renderer_;   // OpenGL renderer (GPU name, or llvmpipe on the CPU)
     bool softwareRenderer() const {

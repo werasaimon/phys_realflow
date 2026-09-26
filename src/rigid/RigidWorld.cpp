@@ -135,6 +135,56 @@ size_t RigidWorld::sleepingCount() const {
     return n;
 }
 
+void RigidWorld::clear() {
+    bodies_.clear();
+    joints_.clear();
+    grab_ = GrabJoint();
+    cache_.clear();
+    manifolds_.clear();
+    pairs_.clear();
+    colors_.clear();
+    levels_.clear();
+    frozen_.clear();
+    held_.clear();
+    islandParent_.clear();
+    ccdClamped_.clear();
+    ccdHits_ = 0;
+    contactCount_ = 0;
+    // XPBD keeps its contacts between collision passes: they belong to the old bodies.
+    xcontacts_.clear();
+    substepCounter_ = 0;
+}
+
+RigidWorld::Frozen RigidWorld::makeStatic(int i) {
+    RigidBody& b = bodies_[i];
+    const Frozen f{i, b.invMass, b.invInertiaLocal};
+    b.invMass = 0;
+    b.invInertiaLocal = Vector3(0.0f);
+    b.updateInertia();
+    return f;
+}
+
+void RigidWorld::restore(const Frozen& f) {
+    RigidBody& b = bodies_[f.body];
+    b.invMass = f.invMass;
+    b.invInertiaLocal = f.invInertiaLocal;
+    b.updateInertia();
+}
+
+void RigidWorld::hold(int i) {
+    if (i < 0 || i >= int(bodies_.size()) || bodies_[i].invMass == 0) return; // static already
+    held_.push_back(makeStatic(i));
+}
+
+void RigidWorld::releaseHeld() {
+    for (const Frozen& f : held_) {
+        if (f.body >= int(bodies_.size())) continue;
+        restore(f);
+        wake(f.body);
+    }
+    held_.clear();
+}
+
 // Sleeping bodies take part in the step as static bodies: their inverse mass is set to zero for
 // the duration of the step (restored in unfreezeAll), so every solver path treats them as fixed.
 void RigidWorld::freezeSleepers() {
@@ -142,22 +192,16 @@ void RigidWorld::freezeSleepers() {
     for (int i = 0; i < int(bodies_.size()); ++i) {
         RigidBody& b = bodies_[i];
         if (!b.sleeping || b.invMass == 0) continue;
-        frozen_.push_back({i, b.invMass, b.invInertiaLocal});
-        b.invMass = 0;
-        b.invInertiaLocal = Vector3(0.0f);
         b.vel = b.angVel = Vector3(0.0f);
-        b.updateInertia();
+        frozen_.push_back(makeStatic(i));
     }
 }
 
 void RigidWorld::unfreezeAll(bool onlyAwake) {
     std::vector<Frozen> keep;
     for (const Frozen& f : frozen_) {
-        RigidBody& b = bodies_[f.body];
-        if (onlyAwake && b.sleeping) { keep.push_back(f); continue; }
-        b.invMass = f.invMass;
-        b.invInertiaLocal = f.invInertiaLocal;
-        b.updateInertia();
+        if (onlyAwake && bodies_[f.body].sleeping) { keep.push_back(f); continue; }
+        restore(f);
     }
     frozen_.swap(keep);
 }
@@ -237,33 +281,6 @@ void RigidWorld::grab(int i, const Vector3& p) {
     wake(i);
 }
 
-static Matrix3x3 skew(const Vector3& r) {
-    Matrix3x3 S = Matrix3x3::zero();
-    S.m[0][1] = -r.z; S.m[0][2] = r.y;
-    S.m[1][0] = r.z;  S.m[1][2] = -r.x;
-    S.m[2][0] = -r.y; S.m[2][1] = r.x;
-    return S;
-}
-
-static Matrix3x3 inverse3(const Matrix3x3& M) {
-    const auto& a = M.m;
-    float det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
-                a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
-    Matrix3x3 r = Matrix3x3::zero();
-    if (std::fabs(det) < 1e-20f) return r;
-    float id = 1.0f / det;
-    r.m[0][0] = (a[1][1] * a[2][2] - a[1][2] * a[2][1]) * id;
-    r.m[0][1] = (a[0][2] * a[2][1] - a[0][1] * a[2][2]) * id;
-    r.m[0][2] = (a[0][1] * a[1][2] - a[0][2] * a[1][1]) * id;
-    r.m[1][0] = (a[1][2] * a[2][0] - a[1][0] * a[2][2]) * id;
-    r.m[1][1] = (a[0][0] * a[2][2] - a[0][2] * a[2][0]) * id;
-    r.m[1][2] = (a[0][2] * a[1][0] - a[0][0] * a[1][2]) * id;
-    r.m[2][0] = (a[1][0] * a[2][1] - a[1][1] * a[2][0]) * id;
-    r.m[2][1] = (a[0][1] * a[2][0] - a[0][0] * a[2][1]) * id;
-    r.m[2][2] = (a[0][0] * a[1][1] - a[0][1] * a[1][0]) * id;
-    return r;
-}
-
 // Soft constraint (Box2D mouse joint): spring-damper with the given frequency and damping ratio,
 // expressed through gamma (softness) and beta (position feedback), solved as a 3D point constraint.
 void RigidWorld::prepareGrab(float dt) {
@@ -279,10 +296,10 @@ void RigidWorld::prepareGrab(float dt) {
     grabGamma_ = grabGamma_ > 0 ? 1.0f / grabGamma_ : 0.0f;
     const float beta = dt * k * grabGamma_;
     Vector3 r = b.rotation() * grab_.localAnchor;
-    Matrix3x3 S = skew(r);
+    Matrix3x3 S = Matrix3x3::skew(r);
     Matrix3x3 K = S * b.invInertiaWorld * S.transposed();
     for (int i = 0; i < 3; ++i) K.m[i][i] += b.invMass + grabGamma_;
-    grabMass_ = inverse3(K);
+    grabMass_ = K.inverse();
     grabBias_ = (b.pos + r - grab_.target) * beta;
     // Warm start and extra angular damping so the held body does not spin forever.
     b.vel += grab_.impulse * b.invMass;
@@ -299,7 +316,7 @@ void RigidWorld::solveGrab(float dt) {
     Vector3 imp = grabMass_ * (-(cdot + grabBias_ + grab_.impulse * grabGamma_));
     Vector3 old = grab_.impulse;
     grab_.impulse += imp;
-    float maxImpulse = grab_.maxForce * b.mass * length(params.gravity) * dt;
+    float maxImpulse = grab_.maxForce * b.mass * 9.81f * dt; // weights at standard gravity, whatever params.gravity is
     float l = length(grab_.impulse);
     if (l > maxImpulse) grab_.impulse *= maxImpulse / l;
     imp = grab_.impulse - old;
@@ -322,7 +339,7 @@ J& RigidWorld::attach(std::unique_ptr<J> j, const Vector3& anchorA, const Vector
     j->localAxisB = B.rot.conjugate().rotate(axis);
     j->refRel = B.rot.conjugate() * A.rot;
     if (auto* h = dynamic_cast<HingeJoint*>(j.get())) {
-        Vector3 ref = normalize(std::fabs(axis.x) > 0.57f ? Vector3(axis.y, -axis.x, 0) : Vector3(0, axis.z, -axis.y));
+        Vector3 ref = anyPerpendicular(axis);
         h->localRefA = A.rot.conjugate().rotate(ref);
         h->localRefB = B.rot.conjugate().rotate(ref);
     }
@@ -388,6 +405,35 @@ void RigidWorld::continuousCollision() {
         float minExtent = std::max(0.5f * minComp(ext), 1e-3f);
         return length(sp.p1 - sp.p0) + sp.angularReach() >= params.ccdThreshold * minExtent;
     };
+    // A compound body is swept part by part: the hull of its union is not its surface, a fast body
+    // can fly into a concave region of that hull (a teapot's handle) without touching any part.
+    auto partsOf = [](const SweptPose& sp, std::vector<SweptPose>& out) {
+        out.clear();
+        if (sp.shape->type() != ShapeType::Compound) {
+            out.push_back(sp);
+            return;
+        }
+        for (const CompoundShape::Child& c : static_cast<const CompoundShape*>(sp.shape)->children()) {
+            SweptPose part = sp;
+            part.shape = c.shape.get();
+            part.partR = c.R;
+            part.partT = c.t;
+            out.push_back(part);
+        }
+    };
+    // Earliest time of impact of any part of A with any part of B.
+    auto partsTimeOfImpact = [&](const SweptPose& A, const SweptPose& B) {
+        std::vector<SweptPose> pa, pb;
+        partsOf(A, pa);
+        partsOf(B, pb);
+        ToiResult first;
+        for (const SweptPose& a : pa)
+            for (const SweptPose& b : pb) {
+                ToiResult r = timeOfImpact(a, b, tol);
+                if (r.hit && r.s < first.s) first = r;
+            }
+        return first;
+    };
     const int n = int(bodies_.size());
     {
         // Nothing fast this step (the usual case): no sweeps to test.
@@ -421,7 +467,7 @@ void RigidWorld::continuousCollision() {
             sweptTree.queryAABB(swBox[i], [&](uint32_t ju) {
                 int j = int(ju);
                 if (j == i || !swBox[j].overlaps(swBox[i])) return;
-                ToiResult r = timeOfImpact(sw[i], sw[j], tol);
+                ToiResult r = partsTimeOfImpact(sw[i], sw[j]);
                 if (!r.hit) return;
                 sMin[i] = std::min(sMin[i], r.s);
                 if (bodies_[j].invMass > 0) sMin[j] = std::min(sMin[j], r.s); // the pair stops together
@@ -441,7 +487,7 @@ void RigidWorld::continuousCollision() {
                     TriangleShape tri(a, b, c);
                     SweptPose T;
                     T.shape = &tri;
-                    ToiResult r = timeOfImpact(sw[i], T, tol);
+                    ToiResult r = partsTimeOfImpact(sw[i], T);
                     if (r.hit) sMin[i] = std::min(sMin[i], r.s);
                 });
             }
@@ -544,12 +590,13 @@ void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
         }
     }
 
-    // Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7).
+    // Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7). The query box
+    // is widened by the contact margin, as for walls and body pairs: speculative contacts.
     if (mesh_ && !mesh_->empty()) {
         AABB bb = body.worldBounds();
+        bb.lo -= Vector3(params.contactMargin);
+        bb.hi += Vector3(params.contactMargin);
         if (!mesh_->bounds().overlaps(bb)) return;
-        bb.lo -= Vector3(1e-3f);
-        bb.hi += Vector3(1e-3f);
         ContactManifold cm;
         mesh_->bvh().queryAABB(bb, [&](uint32_t t) {
             Vector3 a, b, c;
@@ -690,8 +737,6 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
         m.normal += p.normal;
         Vector3 ra = p.position - A.pos, rb = B ? p.position - B->pos : Vector3(0.0f);
         const Vector3& n = p.normal;
-        p.t1 = normalize(std::fabs(n.x) > 0.57f ? Vector3(n.y, -n.x, 0) : Vector3(0, n.z, -n.y));
-        p.t2 = cross(n, p.t1);
         p.massN = effMass(A, B, ra, rb, n);
         Vector3 dv = A.velocityAt(p.position) - (B ? B->velocityAt(p.position) : Vector3(0.0f));
         float vn = dot(dv, n);
@@ -718,16 +763,21 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
                 p.positionBias = 0;
             }
         }
-        p.jn = p.jt1 = p.jt2 = p.jp = 0;
+        p.jn = p.jp = 0;
     }
     const float np = float(m.points.size());
     m.center /= np;
     m.normal = normalize(m.normal);
     const Vector3& n = m.normal;
-    m.t1 = normalize(std::fabs(n.x) > 0.57f ? Vector3(n.y, -n.x, 0) : Vector3(0, n.z, -n.y));
+    m.t1 = anyPerpendicular(n);
     m.t2 = cross(n, m.t1);
     m.patchRadius = 0;
     for (const SolverPoint& p : m.points) m.patchRadius += length(p.position - m.center) / np;
+    // Lever of the twist and rolling limits: the size of the smaller body that can move (A is only
+    // the lower index of the pair - often a large static platform created first).
+    const float sizeA = A.invMass > 0 ? A.boundingRadius() : kInf;
+    const float sizeB = B && B->invMass > 0 ? B->boundingRadius() : kInf;
+    m.lever = std::min(sizeA, sizeB) < kInf ? std::min(sizeA, sizeB) : A.boundingRadius();
 
     // --- Friction at the patch centre (tangents, twist) and rolling resistance -------------------
     Vector3 ra = m.center - A.pos, rb = B ? m.center - B->pos : Vector3(0.0f);
@@ -828,7 +878,8 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
     applyImpulse(m.a, J, m.center);
     if (B) applyImpulse(m.b, -J, m.center);
     Vector3 L = n * m.jtwist + m.jroll + m.jlock; // pure angular impulses
-    A.angVel += A.applyInvInertiaWorld(L) * (A.invMass > 0 ? 1.0f : 0.0f);
+    // (A static: not written at all - manifolds sharing a static body run in parallel batches.)
+    if (A.invMass > 0) A.angVel += A.applyInvInertiaWorld(L);
     if (B && B->invMass > 0) B->angVel -= B->applyInvInertiaWorld(L);
 }
 
@@ -964,7 +1015,7 @@ void RigidWorld::solveManifold(Manifold& m) {
     apply(m.t2 * (m.jt2 - old), m.center);
     // Twist: relative spin about the normal, limited by the friction moment of the patch.
     Vector3 wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
-    const float maxTwist = maxF * std::max(m.patchRadius, 0.25f * A.boundingRadius());
+    const float maxTwist = maxF * std::max(m.patchRadius, 0.25f * m.lever);
     old = m.jtwist;
     m.jtwist = clampv(old - m.massTwist * dot(wRel, m.normal), -maxTwist, maxTwist);
     applyAngular(m.normal * (m.jtwist - old));
@@ -974,7 +1025,7 @@ void RigidWorld::solveManifold(Manifold& m) {
         // breakable - limited by the friction moment the patch can carry - and released in
         // prepareManifold() once log(E) shows a real relative rotation (toppling). No position-level
         // term: the flush orientation is defined by the contact geometry itself.
-        const float limit = maxF * std::max(m.patchRadius, 0.25f * A.boundingRadius());
+        const float limit = maxF * std::max(m.patchRadius, 0.25f * m.lever);
         wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
         Vector3 oldL = m.jlock;
         Vector3 jl = oldL - m.rollMass * wRel;
@@ -990,7 +1041,7 @@ void RigidWorld::solveManifold(Manifold& m) {
         Vector3 wRoll = wRel - m.normal * dot(wRel, m.normal);
         Vector3 oldR = m.jroll;
         Vector3 jr = oldR - m.rollMass * wRoll;
-        float limit = params.rollingResistance * total * A.boundingRadius();
+        float limit = params.rollingResistance * total * m.lever;
         float l = length(jr);
         if (l > limit) jr *= limit / l;
         m.jroll = jr;
@@ -1075,7 +1126,6 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
     if (normalTotal <= 0) return;
     c /= float(np);
     nrm = normalize(nrm);
-    Vector3 r = c - U.pos;
     Vector3 vu = U.velocityAt(c);
     Vector3 vl(0.0f);
     if (upperIsA) { if (m.b >= 0) vl = bodies_[m.b].velocityAt(c); }
@@ -1087,13 +1137,19 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
     // Pure translation (no torque): a correction pass must not spin bodies up; tipping torques are
     // left to the regular two-sided friction.
     Vector3 t = vt / vtl;
-    // The support's friction has to move everything resting on it: in equilibrium the normal
-    // impulse equals the weight of the whole column above times h, so the Coulomb-limited velocity
-    // change of that column is mu * |g| * h per step, independent of its height.
+    // Two limits:
+    //  * the support's friction has to move everything resting on it: in equilibrium the normal
+    //    impulse equals the weight of the whole column above times h, so the Coulomb-limited
+    //    velocity change of that column is mu * |g| * h per step, independent of its height (this
+    //    also keeps the pure translation - it ignores the rotation - a small correction);
+    //  * the Coulomb cone of this contact: mu times its normal impulse, minus the friction impulse
+    //    the regular iterations have already applied. The pass only finishes what they could not
+    //    carry up the column; it never adds friction beyond Coulomb (a sliding body keeps mu_k N).
     const float mu = vtl < params.stickVelocity ? m.staticFriction : m.friction;
-    float dv = std::min(vtl, mu * length(params.gravity) * lastDt_);
+    const float used = length(m.t1 * m.jt1 + m.t2 * m.jt2);
+    const float budget = std::max(0.0f, mu * normalTotal - used);
+    const float dv = std::min({vtl, mu * length(params.gravity) * lastDt_, budget * U.invMass});
     U.vel -= t * dv;
-    (void)r;
 }
 
 void RigidWorld::prepare(float dt) {
@@ -1120,6 +1176,14 @@ void RigidWorld::solve() {
 void RigidWorld::step(float dt) {
     if (bodies_.empty()) return;
     if (params.solver == RigidSolver::XPBD) {
+        // The XPBD path has no islands: every body is awake (a body that fell asleep under the
+        // impulse solver would otherwise keep the flag while it moves, and be frozen mid-air by the
+        // next impulse step; the gas also reuses the cells of "resting" bodies).
+        for (RigidBody& b : bodies_) {
+            b.sleeping = false;
+            b.sleepTimer = 0;
+            b.sleepIsland = -1;
+        }
         stepXPBD(dt);
         return;
     }
@@ -1173,7 +1237,7 @@ void RigidWorld::step(float dt) {
     std::unordered_map<uint64_t, CachedPair> keep;
     for (auto& [k, c] : cache_) {
         int a = int(k >> 32), b = int(k & 0xffffffffu) - 64;
-        bool aSleep = a < int(bodies_.size()) && bodies_[a].sleeping;
+        bool aSleep = a < int(bodies_.size()) && (bodies_[a].sleeping || bodies_[a].mass <= 0);
         bool bSleep = b < 0 || (b < int(bodies_.size()) && (bodies_[b].sleeping || bodies_[b].mass <= 0));
         if (aSleep && bSleep) keep.emplace(k, std::move(c));
     }

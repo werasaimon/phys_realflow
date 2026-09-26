@@ -1,5 +1,6 @@
 #include "core/Mesh.h"
 
+#include <algorithm>
 #include <map>
 
 #include <cstdio>
@@ -30,9 +31,13 @@ float TriMesh::surfaceArea() const {
 }
 
 float TriMesh::signedVolume() const {
+    // Tetrahedra from a vertex of the mesh, not from the world origin: for a model far from the
+    // origin (CAD files in mm) the float terms about the origin would cancel and flip the sign.
+    if (positions.empty()) return 0.0f;
+    const Vector3 o = positions[0];
     double v = 0;
     for (const auto& t : triangles)
-        v += dot(positions[t[0]], cross(positions[t[1]], positions[t[2]])) / 6.0;
+        v += dot(positions[t[0]] - o, cross(positions[t[1]] - o, positions[t[2]] - o)) / 6.0;
     return float(v);
 }
 
@@ -226,11 +231,12 @@ TriMesh cone(float radius, float length, int seg) {
 }
 
 TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
-    float mC = 0.02f, pC = 0.4f, tC = 0.12f;
-    if (code.size() == 4) {
+    float mC = 0.02f, pC = 0.4f, tC = 0.12f; // 2412, also for a code that is not four digits
+    const bool digits = code.size() == 4 && std::all_of(code.begin(), code.end(), [](char c) { return c >= '0' && c <= '9'; });
+    if (digits) {
         mC = (code[0] - '0') / 100.0f;
         pC = (code[1] - '0') / 10.0f;
-        tC = std::stoi(code.substr(2)) / 100.0f;
+        tC = ((code[2] - '0') * 10 + (code[3] - '0')) / 100.0f;
     }
     tC = std::max(tC, 0.01f);
     std::vector<Vector3> U(n + 1), L(n + 1);

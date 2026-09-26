@@ -51,7 +51,7 @@ struct NSParams {
     bool usePlanformArea = false;        // reference area for Cd/Cl: frontal (default) or planform
     bool wallFriction = true;            // skin friction on solid surfaces (wall function)
     BoundaryType bc[6] = {BoundaryType::Inflow, BoundaryType::Outflow, BoundaryType::Wall,
-                          BoundaryType::Wall,   BoundaryType::Wall,    BoundaryType::Wall}; // -x +x -y +y -z +z
+                          BoundaryType::Wall,   BoundaryType::Wall,    BoundaryType::Wall}; // -x +x -y +y -z +z (*reset)
 };
 
 struct HeatSource {
@@ -83,6 +83,14 @@ struct Disturbance {
     float smoke = 0.0f;
     float heat = 0.0f;
 };
+
+// Skin-friction coefficient of a flat plate at the Reynolds number Re of its running length
+// (Schlichting): laminar 1.328 / sqrt(Re), turbulent 0.074 Re^-0.2 beyond Re = 5e5. Used by the
+// solver's wall function and by SurfaceLoads, so both report the same friction.
+inline float skinFrictionCoefficient(float Re) {
+    Re = std::max(Re, 1.0f);
+    return Re < 5e5f ? 1.328f / std::sqrt(Re) : 0.074f * std::pow(Re, -0.2f);
+}
 
 // A rigid body as a moving obstacle for the gas (world space).
 struct MovingSolid {
@@ -181,6 +189,9 @@ public:
     float maxVelocity() const { return maxVel_; }
     float time() const { return time_; }
     bool hasObstacle() const { return solidCount_ > 0; }
+    // Running length of the boundary layer on the static obstacle (its extent along x) [m]: the
+    // length of the wall-function Reynolds number.
+    float wallLength() const { return staticLength_; }
     float dynamicPressure() const { return 0.5f * params.fluidDensity * sqr(std::max(params.inflowSpeed, 1e-3f)); }
 
 private:

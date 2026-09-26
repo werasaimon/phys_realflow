@@ -110,15 +110,19 @@ struct Matrix3x3 {
 // A = V * diag(eigenvalues) * V^T, columns of V are the eigenvectors.
 inline void symmetricEigen(const Matrix3x3& A, Vector3& eig, Matrix3x3& V) {
     double a[3][3], v[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    double scale = 0; // |A|^2: the stop tests are relative (unit-density inertia of a mm part is ~1e-13)
     for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) a[i][j] = A.m[i][j];
+        for (int j = 0; j < 3; ++j) {
+            a[i][j] = A.m[i][j];
+            scale += a[i][j] * a[i][j];
+        }
     for (int sweep = 0; sweep < 50; ++sweep) {
         double off = a[0][1] * a[0][1] + a[0][2] * a[0][2] + a[1][2] * a[1][2];
-        if (off < 1e-24) break;
+        if (off <= 1e-24 * scale) break;
         const int pairs[3][2] = {{0, 1}, {0, 2}, {1, 2}};
         for (auto& pq : pairs) {
             int p = pq[0], q = pq[1];
-            if (std::fabs(a[p][q]) < 1e-30) continue;
+            if (a[p][q] * a[p][q] <= 1e-30 * scale) continue;
             double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
             double t = (theta >= 0 ? 1.0 : -1.0) / (std::fabs(theta) + std::sqrt(theta * theta + 1.0));
             double c = 1.0 / std::sqrt(t * t + 1.0), s = t * c;

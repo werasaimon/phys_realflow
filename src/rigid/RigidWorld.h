@@ -65,19 +65,27 @@ struct RigidParams {
     float restLinearThreshold = 0.05f;  // [m/s]
     float restAngularThreshold = 0.2f;  // [rad/s]
     int shockIterations = 2;
-    bool shockFriction = true;
+    bool shockFriction = true;       // friction in the shock pass: supports hold what rests on them
     int jointPositionIterations = 3; // nonlinear Gauss-Seidel passes of the joint position stage
     // Continuous collision detection (conservative advancement on GJK) for fast bodies.
     bool ccd = true;
     float ccdThreshold = 0.5f;   // CCD when the motion in a step exceeds half of the body's smallest extent (as Bullet)
-    float ccdTolerance = 0.002f; // [m] distance at which the time of impact is accepted       // friction in the shock pass: supports hold what rests on them
+    float ccdTolerance = 0.002f; // [m] distance at which the time of impact is accepted
 };
 
 class RigidWorld {
 public:
     RigidParams params;
 
-    void clear() { bodies_.clear(); cache_.clear(); manifolds_.clear(); joints_.clear(); grab_ = GrabJoint(); }
+    // Removes every body and joint and everything remembered about them (contacts, warm start,
+    // sleeping, XPBD contacts, CCD flags): the next step starts a new scene.
+    void clear();
+
+    // Holds a body still (static for the solver) until releaseHeld(), e.g. bodies hanging in the air
+    // until a scene lets them fall. The same mechanism as the sleeping bodies (see Frozen).
+    void hold(int body);
+    void releaseHeld();
+    bool anyHeld() const { return !held_.empty(); }
 
     // Joints (b = -1: attached to the static world). Anchors/axes are given in world space at the
     // current poses; the joint stores them in the bodies' local frames.
@@ -125,7 +133,9 @@ public:
         int body = -1;
         Vector3 localAnchor;  // grab point in the body frame
         Vector3 target;       // world target
-        float frequency = 5.0f, damping = 0.7f, maxForce = 1000.0f; // maxForce per unit weight
+        // maxForce in units of the body's weight at standard gravity 9.81 m/s^2 (so the mouse can
+        // also move bodies with the gravity switched off)
+        float frequency = 5.0f, damping = 0.7f, maxForce = 1000.0f;
         Vector3 impulse;      // accumulated, warm started
     };
     void grab(int body, const Vector3& worldPoint);
@@ -155,11 +165,10 @@ private:
         Vector3 position, normal, localA; // localA: anchor in A's frame, used to match points between steps
         uint64_t id = 0;               // hash of the quantised localA
         float depth = 0;
-        Vector3 t1, t2;
-        float massN = 0, massT1 = 0, massT2 = 0;
+        float massN = 0;
         float velocityBias = 0; // restitution / speculative gap (velocity level)
         float positionBias = 0; // penetration recovery (split impulse, position level)
-        float jn = 0, jt1 = 0, jt2 = 0, jp = 0;
+        float jn = 0, jp = 0;   // normal and split (pseudo) impulses; friction lives on the manifold
     };
     struct Manifold {
         int a = -1, b = -1; // b < 0: static (walls / mesh)
@@ -169,6 +178,7 @@ private:
         // the contact patch, plus rolling resistance. Accumulated impulses are warm started.
         Vector3 center, normal, t1, t2;
         float massT1 = 0, massT2 = 0, massTwist = 0, patchRadius = 0;
+        float lever = 0; // bounding radius of the smaller movable body: lever of the twist / rolling limits
         Matrix3x3 rollMass = Matrix3x3::zero();
         float jt1 = 0, jt2 = 0, jtwist = 0;
         Vector3 jroll;
@@ -213,8 +223,12 @@ private:
     void freezeSleepers();
     void unfreezeAll(bool onlyAwake = false);
     bool updateIslands(bool decideSleep, float dt);
+    // A body made static for a while: its inverse mass and inertia, restored later. Sleeping bodies
+    // are frozen for the duration of a step (frozen_), held bodies until releaseHeld() (held_).
     struct Frozen { int body; float invMass; Vector3 invInertiaLocal; };
-    std::vector<Frozen> frozen_;
+    Frozen makeStatic(int body);
+    void restore(const Frozen& f);
+    std::vector<Frozen> frozen_, held_;
     GrabJoint grab_;
     std::vector<std::unique_ptr<Joint>> joints_;
     template <class J> J& attach(std::unique_ptr<J> j, const Vector3& anchorA, const Vector3& anchorB, const Vector3& axis);

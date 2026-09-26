@@ -30,17 +30,30 @@ AABB ConvexShape::boundsAt(const Matrix3x3& R, const Vector3& p) const {
 // ---------------------------------------------------------------------------
 // Supporting features
 // ---------------------------------------------------------------------------
-static void orderAround(const Vector3& normal, std::vector<Vector3>& pts) {
+// The corners of a planar point set, counter-clockwise seen from the side the normal points to: its
+// 2D convex hull (Andrew's monotone chain). Points inside the polygon or on its edges go - such as
+// the centre vertex of a fan-triangulated cap (cylinders, cones), which would make the face a
+// non-convex "star" and break the clipping of the contact manifold.
+static void convexPolygon(const Vector3& normal, std::vector<Vector3>& pts) {
     if (pts.size() < 3) return;
-    Vector3 c(0.0f);
-    for (const Vector3& p : pts) c += p;
-    c /= float(pts.size());
-    Vector3 n = normalize(normal);
-    Vector3 u = normalize(std::fabs(n.x) > 0.57f ? Vector3(n.y, -n.x, 0) : Vector3(0, n.z, -n.y));
-    Vector3 v = cross(n, u);
+    const Vector3 n = normalize(normal), u = anyPerpendicular(n), v = cross(n, u);
     std::sort(pts.begin(), pts.end(), [&](const Vector3& a, const Vector3& b) {
-        return std::atan2(dot(a - c, v), dot(a - c, u)) < std::atan2(dot(b - c, v), dot(b - c, u));
+        const float au = dot(a, u), bu = dot(b, u);
+        return au < bu || (au == bu && dot(a, v) < dot(b, v));
     });
+    auto leftTurn = [&](const Vector3& o, const Vector3& a, const Vector3& b) { return dot(cross(a - o, b - o), n) > 0; };
+    std::vector<Vector3> hull(2 * pts.size());
+    size_t k = 0;
+    for (size_t i = 0; i < pts.size(); ++i) { // lower chain
+        while (k >= 2 && !leftTurn(hull[k - 2], hull[k - 1], pts[i])) --k;
+        hull[k++] = pts[i];
+    }
+    for (size_t i = pts.size() - 1, lower = k + 1; i-- > 0;) { // upper chain
+        while (k >= lower && !leftTurn(hull[k - 2], hull[k - 1], pts[i])) --k;
+        hull[k++] = pts[i];
+    }
+    hull.resize(k - 1); // the last point is the first one again
+    pts.swap(hull);
 }
 
 std::vector<ConvexShape::Face> buildFaces(const TriMesh& m) {
@@ -65,7 +78,7 @@ std::vector<ConvexShape::Face> buildFaces(const TriMesh& m) {
             if (!dup) faces[f].verts.push_back(p);
         }
     }
-    for (auto& f : faces) orderAround(f.normal, f.verts);
+    for (auto& f : faces) convexPolygon(f.normal, f.verts);
     return faces;
 }
 

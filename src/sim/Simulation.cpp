@@ -64,13 +64,17 @@ static std::string fmt(const char* f, ...) {
     return buf;
 }
 
-static float deg(float d) { return d * kPi / 180.0f; }
-
 Simulation::Simulation() {
     obstacleMesh_ = std::make_shared<TriMesh>();
     fluidDomain_ = AABB({-1.0f, 0.0f, -0.4f}, {1.0f, 1.2f, 0.4f});
     rigidDomain_ = AABB({-2.0f, 0.0f, -2.0f}, {2.0f, 5.0f, 2.0f});
     loadPreset(Preset::DamBreak);
+}
+
+void Simulation::setGravity(const Vector3& g) {
+    rigid.params.gravity = g;
+    particles.params.gravity = g;
+    grid.combustion.gravity = length(g); // the hot gas rises against it (along +y)
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +344,7 @@ void Simulation::buildObstacleGeometry() {
         break;
     }
     if (!m.empty()) {
-        Quaternion q = Quaternion::fromEuler(deg(obstacle.yawDeg), -deg(obstacle.angleOfAttackDeg), deg(obstacle.rollDeg));
+        Quaternion q = Quaternion::fromEuler(degToRad(obstacle.yawDeg), -degToRad(obstacle.angleOfAttackDeg), degToRad(obstacle.rollDeg));
         m.transform(q.toMatrix3x3(), Vector3(1.0f), obstacle.position);
     }
     obstacleMesh_ = std::make_shared<TriMesh>(std::move(m));
@@ -368,6 +372,7 @@ bool Simulation::loadCustomMesh(const std::string& path, std::string& error) {
 void Simulation::reset() {
     time_ = 0;
     frame_ = 0;
+    surfaceLoads_ = SurfaceLoads(); // the loads of the old geometry (filled again by the tunnel steps)
     switch (mode_) {
     case SimMode::Fluid: setupFluidScene(); break;
     case SimMode::WindTunnel: setupTunnelScene(); break;
@@ -494,7 +499,6 @@ void Simulation::setupTunnelScene() {
     gasAngularImpulse_.clear();
     softGasImpulse_.clear();
     gasForceMax_ = 0;
-    held_.clear();
     if (preset_ == Preset::Hydro) {
         const AABB d = grid.domain();
         // Bodies first (the water is not placed inside them).
@@ -590,13 +594,7 @@ void Simulation::setupTunnelScene() {
                           {0.92f, 0.9f, 0.86f}); // right above the plume: falls through it
         // They hang still (the smoke flows around them) until the plume has risen, then drop through it.
         releaseTime_ = 1.5f;
-        for (int i = 0; i < int(rigid.bodies().size()); ++i) {
-            RigidBody& b = rigid.bodies()[i];
-            held_.push_back({i, b.invMass, b.invInertiaLocal});
-            b.invMass = 0;
-            b.invInertiaLocal = Vector3(0.0f);
-            b.updateInertia();
-        }
+        for (int i = 0; i < int(rigid.bodies().size()); ++i) rigid.hold(i);
     }
 }
 
@@ -658,7 +656,7 @@ std::vector<MovingSolid> Simulation::movingSolids() const {
 }
 
 void Simulation::applyGasDragOnCloth(float dt) {
-    // Aerodynamic force of the gas on every cloth particle (its patch of area s^2): pressure drag
+    // Aerodynamic force of the gas on every cloth particle (its patch of the sheet): pressure drag
     // of a flat plate on the part of the relative wind normal to the sheet (Cd 1.2), skin friction
     // along it (Cf 0.02). Taken implicitly (the particle cannot overtake the wind in one step); the
     // reaction goes into the gas at the same point, so momentum is conserved.
@@ -667,7 +665,7 @@ void Simulation::applyGasDragOnCloth(float dt) {
     const auto& v = particles.velocities();
     const auto& w = particles.invMasses();
     for (const Cloth& c : particles.cloths()) {
-        const float area = c.spacing * c.spacing;
+        const float area = c.particleArea; // the share of the sheet one particle stands for
         for (int y = 0; y < c.height; ++y)
             for (int xg = 0; xg < c.width; ++xg) {
                 const int i = c.particle(xg, y);
@@ -724,31 +722,37 @@ void Simulation::passLiquidToGas() {
     grid.setLiquid(std::move(pos), std::move(vel));
 }
 
-void Simulation::stepParticlesInGas() {
+void Simulation::applyGasOnSoftBodies() {
     // Soft bodies: the gas pressure impulses of the last gas steps (plus the buoyancy of the
     // displaced gas) as a velocity change of the whole body.
     const auto& bodies = particles.softBodies();
-    if (gasPushesBodies)
-        for (size_t b = 0; b < bodies.size() && b < softGasImpulse_.size(); ++b) {
-            float mass = 0;
-            for (int i : bodies[b].particles) mass += particles.invMasses()[i] > 0 ? 1.0f / particles.invMasses()[i] : 0.0f;
-            if (mass <= 0) continue;
-            const float volume = float(bodies[b].particles.size()) * std::pow(particles.spacing(), 3.0f);
-            const Vector3 J = softGasImpulse_[b] - particles.params.gravity * (grid.params.fluidDensity * volume * frameDt);
-            for (int i : bodies[b].particles)
-                if (particles.invMasses()[i] > 0) particles.addVelocity(i, J / mass);
+    for (size_t b = 0; b < bodies.size() && b < softGasImpulse_.size(); ++b) {
+        float mass = 0;
+        for (int i : bodies[b].particles) mass += particles.invMasses()[i] > 0 ? 1.0f / particles.invMasses()[i] : 0.0f;
+        if (mass <= 0) continue;
+        const float volume = float(bodies[b].particles.size()) * std::pow(particles.spacing(), 3.0f);
+        const Vector3 J = softGasImpulse_[b] - gravity() * (grid.params.fluidDensity * volume * frameDt);
+        for (int i : bodies[b].particles)
+            if (particles.invMasses()[i] > 0) particles.addVelocity(i, J / mass);
+    }
+}
+
+void Simulation::stepBodiesAndParticles(bool gasDrag) {
+    // Every rigid step has the length the rigid solver asks for (frameDt / its substeps), with or
+    // without particles; before each particle step come the rigid steps that end within it
+    // (10 rigid and 3 particle steps: 3, 3, 4). With no particles the particle steps cost nothing
+    // (only the emitter runs).
+    const int nr = std::max(1, rigid.params.substeps), np = std::max(1, particles.params.substeps);
+    const float hr = frameDt / float(nr), hp = frameDt / float(np);
+    int r = 0;
+    for (int p = 0; p < np; ++p) {
+        const int rEnd = (p + 1) * nr / np; // rigid steps done by the end of this particle step
+        for (; r < rEnd; ++r) rigid.step(hr);
+        if (gasDrag) {
+            applyGasDragOnCloth(hp);
+            applyGasDragOnLiquid(hp);
         }
-    // Rigid bodies and particles interleaved (as in the liquid mode: floating needs it).
-    const int n = std::max(1, particles.params.substeps);
-    const float dt = frameDt / n;
-    const int rs = std::max(1, rigid.params.substeps / n);
-    for (int s = 0; s < n; ++s) {
-        if (gasPushesBodies) {
-            applyGasDragOnCloth(dt);
-            applyGasDragOnLiquid(dt);
-        }
-        for (int r = 0; r < rs; ++r) rigid.step(dt / rs);
-        particles.step(dt);
+        particles.step(hp);
     }
 }
 
@@ -759,17 +763,7 @@ void Simulation::stepGasWithBodies() {
     //  2) rigid substeps;
     //  3) bodies -> gas: the bodies at their new poses and velocities are the moving boundaries of
     //     the gas steps that cover the same frame time.
-    if (!held_.empty() && time_ >= releaseTime_) {
-        for (const Held& h : held_) {
-            if (h.body >= int(rigid.bodies().size())) continue;
-            RigidBody& b = rigid.bodies()[h.body];
-            b.invMass = h.invMass;
-            b.invInertiaLocal = h.invInertiaLocal;
-            b.updateInertia();
-            rigid.wake(h.body);
-        }
-        held_.clear();
-    }
+    if (rigid.anyHeld() && time_ >= releaseTime_) rigid.releaseHeld();
     const int nb = int(rigid.bodies().size());
     if (gasPushesBodies) {
         const float rho = grid.params.fluidDensity;
@@ -778,18 +772,14 @@ void Simulation::stepGasWithBodies() {
             if (b.invMass == 0) continue;
             Vector3 J = i < int(gasImpulse_.size()) ? gasImpulse_[i] : Vector3(0.0f);
             Vector3 L = i < int(gasAngularImpulse_.size()) ? gasAngularImpulse_[i] : Vector3(0.0f);
-            J -= rigid.params.gravity * (rho * b.shape->volume() * frameDt); // Archimedes in the gas
+            J -= gravity() * (rho * b.shape->volume() * frameDt); // Archimedes in the gas
             // A resting body is not woken by pressure noise far below its sleep threshold.
             if (b.sleeping && length(J) * b.invMass < 0.5f * rigid.params.sleepLinear) continue;
             rigid.applyExternalWrench(i, J, L);
         }
+        applyGasOnSoftBodies();
     }
-    if (particles.size() == 0) {
-        const int n = std::max(1, rigid.params.substeps);
-        for (int s = 0; s < n; ++s) rigid.step(frameDt / n);
-    } else {
-        stepParticlesInGas(); // rigid bodies interleaved with the particles
-    }
+    stepBodiesAndParticles(gasPushesBodies); // rigid bodies interleaved with the particles
 
     // Fire: the cloths take heat from the gas (or burn and give it heat and fuel gas).
     if (grid.combustion.enabled) {
@@ -1012,17 +1002,11 @@ void Simulation::setupRigidScene() {
 void Simulation::stepFrame() {
     auto t0 = std::chrono::steady_clock::now();
     switch (mode_) {
-    case SimMode::Fluid: {
-        int n = std::max(1, particles.params.substeps);
-        float dt = frameDt / n;
-        const int rs = std::max(1, rigid.params.substeps / n); // rigid substeps per SPH substep
-        for (int s = 0; s < n; ++s) {
-            for (int r = 0; r < rs; ++r) rigid.step(dt / rs);
-            particles.step(dt);
-        }
+    case SimMode::Fluid:
+    case SimMode::Rigid: // (bodies, and whatever particles were added: the same stepping)
+        stepBodiesAndParticles(false);
         time_ += frameDt;
         break;
-    }
     case SimMode::WindTunnel:
         if (rigid.bodies().empty() && particles.size() == 0) { // gas alone
             grid.setMovingSolids({});
@@ -1037,23 +1021,6 @@ void Simulation::stepFrame() {
         }
         updateSurfaceLoads();
         break;
-    case SimMode::Rigid: {
-        if (particles.size() == 0) {
-            int n = std::max(1, rigid.params.substeps);
-            float dt = frameDt / n;
-            for (int s = 0; s < n; ++s) rigid.step(dt);
-        } else { // soft bodies / cloth added: interleave as in the liquid mode
-            int n = std::max(1, particles.params.substeps);
-            float dt = frameDt / n;
-            const int rs = std::max(1, rigid.params.substeps / n);
-            for (int s = 0; s < n; ++s) {
-                for (int r = 0; r < rs; ++r) rigid.step(dt / rs);
-                particles.step(dt);
-            }
-        }
-        time_ += frameDt;
-        break;
-    }
     }
     ++frame_;
     lastStepMs_ = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -1361,7 +1328,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         std::shared_ptr<const TriMesh> mesh;
         if (b.type() == ShapeType::ConvexHull) mesh = static_cast<const ConvexHullShape*>(b.shape.get())->mesh();
         else if (b.type() == ShapeType::Compound) mesh = static_cast<const CompoundShape*>(b.shape.get())->visualMesh();
-        s.bodies.push_back({b.type(), b.pos, b.rot, b.halfExtents(), b.radius(), b.color, mesh, b.sleeping, b.shape});
+        s.bodies.push_back({b.type(), b.pos, b.rot, b.halfExtents(), b.radius(), b.color, mesh, b.sleeping, b.shape, b.invMass > 0});
     }
 
     auto range = [&](float lo, float hi) {
@@ -1377,12 +1344,10 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         const auto& v = particles.velocities();
         const auto& rho = particles.densities();
         const auto& phase = particles.phases();
-        const bool anySolid = particles.fluidCount() < particles.size();
         s.particles.clear();
         s.particles.reserve(x.size());
         s.particleScalar.clear();
         s.particleScalar.reserve(x.size());
-        if (anySolid) s.particleColor.reserve(x.size());
         float lo = kInf, hi = -kInf;
         for (size_t i = 0; i < x.size(); ++i) {
             if (phase[i] != uint8_t(ParticlePhase::Fluid)) continue; // cloth / soft bodies: drawn as surfaces
@@ -1391,11 +1356,6 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
                 continue;
             }
             s.particles.push_back(x[i]);
-            if (anySolid) s.particleColor.push_back(particles.particleColors()[i]);
-            if (phase[i] == uint8_t(ParticlePhase::Soft)) {
-                s.particleScalar.push_back(RenderSnapshot::kOwnColor);
-                continue;
-            }
             float val = 0;
             if (vis.particleColoring == ParticleColoring::Speed) val = length(v[i]);
             else if (vis.particleColoring == ParticleColoring::Density)
@@ -1547,7 +1507,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
             s.info.push_back({"Тел в газе", fmt("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
                                                 rigid.sleepingCount())});
             s.info.push_back({"Сила газа на тело (макс.)", fmt("%.3f Н", gasForceMax_)});
-            if (!held_.empty()) s.info.push_back({"Тела отпустятся через", fmt("%.1f с", std::max(0.0f, releaseTime_ - time_))});
+            if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", fmt("%.1f с", std::max(0.0f, releaseTime_ - time_))});
         }
         if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", fmt("%zu", s.arrowPos.size())});
         if (!grid.hasObstacle()) {

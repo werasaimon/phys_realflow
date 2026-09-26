@@ -37,6 +37,14 @@ void BVH::subdivide(int nodeIdx, const std::vector<AABB>& boxes, const std::vect
     if (count <= maxLeaf || depth >= 48) return;
 
     constexpr int kBins = 12;
+    // Bin of a centroid coordinate. The float is range-checked before the int conversion, so a NaN
+    // or infinite one (a body that blew up, a broken mesh) lands in an end bin instead of indexing
+    // with int(NaN).
+    auto binOf = [&](float c, int axis, float scale) {
+        const float f = (c - cBox.lo[axis]) * scale;
+        if (!(f > 0.0f)) return 0;
+        return f < float(kBins - 1) ? int(f) : kBins - 1;
+    };
     Vector3 cExt = cBox.extent();
     int bestAxis = -1, bestSplit = -1;
     float bestCost = kInf;
@@ -46,7 +54,7 @@ void BVH::subdivide(int nodeIdx, const std::vector<AABB>& boxes, const std::vect
         int binCount[kBins] = {};
         float scale = kBins / cExt[axis];
         for (int i = first; i < first + count; ++i) {
-            int b = std::min(kBins - 1, int((centroids[prims_[i]][axis] - cBox.lo[axis]) * scale));
+            int b = binOf(centroids[prims_[i]][axis], axis, scale);
             binCount[b]++;
             binBox[b].expand(boxes[prims_[i]]);
         }
@@ -83,8 +91,7 @@ void BVH::subdivide(int nodeIdx, const std::vector<AABB>& boxes, const std::vect
         if (bestCost >= leafCost && count <= 16) return;
         float scale = kBins / cExt[bestAxis];
         auto it = std::partition(prims_.begin() + first, prims_.begin() + first + count, [&](uint32_t p) {
-            int b = std::min(kBins - 1, int((centroids[p][bestAxis] - cBox.lo[bestAxis]) * scale));
-            return b < bestSplit;
+            return binOf(centroids[p][bestAxis], bestAxis, scale) < bestSplit;
         });
         mid = int(it - prims_.begin());
         if (mid == first || mid == first + count) mid = first + count / 2;

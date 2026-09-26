@@ -6,8 +6,8 @@ namespace rf {
 
 namespace {
 
-// The static world as a body: infinite mass, identity pose. Never written to (all updates are
-// scaled by invMass == 0).
+// The static world as a body: infinite mass, identity pose. Never written to: applyRowImpulse and
+// moveBody skip bodies with invMass == 0 (so a bad impulse cannot poison this shared object).
 RigidBody& worldBody() {
     static RigidBody w = [] {
         RigidBody b;
@@ -23,41 +23,11 @@ RigidBody& worldBody() {
 RigidBody& bodyOf(std::vector<RigidBody>& bodies, int i) { return i >= 0 ? bodies[i] : worldBody(); }
 const RigidBody& bodyOf(const std::vector<RigidBody>& bodies, int i) { return i >= 0 ? bodies[i] : worldBody(); }
 
-Matrix3x3 skew(const Vector3& r) {
-    Matrix3x3 S = Matrix3x3::zero();
-    S.m[0][1] = -r.z; S.m[0][2] = r.y;
-    S.m[1][0] = r.z;  S.m[1][2] = -r.x;
-    S.m[2][0] = -r.y; S.m[2][1] = r.x;
-    return S;
-}
-
-Matrix3x3 add(const Matrix3x3& a, const Matrix3x3& b) {
-    Matrix3x3 r;
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) r.m[i][j] = a.m[i][j] + b.m[i][j];
-    return r;
-}
-
-bool inverse3(const Matrix3x3& M, Matrix3x3& r) {
-    const auto& a = M.m;
-    float det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
-                a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
-    if (std::fabs(det) < 1e-20f) return false;
-    float id = 1.0f / det;
-    r.m[0][0] = (a[1][1] * a[2][2] - a[1][2] * a[2][1]) * id;
-    r.m[0][1] = (a[0][2] * a[2][1] - a[0][1] * a[2][2]) * id;
-    r.m[0][2] = (a[0][1] * a[1][2] - a[0][2] * a[1][1]) * id;
-    r.m[1][0] = (a[1][2] * a[2][0] - a[1][0] * a[2][2]) * id;
-    r.m[1][1] = (a[0][0] * a[2][2] - a[0][2] * a[2][0]) * id;
-    r.m[1][2] = (a[0][2] * a[1][0] - a[0][0] * a[1][2]) * id;
-    r.m[2][0] = (a[1][0] * a[2][1] - a[1][1] * a[2][0]) * id;
-    r.m[2][1] = (a[0][1] * a[2][0] - a[0][0] * a[2][1]) * id;
-    r.m[2][2] = (a[0][0] * a[1][1] - a[0][1] * a[1][0]) * id;
-    return true;
-}
-
-Vector3 perpendicular(const Vector3& n) {
-    return normalize(std::fabs(n.x) > 0.57f ? Vector3(n.y, -n.x, 0) : Vector3(0, n.z, -n.y));
+// Velocity change of a body by the impulse lambda of one Jacobian row (its linear and angular part).
+void applyRowImpulse(RigidBody& b, const Vector3& lin, const Vector3& ang, float lambda) {
+    if (b.invMass == 0) return;
+    b.vel += lin * (b.invMass * lambda);
+    b.angVel += b.applyInvInertiaWorld(ang) * lambda;
 }
 
 // Position-stage step limits (keep the nonlinear Gauss-Seidel robust for large errors).
@@ -115,10 +85,8 @@ void Joint::prepare(std::vector<RigidBody>& bodies, float h, bool warmStart) {
         JacobianRow& r = rows_[i];
         r.lambda = warm ? clampv(warm_[i], r.lo, r.hi) : 0.0f;
         if (r.lambda == 0) continue;
-        A.vel += r.linA * (A.invMass * r.lambda);
-        A.angVel += A.applyInvInertiaWorld(r.angA) * r.lambda;
-        B.vel += r.linB * (B.invMass * r.lambda);
-        B.angVel += B.applyInvInertiaWorld(r.angB) * r.lambda;
+        applyRowImpulse(A, r.linA, r.angA, r.lambda);
+        applyRowImpulse(B, r.linB, r.angB, r.lambda);
     }
 }
 
@@ -132,10 +100,8 @@ void Joint::solveVelocity(std::vector<RigidBody>& bodies) {
         r.lambda = clampv(old + d, r.lo, r.hi);
         d = r.lambda - old;
         if (d == 0) continue;
-        A.vel += r.linA * (A.invMass * d);
-        A.angVel += A.applyInvInertiaWorld(r.angA) * d;
-        B.vel += r.linB * (B.invMass * d);
-        B.angVel += B.applyInvInertiaWorld(r.angB) * d;
+        applyRowImpulse(A, r.linA, r.angA, d);
+        applyRowImpulse(B, r.linB, r.angB, d);
     }
     warm_.resize(rows_.size());
     for (size_t i = 0; i < rows_.size(); ++i) warm_[i] = rows_[i].lambda;
@@ -149,11 +115,10 @@ float Joint::correctPoint(std::vector<RigidBody>& bodies, const Vector3& C, cons
     float err = length(C);
     if (err < 1e-7f) return err;
     Vector3 rA = pA - A.pos, rB = pB - B.pos;
-    Matrix3x3 SA = skew(rA), SB = skew(rB);
-    Matrix3x3 K = add(Matrix3x3::diag(Vector3(A.invMass + B.invMass)),
-                 add(SA * A.invInertiaWorld * SA.transposed(), SB * B.invInertiaWorld * SB.transposed()));
-    Matrix3x3 Ki;
-    if (!inverse3(K, Ki)) return err;
+    Matrix3x3 SA = Matrix3x3::skew(rA), SB = Matrix3x3::skew(rB);
+    Matrix3x3 K = Matrix3x3::diag(Vector3(A.invMass + B.invMass)) + SA * A.invInertiaWorld * SA.transposed() +
+                  SB * B.invInertiaWorld * SB.transposed();
+    Matrix3x3 Ki = K.inverse(); // zero for two static bodies: no correction
     Vector3 corr = C * beta;
     if (length(corr) > kMaxLinearCorrection) corr *= kMaxLinearCorrection / length(corr);
     Vector3 P = Ki * (-corr);
@@ -168,8 +133,7 @@ float Joint::correctAngle(std::vector<RigidBody>& bodies, Vector3 e, float beta)
     RigidBody& B = bodyOf(bodies, b);
     float err = length(e);
     if (err < 1e-7f) return err;
-    Matrix3x3 Ki;
-    if (!inverse3(add(A.invInertiaWorld, B.invInertiaWorld), Ki)) return err;
+    Matrix3x3 Ki = (A.invInertiaWorld + B.invInertiaWorld).inverse(); // zero if neither can turn
     e *= beta;
     if (length(e) > kMaxAngularCorrection) e *= kMaxAngularCorrection / length(e);
     Vector3 L = Ki * (-e);
@@ -239,7 +203,7 @@ void HingeJoint::buildRows(const std::vector<RigidBody>& bodies, float h) {
     BallJoint::buildRows(bodies, h);
     const RigidBody& A = bodyOf(bodies, a);
     Vector3 axis = A.rot.rotate(localAxisA);
-    Vector3 t1 = perpendicular(axis), t2 = cross(axis, t1);
+    Vector3 t1 = anyPerpendicular(axis), t2 = cross(axis, t1);
     for (const Vector3& t : {t1, t2}) { // relative rotation only about the axis
         JacobianRow r;
         r.angA = t;
@@ -303,7 +267,7 @@ void SliderJoint::buildRows(const std::vector<RigidBody>& bodies, float) {
     Vector3 rA = A.rot.rotate(localAnchorA), rB = B.rot.rotate(localAnchorB);
     Vector3 d = (B.pos + rB) - (A.pos + rA);
     Vector3 axis = A.rot.rotate(localAxisA);
-    Vector3 t1 = perpendicular(axis), t2 = cross(axis, t1);
+    Vector3 t1 = anyPerpendicular(axis), t2 = cross(axis, t1);
     auto linearRow = [&](const Vector3& t) { // C = t.(pB - pA), t rotating with A
         JacobianRow r;
         r.linA = -t;

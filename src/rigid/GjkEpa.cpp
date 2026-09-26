@@ -293,6 +293,12 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
         for (auto& ed : horizon) faces.push_back(makeFace(ed.first, ed.second, wi));
         if (faces.size() > 512) break;
     }
+    // The loop may end right after rebuilding the polytope (face limit, iteration limit): the
+    // index found at the top of the last iteration then points into the old face list.
+    closest = 0;
+    for (int i = 1; i < int(faces.size()); ++i)
+        if (faces[i].d < faces[closest].d) closest = i;
+    if (faces[closest].d == kInf) return res;
 
     const Face& f = faces[closest];
     // Barycentric coordinates of the origin's projection onto the closest face.
