@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" width="680" height="420" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="420" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Доля ядра poly6 за стенкой: Φ(d) = (πk/4)·∫ от d до h (h² − z²)⁴ dz</text>
+<line x1="76" y1="48" x2="76" y2="358" stroke="#e5e7eb"/><text x="76" y="376" text-anchor="middle" fill="#374151">0.0</text>
+<line x1="192" y1="48" x2="192" y2="358" stroke="#e5e7eb"/><text x="192" y="376" text-anchor="middle" fill="#374151">0.2</text>
+<line x1="308" y1="48" x2="308" y2="358" stroke="#e5e7eb"/><text x="308" y="376" text-anchor="middle" fill="#374151">0.4</text>
+<line x1="424" y1="48" x2="424" y2="358" stroke="#e5e7eb"/><text x="424" y="376" text-anchor="middle" fill="#374151">0.6</text>
+<line x1="540" y1="48" x2="540" y2="358" stroke="#e5e7eb"/><text x="540" y="376" text-anchor="middle" fill="#374151">0.8</text>
+<line x1="656" y1="48" x2="656" y2="358" stroke="#e5e7eb"/><text x="656" y="376" text-anchor="middle" fill="#374151">1.0</text>
+<line x1="76" y1="358" x2="656" y2="358" stroke="#e5e7eb"/><text x="68" y="362" text-anchor="end" fill="#374151">0.0</text>
+<line x1="76" y1="301.6" x2="656" y2="301.6" stroke="#e5e7eb"/><text x="68" y="305.6" text-anchor="end" fill="#374151">0.1</text>
+<line x1="76" y1="245.3" x2="656" y2="245.3" stroke="#e5e7eb"/><text x="68" y="249.3" text-anchor="end" fill="#374151">0.2</text>
+<line x1="76" y1="188.9" x2="656" y2="188.9" stroke="#e5e7eb"/><text x="68" y="192.9" text-anchor="end" fill="#374151">0.3</text>
+<line x1="76" y1="132.5" x2="656" y2="132.5" stroke="#e5e7eb"/><text x="68" y="136.5" text-anchor="end" fill="#374151">0.4</text>
+<line x1="76" y1="76.2" x2="656" y2="76.2" stroke="#e5e7eb"/><text x="68" y="80.2" text-anchor="end" fill="#374151">0.5</text>
+<rect x="76" y="48" width="580" height="310" fill="none" stroke="#9ca3af"/>
+<text x="366" y="404" text-anchor="middle" fill="#111827">расстояние до стенки d / h</text>
+<text transform="translate(20 203) rotate(-90)" text-anchor="middle" fill="#111827">Φ(d) — объём «жидкости в стенке»</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2.2" points="76,76.2 83.3,84.8 90.5,93.5 97.8,102.1 105,110.7 112.3,119.3 119.5,127.8 126.8,136.3 134,144.6 141.3,152.9 148.5,161.1 155.8,169.2 163,177.2 170.3,185 177.5,192.7 184.8,200.3 192,207.8 199.3,215 206.5,222.2 213.8,229.1 221,235.9 228.3,242.5 235.5,248.9 242.8,255.2 250,261.2 257.3,267.1 264.5,272.7 271.8,278.2 279,283.4 286.3,288.4 293.5,293.3 300.8,297.9 308,302.3 315.3,306.5 322.5,310.5 329.8,314.3 337,317.9 344.3,321.4 351.5,324.6 358.8,327.6 366,330.4 373.3,333.1 380.5,335.5 387.8,337.9 395,340 402.3,342 409.5,343.8 416.8,345.4 424,347 431.3,348.4 438.5,349.6 445.8,350.7 453,351.8 460.3,352.7 467.5,353.5 474.8,354.2 482,354.8 489.3,355.4 496.5,355.8 503.8,356.3 511,356.6 518.3,356.9 525.5,357.1 532.8,357.3 540,357.5 547.3,357.6 554.5,357.7 561.8,357.8 569,357.9 576.3,357.9 583.5,357.9 590.8,358 598,358 605.3,358 612.5,358 619.8,358 627,358 634.3,358 641.5,358 648.8,358 656,358"/>
+<circle cx="76" cy="76.2" r="6" fill="#ea580c" stroke="#111827"/>
+<circle cx="656" cy="358" r="6" fill="#ea580c" stroke="#111827"/>
+<rect x="276" y="58" width="370" height="48" fill="#ffffff" fill-opacity="0.92" stroke="#d1d5db" rx="4"/>
+<line x1="286" y1="72" x2="312" y2="72" stroke="#2563eb" stroke-width="2.5"/><text x="320" y="76" fill="#111827">замкнутая формула (ParticleSystem::wallVolume)</text>
+<circle cx="299" cy="92" r="5" fill="#ea580c" stroke="#111827"/><text x="320" y="96" fill="#111827">тест: Φ(0) = 0.5000, внутри 0</text>
+</svg>

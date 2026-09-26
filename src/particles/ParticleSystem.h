@@ -1,0 +1,221 @@
+#pragma once
+// Unified particle solver (as NVIDIA FleX: Macklin, Mueller, Chentanez, Kim 2014, "Unified Particle
+// Physics for Real-Time Applications"). All particles share one neighbour grid and one constraint
+// loop; each has a phase:
+//   fluid - incompressible liquid: Position Based Fluids (Macklin & Mueller 2013), an SPH method
+//   soft  - soft body: shape matching on overlapping clusters (SoftBody.h)
+//   cloth - cloth: XPBD stretch / shear / bending constraints (Cloth.h)
+// Particles of different phases (and distant particles of the same cloth) collide with each other.
+//  * poly6 density / spiky gradient kernels, uniform-grid neighbour search
+//  * unilateral density constraint (no clumping at free surfaces)
+//  * XSPH viscosity, vorticity confinement
+//  * boundaries: domain box, static meshes (BVH signed distance), two-way coupling with rigid bodies
+
+#include "spatial/BVH.h"
+#include "particles/Cloth.h"
+#include "particles/SoftBody.h"
+#include "math/Math.h"
+#include "rigid/RigidWorld.h"
+
+#include <functional>
+#include <vector>
+
+namespace rf {
+
+enum class ParticlePhase : uint8_t { Fluid, Soft, Cloth };
+
+// The hot gas around a point as a burning cloth feels it: its temperature [K above ambient] and the
+// thermal radiation of the flame arriving there [W/m^2].
+struct GasHeat {
+    float temperature = 0;
+    float irradiance = 0;
+};
+
+// What a burning cloth particle gives to the gas around it (see ParticleSystem::burnCloths).
+struct FireOutput {
+    Vector3 position;
+    float heat = 0; // [J]
+    float fuel = 0; // [m^3] fuel gas at unit concentration
+};
+
+struct ParticleParams {
+    float particleRadius = 0.015f;  // [m], spacing = 2r, kernel radius h = 4r   (*reset)
+    float restDensity = 1000.0f;    // [kg/m^3]
+    int solverIterations = 4;
+    int solidIterations = 2;        // passes of the soft / cloth / contact constraints per iteration
+    int clothSubsteps = 8;          // small steps of the cloth inside every substep (Macklin et al. 2019)
+    float clothSpacing = 1.0f;      // distance between cloth particles, in particle radii: 1 = a
+                                    // particle of radius r cannot slip through the sheet (as in FleX)
+    int substeps = 3;               // per frame
+    float viscosity = 0.02f;        // XSPH coefficient, 0..1
+    float vorticity = 0.0f;         // confinement strength [m/s^2 scale]
+    float relaxation = 0.1f;        // constraint-force-mixing term (scaled by 1/h^2)
+    float tensileK = 0.0001f;       // artificial pressure (surface tension-like)
+    float wallFriction = 0.1f;      // 0 = free slip, 1 = no slip on obstacles
+    Vector3 gravity{0, -9.81f, 0};
+    int maxParticles = 250000;
+};
+
+struct ParticleEmitter {
+    bool enabled = false;
+    Vector3 position;             // nozzle center
+    Vector3 direction{1, 0, 0};   // unit
+    float radius = 0.05f;
+    float speed = 2.0f;
+    float accumulated = 0;     // distance travelled since last layer
+};
+
+class ParticleSystem {
+public:
+    ParticleParams params;
+    ParticleEmitter emitter;
+
+    void reset(const AABB& domain);
+    void addBlock(const AABB& box, const Vector3& velocity = Vector3(0.0f));
+    // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space);
+    // stiffness 0..1 (1 = rigid). Returns the soft body index, -1 if nothing fitted.
+    int addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color,
+                    const Vector3& velocity = Vector3(0.0f));
+    // Cloth: particle grid from `origin` along the edges u (warp) and v (weft), spacing
+    // params.clothSpacing * r. pinMask pins corners: 1 = origin, 2 = origin + u, 4 = origin + v,
+    // 8 = origin + u + v; or whole edges: 16 = the edge along u at the origin (e.g. a curtain rod),
+    // 32 = the opposite edge, 64 = the edge along v at the origin, 128 = the opposite one.
+    // Returns the cloth index.
+    int addCloth(const Vector3& origin, const Vector3& u, const Vector3& v, const ClothMaterial& material, int pinMask,
+                 const Vector3& color);
+    void setStaticMesh(const MeshBVH* bvh) { mesh_ = bvh; }
+    void setRigidWorld(RigidWorld* w) { rigid_ = w; }
+
+    // Advances one substep of length dt.
+    void step(float dt);
+    // Fire (cloths whose material burns): heating by the gas and the flame's radiation (gas(x)),
+    // ignition, burning, charring. The fabric loses mass as it burns. What the cloths give to the
+    // gas is appended to `out` (only particles with something to give).
+    void burnCloths(float dt, const std::function<GasHeat(const Vector3&)>& gas, float ambientTemperature,
+                    std::vector<FireOutput>& out);
+
+    size_t size() const { return x_.size(); }
+    const std::vector<Vector3>& positions() const { return x_; }
+    const std::vector<Vector3>& velocities() const { return v_; }
+    const std::vector<float>& densities() const { return rho_; }
+    const std::vector<uint8_t>& phases() const { return phase_; }
+    const std::vector<float>& invMasses() const { return invMass_; }
+    const std::vector<Vector3>& particleColors() const { return color_; }
+    const std::vector<SoftBody>& softBodies() const { return softBodies_; }
+    const std::vector<Cloth>& cloths() const { return cloths_; }
+    // Surface of a soft body now (its mesh skinned to the clusters).
+    void softBodySurface(size_t body, std::vector<Vector3>& out) const { skinSurface(softBodies_[body], out); }
+
+    // Mouse grab: the particle nearest to `point` (within 3 spacings) and its neighbours of the same
+    // object (cloth: that particle alone; soft body / liquid: a small ball) follow the target
+    // kinematically; everything else is dragged along by the constraints - a hard yank tears cloth.
+    bool grab(const Vector3& point);
+    void setGrabTarget(const Vector3& target) { grab_.target = target; }
+    void releaseGrab();
+    bool grabbing() const { return !grab_.particles.empty(); }
+    Vector3 grabAnchor() const { return grabbing() ? x_[grab_.particles[0]] : Vector3(0.0f); }
+    Vector3 grabTarget() const { return grab_.target; }
+    size_t fluidCount() const { return fluidCount_; }
+    bool hasSolids() const { return fluidCount_ < x_.size(); } // soft bodies or cloth
+    void addVelocity(int i, const Vector3& dv) { v_[i] += dv; } // external forces (e.g. gas drag)
+    size_t particleContactCount() const { return contacts_.size(); } // candidate pairs of the last substep
+    float kernelRadius() const { return h_; }
+    float particleMass() const { return mass_; }
+    float spacing() const { return 2.0f * params.particleRadius; }
+    const AABB& domain() const { return domain_; }
+    float averageDensityError() const { return avgDensityError_; }
+    // Part of the kernel of a particle at p lying beyond the domain walls (0 .. 1/2 per wall) and
+    // its gradient: the walls count in the density as liquid at rest (see computeLambda).
+    float wallVolume(const Vector3& p, Vector3& gradient) const;
+    float maxSpeed() const { return maxSpeed_; }
+
+private:
+    void emitParticles(float dt);
+    void buildGrid(const std::vector<Vector3>& pts);
+    void findNeighbors();
+    void computeLambda();
+    void computeDeltaP();
+    void collide(int i, Vector3& p, bool recordImpulse, float dt);
+    void applyViscosityAndVorticity(float dt);
+    void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, const Vector3& color,
+                     float volume = 1.0f);
+    // Particles of different phases (and non-adjacent particles of one cloth) keep 2r apart:
+    // the candidate pairs are collected once per substep, then projected Gauss-Seidel style.
+    struct ParticleContact {
+        int i, j;
+        Vector3 normal; // from j to i, fixed for the substep
+    };
+    void findParticleContacts();
+    void solveParticleContacts();
+    // Cloth dynamics in clothSubsteps small steps (gravity, one constraint pass, tearing each) from
+    // the start of the substep: "small steps" converge far better than more iterations, so the
+    // thread tensions - and with them the tearing - are physical, not solver lag.
+    void stepClothsInSmallSteps(float dt);
+    std::vector<ParticleContact> contacts_;
+    struct ParticleGrab {
+        std::vector<int> particles;       // [0] = the picked one
+        std::vector<Vector3> offsets;     // from the picked particle at grab time
+        std::vector<float> savedInvMass;  // restored on release
+        Vector3 target;
+    } grab_;
+    bool isFluid(int i) const { return phase_[i] == uint8_t(ParticlePhase::Fluid); }
+    float particleMass(int i) const { return invMass_[i] > 0 ? 1.0f / invMass_[i] : 0.0f; }
+
+    inline float W(float r2) const {
+        if (r2 >= h2_) return 0.0f;
+        float d = h2_ - r2;
+        return poly6_ * d * d * d;
+    }
+    inline Vector3 gradW(const Vector3& r) const {
+        float l2 = length2(r);
+        if (l2 >= h2_ || l2 < 1e-20f) return Vector3(0.0f);
+        float l = std::sqrt(l2);
+        float d = h_ - l;
+        return r * (spikyGrad_ * d * d / l);
+    }
+
+    AABB domain_;
+    float h_ = 0.06f, h2_ = 0, poly6_ = 0, spikyGrad_ = 0, mass_ = 1, deltaQW_ = 1;
+
+    std::vector<Vector3> x_, v_, p_, dp_, omega_, vtmp_;
+    std::vector<float> rho_, lambda_;
+    // per particle: phase, object id (-1 = fluid), inverse mass (0 = pinned), rest position
+    // (cloth self-collision filter) and display colour
+    std::vector<uint8_t> phase_;
+    std::vector<int> object_;
+    std::vector<float> invMass_;
+    std::vector<float> volume_; // volume relative to a fluid particle (cloth sheets are thinner)
+    std::vector<Vector3> rest_, color_;
+    std::vector<SoftBody> softBodies_;
+    std::vector<Cloth> cloths_;
+    int nextObject_ = 0;
+    size_t fluidCount_ = 0;
+
+    // neighbours
+    static constexpr int kMaxNeighbors = 80;
+    std::vector<int> nbrCount_;
+    std::vector<int> nbr_;
+    // grid
+    int gx_ = 1, gy_ = 1, gz_ = 1;
+    std::vector<int> cellStart_, cellOf_, sorted_;
+
+    // Two-way coupling with rigid bodies inside the iterations (XPBD contacts, Mueller et al. 2020,
+    // "Detailed Rigid Body Simulation with Extended Position Based Dynamics"): every contact splits
+    // its correction between particle and body by their generalized inverse masses; the bodies move
+    // (bodyShift_, small rotation bodyTurn_) during the substep, so the particles meet them where
+    // they are, and the motion becomes their velocity change at the end. The contacts of a body are
+    // solved one after another (Gauss-Seidel): a light body hit by a lot of water at once is pushed
+    // no farther than the water pushes it, and the pressure all around a floating body leaves
+    // exactly its buoyancy.
+    std::vector<int> contactBody_;                     // body touched in the current pass, -1 none
+    std::vector<Vector3> contactNormal_, contactPoint_; // out of the body; on its surface
+    std::vector<float> contactDepth_;                   // penetration when found
+    std::vector<Vector3> bodyShift_, bodyTurn_;
+    void solveBodyContacts(float dt); // after a collision pass
+
+    const MeshBVH* mesh_ = nullptr;
+    RigidWorld* rigid_ = nullptr;
+    float avgDensityError_ = 0, maxSpeed_ = 0;
+};
+
+} // namespace rf

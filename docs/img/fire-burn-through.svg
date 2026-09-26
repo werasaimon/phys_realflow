@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" width="680" height="420" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="420" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Горящая штора: столбец над горелкой (сцена «Огонь»)</text>
+<line x1="76" y1="48" x2="76" y2="358" stroke="#e5e7eb"/><text x="76" y="376" text-anchor="middle" fill="#374151">−0.6</text>
+<line x1="172.7" y1="48" x2="172.7" y2="358" stroke="#e5e7eb"/><text x="172.7" y="376" text-anchor="middle" fill="#374151">−0.4</text>
+<line x1="269.3" y1="48" x2="269.3" y2="358" stroke="#e5e7eb"/><text x="269.3" y="376" text-anchor="middle" fill="#374151">−0.2</text>
+<line x1="366" y1="48" x2="366" y2="358" stroke="#e5e7eb"/><text x="366" y="376" text-anchor="middle" fill="#374151">0.0</text>
+<line x1="462.7" y1="48" x2="462.7" y2="358" stroke="#e5e7eb"/><text x="462.7" y="376" text-anchor="middle" fill="#374151">0.2</text>
+<line x1="559.3" y1="48" x2="559.3" y2="358" stroke="#e5e7eb"/><text x="559.3" y="376" text-anchor="middle" fill="#374151">0.4</text>
+<line x1="656" y1="48" x2="656" y2="358" stroke="#e5e7eb"/><text x="656" y="376" text-anchor="middle" fill="#374151">0.6</text>
+<line x1="76" y1="358" x2="656" y2="358" stroke="#e5e7eb"/><text x="68" y="362" text-anchor="end" fill="#374151">1.5</text>
+<line x1="76" y1="319.3" x2="656" y2="319.3" stroke="#e5e7eb"/><text x="68" y="323.3" text-anchor="end" fill="#374151">2</text>
+<line x1="76" y1="280.5" x2="656" y2="280.5" stroke="#e5e7eb"/><text x="68" y="284.5" text-anchor="end" fill="#374151">2.5</text>
+<line x1="76" y1="241.8" x2="656" y2="241.8" stroke="#e5e7eb"/><text x="68" y="245.8" text-anchor="end" fill="#374151">3</text>
+<line x1="76" y1="203" x2="656" y2="203" stroke="#e5e7eb"/><text x="68" y="207" text-anchor="end" fill="#374151">3.5</text>
+<line x1="76" y1="164.3" x2="656" y2="164.3" stroke="#e5e7eb"/><text x="68" y="168.3" text-anchor="end" fill="#374151">4</text>
+<line x1="76" y1="125.5" x2="656" y2="125.5" stroke="#e5e7eb"/><text x="68" y="129.5" text-anchor="end" fill="#374151">4.5</text>
+<line x1="76" y1="86.8" x2="656" y2="86.8" stroke="#e5e7eb"/><text x="68" y="90.8" text-anchor="end" fill="#374151">5</text>
+<line x1="76" y1="48" x2="656" y2="48" stroke="#e5e7eb"/><text x="68" y="52" text-anchor="end" fill="#374151">5.5</text>
+<rect x="76" y="48" width="580" height="310" fill="none" stroke="#9ca3af"/>
+<text x="366" y="404" text-anchor="middle" fill="#111827">высота y на шторе, м (низ шторы −0.55, штанга 0.55)</text>
+<text transform="translate(20 203) rotate(-90)" text-anchor="middle" fill="#111827">время от старта сцены, с</text>
+<polyline fill="none" stroke="#ea580c" stroke-width="2.2" points="631.8,183.6 573.8,201.5 515.8,214.6 457.8,224.7 399.8,234 346.7,240.2 288.7,266.5 230.7,288.3 172.7,306.1 114.7,329.3"/>
+<circle cx="631.8" cy="183.6" r="4" fill="#ea580c"/>
+<circle cx="573.8" cy="201.5" r="4" fill="#ea580c"/>
+<circle cx="515.8" cy="214.6" r="4" fill="#ea580c"/>
+<circle cx="457.8" cy="224.7" r="4" fill="#ea580c"/>
+<circle cx="399.8" cy="234" r="4" fill="#ea580c"/>
+<circle cx="346.7" cy="240.2" r="4" fill="#ea580c"/>
+<circle cx="288.7" cy="266.5" r="4" fill="#ea580c"/>
+<circle cx="230.7" cy="288.3" r="4" fill="#ea580c"/>
+<circle cx="172.7" cy="306.1" r="4" fill="#ea580c"/>
+<circle cx="114.7" cy="329.3" r="4" fill="#ea580c"/>
+<polyline fill="none" stroke="#111827" stroke-width="2.2" points="631.8,120.1 573.8,129.4 515.8,135.6 457.8,144.9 399.8,155 346.7,166.6 288.7,178.2 230.7,187.5 172.7,158.8 114.7,117.8"/>
+<circle cx="631.8" cy="120.1" r="4" fill="#111827"/>
+<circle cx="573.8" cy="129.4" r="4" fill="#111827"/>
+<circle cx="515.8" cy="135.6" r="4" fill="#111827"/>
+<circle cx="457.8" cy="144.9" r="4" fill="#111827"/>
+<circle cx="399.8" cy="155" r="4" fill="#111827"/>
+<circle cx="346.7" cy="166.6" r="4" fill="#111827"/>
+<circle cx="288.7" cy="178.2" r="4" fill="#111827"/>
+<circle cx="230.7" cy="187.5" r="4" fill="#111827"/>
+<circle cx="172.7" cy="158.8" r="4" fill="#111827"/>
+<circle cx="114.7" cy="117.8" r="4" fill="#111827"/>
+<text x="114.7" y="329.3" dx="8" dy="18" text-anchor="start" fill="#9a3412" font-size="12">44 кВт/м²</text>
+<text x="631.8" y="183.6" dx="-4" dy="26" text-anchor="end" fill="#9a3412" font-size="12">5 кВт/м²</text>
+<text x="230.7" y="187.5" dx="0" dy="22" text-anchor="middle" fill="#111827" font-size="12">минимум 3.70 с</text>
+<rect x="230" y="56" width="330" height="48" fill="#ffffff" fill-opacity="0.92" stroke="#d1d5db" rx="4"/>
+<line x1="240" y1="70" x2="266" y2="70" stroke="#ea580c" stroke-width="2.5"/><text x="274" y="74" fill="#111827">начало пиролиза (снизу вверх)</text>
+<line x1="240" y1="90" x2="266" y2="90" stroke="#111827" stroke-width="2.5"/><text x="274" y="94" fill="#111827">прогорание нити (первым — y ≈ −0.3 м)</text>
+</svg>

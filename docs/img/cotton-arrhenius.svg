@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 420" width="680" height="420" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="420" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Пиролиз хлопка: k(T) = A·exp(−E/RT), E = 238 кДж/моль, A = 10¹⁸·¹ с⁻¹</text>
+<line x1="156" y1="48" x2="156" y2="358" stroke="#e5e7eb"/><text x="156" y="376" text-anchor="middle" fill="#374151">400</text>
+<line x1="256" y1="48" x2="256" y2="358" stroke="#e5e7eb"/><text x="256" y="376" text-anchor="middle" fill="#374151">500</text>
+<line x1="356" y1="48" x2="356" y2="358" stroke="#e5e7eb"/><text x="356" y="376" text-anchor="middle" fill="#374151">600</text>
+<line x1="456" y1="48" x2="456" y2="358" stroke="#e5e7eb"/><text x="456" y="376" text-anchor="middle" fill="#374151">700</text>
+<line x1="556" y1="48" x2="556" y2="358" stroke="#e5e7eb"/><text x="556" y="376" text-anchor="middle" fill="#374151">800</text>
+<line x1="656" y1="48" x2="656" y2="358" stroke="#e5e7eb"/><text x="656" y="376" text-anchor="middle" fill="#374151">900</text>
+<line x1="76" y1="358" x2="656" y2="358" stroke="#e5e7eb"/><text x="68" y="362" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−24</tspan></text>
+<line x1="76" y1="319.3" x2="656" y2="319.3" stroke="#e5e7eb"/><text x="68" y="323.3" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−20</tspan></text>
+<line x1="76" y1="280.5" x2="656" y2="280.5" stroke="#e5e7eb"/><text x="68" y="284.5" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−16</tspan></text>
+<line x1="76" y1="241.8" x2="656" y2="241.8" stroke="#e5e7eb"/><text x="68" y="245.8" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−12</tspan></text>
+<line x1="76" y1="203" x2="656" y2="203" stroke="#e5e7eb"/><text x="68" y="207" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−8</tspan></text>
+<line x1="76" y1="164.3" x2="656" y2="164.3" stroke="#e5e7eb"/><text x="68" y="168.3" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">−4</tspan></text>
+<line x1="76" y1="125.5" x2="656" y2="125.5" stroke="#e5e7eb"/><text x="68" y="129.5" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">0</tspan></text>
+<line x1="76" y1="86.8" x2="656" y2="86.8" stroke="#e5e7eb"/><text x="68" y="90.8" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">4</tspan></text>
+<line x1="76" y1="48" x2="656" y2="48" stroke="#e5e7eb"/><text x="68" y="52" text-anchor="end" fill="#374151">10<tspan dy="-6" font-size="10">8</tspan></text>
+<rect x="76" y="48" width="580" height="310" fill="none" stroke="#9ca3af"/>
+<text x="366" y="404" text-anchor="middle" fill="#111827">температура ткани T, K</text>
+<text transform="translate(20 203) rotate(-90)" text-anchor="middle" fill="#111827">скорость разложения k, 1/с</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2.2" points="76,326.5 81,320.7 86,315.1 91,309.7 96,304.4 101,299.2 106,294.3 111,289.4 116,284.7 121,280.1 126,275.7 131,271.3 136,267.1 141,263 146,259 151,255.1 156,251.2 161,247.5 166,243.9 171,240.4 176,236.9 181,233.5 186,230.2 191,227 196,223.9 201,220.8 206,217.8 211,214.9 216,212 221,209.2 226,206.4 231,203.7 236,201.1 241,198.5 246,195.9 251,193.5 256,191 261,188.6 266,186.3 271,184 276,181.8 281,179.6 286,177.4 291,175.3 296,173.2 301,171.1 306,169.1 311,167.2 316,165.2 321,163.3 326,161.4 331,159.6 336,157.8 341,156 346,154.3 351,152.6 356,150.9 361,149.2 366,147.6 371,146 376,144.4 381,142.9 386,141.3 391,139.8 396,138.3 401,136.9 406,135.4 411,134 416,132.6 421,131.3 426,129.9 431,128.6 436,127.3 441,126 446,124.7 451,123.4 456,122.2 461,121 466,119.8 471,118.6 476,117.4 481,116.3 486,115.1 491,114 496,112.9 501,111.8 506,110.7 511,109.7 516,108.6 521,107.6 526,106.6 531,105.6 536,104.6 541,103.6 546,102.6 551,101.6 556,100.7 561,99.8 566,98.8 571,97.9 576,97 581,96.1 586,95.3 591,94.4 596,93.5 601,92.7 606,91.8 611,91 616,90.2 621,89.4 626,88.6 631,87.8 636,87 641,86.2 646,85.5 651,84.7 656,84"/>
+<circle cx="125" cy="276.5" r="6" fill="#16a34a" stroke="#111827"/>
+<circle cx="444" cy="125.2" r="6" fill="#ea580c" stroke="#111827"/>
+<text x="125" y="276.5" dx="12" dy="4" text-anchor="start" fill="#111827" font-size="12">k ≈ 2.6·10⁻¹⁶ 1/с</text>
+<text x="444" y="125.2" dx="12" dy="18" text-anchor="start" fill="#111827" font-size="12">k ≈ 1.07 1/с</text>
+<rect x="270" y="272" width="380" height="68" fill="#ffffff" fill-opacity="0.92" stroke="#d1d5db" rx="4"/>
+<line x1="280" y1="286" x2="306" y2="286" stroke="#2563eb" stroke-width="2.5"/><text x="314" y="290" fill="#111827">Antal &amp; Várhegyi 1995 (параметры ClothMaterial)</text>
+<circle cx="293" cy="306" r="5" fill="#16a34a" stroke="#111827"/><text x="314" y="310" fill="#111827">8 кВт/м²: 369 K через 30 с — цела</text>
+<circle cx="293" cy="326" r="5" fill="#ea580c" stroke="#111827"/><text x="314" y="330" fill="#111827">100 кВт/м²: фронт 688 K, ½ за 2.43 с</text>
+</svg>

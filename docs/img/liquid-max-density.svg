@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 200" width="680" height="200" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="680" height="200" fill="#ffffff"/>
+<text x="340" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Бак с водой: максимальная плотность частиц за 4 с</text>
+<line x1="150" y1="50" x2="150" y2="110" stroke="#e5e7eb"/><text x="150" y="128" text-anchor="middle" fill="#374151">100</text>
+<line x1="316.7" y1="50" x2="316.7" y2="110" stroke="#e5e7eb"/><text x="316.7" y="128" text-anchor="middle" fill="#374151">1000</text>
+<line x1="483.3" y1="50" x2="483.3" y2="110" stroke="#e5e7eb"/><text x="483.3" y="128" text-anchor="middle" fill="#374151">10000</text>
+<line x1="650" y1="50" x2="650" y2="110" stroke="#e5e7eb"/><text x="650" y="128" text-anchor="middle" fill="#374151">100000</text>
+<text x="400" y="148" text-anchor="middle" fill="#111827">ρ_max, кг/м³ (логарифмическая шкала; покой 1000)</text>
+<text x="140" y="86" text-anchor="end" fill="#111827" font-weight="600">ρ_max</text>
+<rect x="150" y="60" width="335.3" height="22" fill="#dc2626"/><text x="491.3" y="76" fill="#111827">10 279 (в углах)</text>
+<rect x="150" y="88" width="173" height="22" fill="#16a34a"/><text x="329" y="104" fill="#111827">1 091</text>
+<rect x="150" y="50" width="500" height="60" fill="none" stroke="#9ca3af"/>
+<rect x="150" y="165" width="16" height="10" fill="#dc2626"/><text x="172" y="174" fill="#111827">без стенок в плотности</text><rect x="410" y="165" width="16" height="10" fill="#16a34a"/><text x="432" y="174" fill="#111827">Koschier &amp; Bender 2017</text>
+</svg>

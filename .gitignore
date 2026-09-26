@@ -1,0 +1,23 @@
+# Build output
+build/
+build-*/
+out/
+*.exe
+*.dll
+*.a
+*.o
+*.obj
+
+# Logs of local builds / deployments
+*.log
+
+# IDE / editor state
+.vs/
+.vscode/
+.idea/
+*.user
+CMakeUserPresets.json
+compile_commands.json
+
+# Local results (screenshots, exported data)
+*.csv

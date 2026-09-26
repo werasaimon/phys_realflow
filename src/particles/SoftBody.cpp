@@ -1,0 +1,129 @@
+#include "particles/SoftBody.h"
+
+namespace rf {
+
+std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::vector<Vector3>& rest, float spacing,
+                                       float radius) {
+    AABB box;
+    for (const Vector3& r : rest) box.expand(r);
+    std::vector<SoftCluster> clusters;
+    const Vector3 e = box.extent();
+    const int nx = std::max(1, int(std::ceil(e.x / spacing))), ny = std::max(1, int(std::ceil(e.y / spacing))),
+              nz = std::max(1, int(std::ceil(e.z / spacing)));
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx; ++i) {
+                // Centre of this lattice cell of the body's bounding box.
+                Vector3 c = box.lo + Vector3((i + 0.5f) * e.x / nx, (j + 0.5f) * e.y / ny, (k + 0.5f) * e.z / nz);
+                std::vector<size_t> members; // local indices within the radius
+                for (size_t m = 0; m < ids.size(); ++m)
+                    if (length2(rest[m] - c) <= radius * radius) members.push_back(m);
+                if (members.size() < 4) continue; // too few particles to define a rotation
+                Vector3 com(0.0f);
+                for (size_t m : members) com += rest[m];
+                com /= float(members.size());
+                SoftCluster cl;
+                cl.restCentre = cl.centre = com;
+                for (size_t m : members) {
+                    cl.particles.push_back(ids[m]);
+                    cl.restOffsets.push_back(rest[m] - com);
+                }
+                clusters.push_back(std::move(cl));
+            }
+    if (clusters.empty()) { // small body: one cluster with everything
+        SoftCluster cl;
+        Vector3 com(0.0f);
+        for (const Vector3& r : rest) com += r;
+        com /= float(rest.size());
+        cl.restCentre = cl.centre = com;
+        cl.particles = ids;
+        for (const Vector3& r : rest) cl.restOffsets.push_back(r - com);
+        clusters.push_back(std::move(cl));
+    }
+    return clusters;
+}
+
+void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& particleRest) {
+    body.surface = restSurface;
+    body.vertexClusters.assign(restSurface.positions.size(), {});
+    // Clusters of every particle (local particle index -> cluster indices).
+    const int first = body.particles.front();
+    std::vector<std::vector<int>> clustersOf(body.particles.size());
+    for (int k = 0; k < int(body.clusters.size()); ++k)
+        for (int i : body.clusters[k].particles) clustersOf[i - first].push_back(k);
+    for (size_t v = 0; v < restSurface.positions.size(); ++v) {
+        size_t nearest = 0;
+        float best = kInf;
+        for (size_t m = 0; m < particleRest.size(); ++m) {
+            float d = length2(particleRest[m] - restSurface.positions[v]);
+            if (d < best) { best = d; nearest = m; }
+        }
+        body.vertexClusters[v] = clustersOf[nearest];
+    }
+}
+
+void skinSurface(const SoftBody& body, std::vector<Vector3>& out) {
+    out.resize(body.surface.positions.size());
+    for (size_t v = 0; v < out.size(); ++v) {
+        const Vector3& rest = body.surface.positions[v];
+        Vector3 sum(0.0f);
+        for (int k : body.vertexClusters[v]) {
+            const SoftCluster& cl = body.clusters[k];
+            sum += cl.centre + cl.rotation.rotate(rest - cl.restCentre);
+        }
+        out[v] = body.vertexClusters[v].empty() ? rest : sum / float(body.vertexClusters[v].size());
+    }
+}
+
+void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass) {
+    std::vector<Vector3> goalSum;
+    std::vector<int> goalCount;
+    for (SoftBody& body : bodies) {
+        // Goals of every particle, summed over the clusters it belongs to.
+        goalSum.assign(body.particles.size(), Vector3(0.0f));
+        goalCount.assign(body.particles.size(), 0);
+        // Map global particle index -> local slot (particles of a body are contiguous).
+        const int first = body.particles.front();
+        for (SoftCluster& cl : body.clusters) {
+            // Current centre of mass (all particles of a body have the same mass).
+            Vector3 c(0.0f);
+            for (int i : cl.particles) c += p[i];
+            c /= float(cl.particles.size());
+            // A = sum (p - c) q^T: the deformation of the cluster from rest.
+            Matrix3x3 A = Matrix3x3::zero();
+            for (size_t m = 0; m < cl.particles.size(); ++m) A += Matrix3x3::outer(p[cl.particles[m]] - c, cl.restOffsets[m]);
+            cl.rotation = extractRotation(A, cl.rotation, 10);
+            cl.centre = c;
+            const Matrix3x3 R = cl.rotation.toMatrix3x3();
+            for (size_t m = 0; m < cl.particles.size(); ++m) {
+                int slot = cl.particles[m] - first;
+                goalSum[slot] += c + R * cl.restOffsets[m];
+                goalCount[slot] += 1;
+            }
+        }
+        // Corrections towards the averaged goals. Particles belong to different numbers of clusters,
+        // so these do not sum to zero on their own: remove their mean - an internal force must not
+        // move the body's centre of mass (momentum conservation). Unless part of the body is held
+        // (pinned / grabbed particles): that is an external support the body must follow.
+        std::vector<Vector3> delta(body.particles.size(), Vector3(0.0f));
+        Vector3 mean(0.0f);
+        int movable = 0;
+        for (size_t s = 0; s < body.particles.size(); ++s) {
+            int i = body.particles[s];
+            if (goalCount[s] == 0 || invMass[i] == 0) continue;
+            delta[s] = (goalSum[s] / float(goalCount[s]) - p[i]) * body.stiffness;
+            mean += delta[s];
+            ++movable;
+        }
+        const bool held = movable < int(body.particles.size());
+        if (movable > 0 && !held) mean /= float(movable);
+        else mean = Vector3(0.0f);
+        for (size_t s = 0; s < body.particles.size(); ++s) {
+            int i = body.particles[s];
+            if (goalCount[s] == 0 || invMass[i] == 0) continue;
+            p[i] += delta[s] - mean;
+        }
+    }
+}
+
+} // namespace rf
