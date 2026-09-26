@@ -1,0 +1,65 @@
+# The SDK and its tests on every push and pull request: three compilers, three platforms,
+# warnings as errors, and a sanitizer build. The Qt app is not built here (no Qt on the runners).
+name: SDK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Linux GCC",     os: ubuntu-latest,  cc: gcc,   cxx: g++ }
+          - { name: "Linux Clang",   os: ubuntu-latest,  cc: clang, cxx: clang++ }
+          - { name: "Windows MSVC",  os: windows-latest }
+          - { name: "macOS Clang",   os: macos-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRF_BUILD_APP=OFF -DRF_WERROR=ON -DRF_STRICT_FP=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        shell: bash
+        env:
+          RF_JUNIT: junit.xml
+        run: |
+          exe=build/rf_tests
+          [ -f build/Release/rf_tests.exe ] && exe=build/Release/rf_tests.exe
+          "$exe"
+      - name: Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.os }}-${{ matrix.cc || 'msvc' }}
+          path: junit.xml
+
+  sanitizers:
+    name: "Linux Clang ASan+UBSan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        env: { CC: clang, CXX: clang++ }
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DRF_BUILD_APP=OFF -DRF_SANITIZE=ON -DRF_STRICT_FP=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test (the fast half - the sanitizers slow the solvers 5-10x)
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          ASAN_OPTIONS: detect_leaks=0
+          RF_TEST: "math"
+        run: |
+          for t in "math" "primitives" "bvh" "mass" "gjk" "rigid bodies" "box stack" "tall stack" "joints" "continuous" "particles rest" "grid uniform" "smoke closed" "combustion" "MHD"; do
+            RF_TEST="$t" build/rf_tests
+          done

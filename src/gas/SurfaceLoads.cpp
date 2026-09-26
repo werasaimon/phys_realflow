@@ -1,4 +1,4 @@
-#include "grid/SurfaceLoads.h"
+#include "gas/SurfaceLoads.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -6,10 +6,10 @@
 
 namespace rf {
 
-SurfaceLoads computeSurfaceLoads(const NSGridSolver& gas, const TriMesh& surface, const Vector3& momentRef, float refArea,
+SurfaceLoads computeSurfaceLoads(const GasSolver& gas, const TriMesh& surface, const Vector3& momentRef, float refArea,
                                  float refLength) {
     SurfaceLoads out;
-    const NSParams& prm = gas.params;
+    const GasParams& prm = gas.params;
     const float q = gas.dynamicPressure();
     const float rho = prm.fluidDensity, nu = std::max(prm.kinematicViscosity, 1e-12f);
     // The gas is read at one and two cell spacings outside the surface (the voxelised body may

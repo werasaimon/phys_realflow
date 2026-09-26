@@ -3,7 +3,7 @@
 // it posts commands (executed between frames on the simulation thread) and reads immutable
 // RenderSnapshots published after every frame.
 
-#include "sim/Simulation.h"
+#include "scene/Simulation.h"
 
 #include <atomic>
 #include <condition_variable>

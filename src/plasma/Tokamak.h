@@ -38,7 +38,7 @@
 // Everything is scaled down (millitesla, metres, Alfven speeds of m/s): the equations are the
 // same, only the time runs 10^6 times slower than in a real machine.
 
-#include "grid/MagneticField.h"
+#include "plasma/MagneticField.h"
 #include "math/Math.h"
 
 #include <vector>

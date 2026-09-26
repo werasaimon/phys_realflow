@@ -12,7 +12,7 @@
 
 > **Важно:** SDK (`src/`, CMake-цель `rfcore`) зависит **только от стандартной библиотеки C++17** (и системной библиотеки потоков). В нём нет Qt, Eigen, OpenMP и других библиотек. Его можно встроить в любой движок или запускать без окна. Qt нужен только демо-приложению (`app/`).
 >
-> Правило проверяется при сборке: [CMakeLists.txt:51](../CMakeLists.txt#L51) останавливает конфигурацию, если к `rfcore` подключено что-то кроме `Threads::Threads`.
+> Правило проверяется при сборке: [CMakeLists.txt:71](../CMakeLists.txt#L71) останавливает конфигурацию, если к `rfcore` подключено что-то кроме `Threads::Threads`.
 
 ---
 
@@ -41,27 +41,38 @@ flowchart TB
         math["math/<br/>Vector2/3/4, Quaternion,<br/>Matrix3x3/4x4/NxN, AABB"]
         core["core/<br/>Mesh, Parallel (пул потоков)"]
         spatial["spatial/<br/>BVH, AABBTree"]
-        rigid["rigid/<br/>RigidWorld, GJK/EPA,<br/>Narrowphase, BroadPhase,<br/>CCD, Joints, Decomposition"]
-        particles["particles/<br/>ParticleSystem (PBF),<br/>SoftBody, Cloth"]
-        grid["grid/<br/>NSGridSolver, Field3,<br/>Combustion, MagneticField,<br/>SurfaceLoads"]
-        sim["sim/<br/>Simulation: сцены,<br/>связь решателей, RenderSnapshot"]
+        rigid["rigid/<br/>RigidWorld + ContactSolver, Islands,<br/>ShockPropagation, Grab, Joints,<br/>TimeOfImpact, XpbdSolver;<br/>Shapes, GjkEpa, NarrowPhase,<br/>BroadPhase, ConvexDecomposition"]
+        particles["particles/<br/>ParticleSystem + DensitySolver,<br/>ParticleContacts;<br/>SoftBody, Cloth"]
+        gas["gas/<br/>GasSolver + Advection,<br/>PressureSolver, MovingSolids, Heat;<br/>Field3, Combustion, SurfaceLoads"]
+        plasma["plasma/<br/>MagneticField, Tokamak"]
+        scene["scene/<br/>Simulation + Presets,<br/>Coupling, Snapshot"]
         math --> spatial
         core --> spatial
         spatial --> rigid
         spatial --> particles
-        spatial --> grid
+        spatial --> gas
+        gas --> plasma
         rigid --> particles
-        rigid --> sim
-        particles --> sim
-        grid --> sim
+        rigid --> scene
+        particles --> scene
+        plasma --> scene
     end
     subgraph APP["Демо realflow — Qt 6"]
         app["app/<br/>MainWindow, Viewport (OpenGL 3.0),<br/>FluidSurfaceRenderer, PlotPanel"]
     end
-    sim --> app
+    scene --> app
 ```
 
-Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/sim/Simulation.cpp:1002](../src/sim/Simulation.cpp#L1002)):
+### Как устроен код
+
+Как в Box2D: по имени файла понятно, что в нём.
+
+- **Один класс — один файл с тем же именем**: `RigidWorld.h`, `ParticleSystem.h`, `GasSolver.h`, `MagneticField.h`, `Simulation.h`.
+- **Большой класс разрезан на файлы по одной ответственности**, как `b2_world` / `b2_island` / `b2_contact_solver`: методы `RigidWorld` живут в `RigidWorld.cpp` (тела, шаг), `ContactSolver.cpp` (контакты), `Islands.cpp` (острова и сон), `ShockPropagation.cpp`, `Grab.cpp`; методы `GasSolver` — в `GasSolver.cpp`, `Advection.cpp`, `PressureSolver.cpp`, `MovingSolids.cpp`, `Heat.cpp`; `ParticleSystem` — в `ParticleSystem.cpp`, `DensitySolver.cpp`, `ParticleContacts.cpp`; `Simulation` — в `Simulation.cpp`, `Presets.cpp`, `Coupling.cpp`, `Snapshot.cpp`.
+- **Каждый файл начинается с комментария**, что в нём лежит и где остальное; у каждой формулы в коде — комментарий со ссылкой на статью.
+- Никакой шаблонной магии: обычные классы, `std::vector`, `std::function`.
+
+Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/scene/Simulation.cpp:37](../src/scene/Simulation.cpp#L37)):
 
 | Режим | Что шагает | Связь |
 |---|---|---|
@@ -79,7 +90,7 @@ flowchart TB
 
 Гравитация в сцене **одна**. `Simulation::setGravity` передаёт один и тот же $\mathbf g$ всем трём решателям. Газу огня нужен только модуль $|\mathbf g|$: горячий газ поднимается против $\mathbf g$ с плавучестью $|\mathbf g|\,\Delta T/(T_0 + \Delta T)$ (глава 5). Загрузка сцены возвращает $\mathbf g = (0, -9.81, 0)$ везде.
 
-[src/sim/Simulation.cpp:74](../src/sim/Simulation.cpp#L74)
+[src/scene/Simulation.cpp:17](../src/scene/Simulation.cpp#L17)
 ```cpp
 void Simulation::setGravity(const Vector3& g) {
     rigid.params.gravity = g;
@@ -116,7 +127,20 @@ build-core/rf_tests            # код возврата = число прова
 RF_TEST=MHD build-core/rf_tests   # только тесты, в имени которых есть подстрока "MHD"
 ```
 
-Фильтр `RF_TEST=<подстрока>` сравнивает подстроку с именем теста ([tests/tests.cpp:37](../tests/tests.cpp#L37)). Имена — в `main()` файла [tests/tests.cpp](../tests/tests.cpp#L1946), например `"gjk / epa / sat"`, `"fire: burner ignites a curtain, it burns through"`, `"MHD: resistive decay, Alfven wave, div B = 0"`.
+Фильтр `RF_TEST=<подстрока>` сравнивает подстроку с именем теста ([tests/TestRunner.h:41](../tests/TestRunner.h#L41)). Имена — в `main()` файла [tests/main.cpp](../tests/main.cpp), например `"gjk / epa / sat"`, `"fire: burner ignites a curtain, it burns through"`, `"MHD: resistive decay, Alfven wave, div B = 0"`. `RF_JUNIT=<файл>` пишет отчёт JUnit XML (по тесту на `<testcase>`, время и число провалившихся проверок) — его читают CI и панели.
+
+Опции CMake для проверки качества:
+
+| Опция | Что делает |
+|---|---|
+| `RF_WERROR=ON` | предупреждения — ошибки (`-Wall -Wextra -Werror`, MSVC `/W4 /WX`) |
+| `RF_SANITIZE=ON` | AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang): выход за границы, неопределённое поведение, которых тесты с числами не увидят |
+| `RF_STRICT_FP=ON` | побитово воспроизводимые числа между сборками: без слияния умножения-сложения (`-ffp-contract=off`) и без `-march=native`. Без неё разные решения компилятора об инлайнинге меняют округление, и хаотичные сцены (стопка 100 кубов, огонь по шторе) расходятся в последних знаках |
+| `RF_LTO=ON` | межмодульная оптимизация SDK: после разреза на файлы по одной ответственности компилятор снова инлайнит через границы файлов (100 чайников: 22 → 16 мс/кадр) |
+
+### Непрерывная интеграция
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml): на каждый push и pull request SDK и тесты собираются и прогоняются на GCC и Clang (Linux), MSVC (Windows) и Clang (macOS) с `RF_WERROR` и `RF_STRICT_FP`, плюс сборка с санитайзерами на Linux. Отчёты JUnit прикладываются к прогону. Приложение на Qt в CI не собирается (на раннерах нет Qt).
 
 ### Приложение (Qt 6.7.3, MinGW)
 
@@ -128,7 +152,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Q
 cmake --build build -j 24
 ```
 
-Нужны модули Qt: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Charts. После сборки рядом с `realflow.exe` копируется `opengl32sw.dll` (Mesa llvmpipe), чтобы программа работала и без видеокарты ([CMakeLists.txt:81](../CMakeLists.txt#L81)).
+Нужны модули Qt: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Charts. После сборки рядом с `realflow.exe` копируется `opengl32sw.dll` (Mesa llvmpipe), чтобы программа работала и без видеокарты ([CMakeLists.txt:101](../CMakeLists.txt#L101)).
 
 | Опция CMake | По умолчанию | Смысл |
 |---|---|---|
@@ -158,7 +182,7 @@ realflow.exe --preset 23 --frames 300 --screenshot fire.png --size 1280x720
 
 ## Сцены (пресеты)
 
-Индекс совпадает с порядком `enum class Preset` ([src/sim/Simulation.h:21](../src/sim/Simulation.h#L21)), названия — из `presetName` ([src/sim/Simulation.cpp:12](../src/sim/Simulation.cpp#L12)).
+Индекс совпадает с порядком `enum class Preset` ([src/scene/Simulation.h:22](../src/scene/Simulation.h#L22)), названия — из `presetName` ([src/scene/Presets.cpp:9](../src/scene/Presets.cpp#L9)).
 
 | `--preset` | Название | Режим | Что показывает |
 |---:|---|---|---|
@@ -210,9 +234,61 @@ realflow.exe --preset 23 --frames 300 --screenshot fire.png --size 1280x720
 
 ---
 
+## Производительность
+
+Время физики на кадр (без рендера), среднее по 180 кадрам после 60 кадров разгона, один и тот же ПК; сцены — по номерам пресетов. «До» — до разреза файлов по одной ответственности, «после» — текущий код.
+
+| # | Сцена | Тела | Частицы | Ячейки | мс/кадр до | мс/кадр после |
+|--:|---|--:|--:|--:|--:|--:|
+| 0 | Жидкость: разрушение плотины | 0 | 11960 | 0 | 15.5 | 19.1 |
+| 1 | Жидкость: поток на препятствие | 0 | 11960 | 0 | 19.5 | 19.2 |
+| 2 | Жидкость: плавающие тела | 4 | 15500 | 0 | 28.1 | 29.2 |
+| 3 | Жидкость: струя на объект | 0 | 13548 | 0 | 16.7 | 16.6 |
+| 4 | Аэротруба: сфера | 0 | 0 | 221184 | 136.7 | 141.7 |
+| 5 | Аэротруба: цилиндр | 0 | 0 | 221184 | 171.9 | 178.6 |
+| 6 | Аэротруба: крыло NACA | 0 | 0 | 221184 | 146.2 | 146.2 |
+| 7 | Аэротруба: обтекаемое тело | 0 | 0 | 221184 | 144.5 | 144.3 |
+| 8 | Аэротруба: куб | 0 | 0 | 221184 | 145.8 | 199.6 |
+| 9 | Газ: тепловой шлейф дыма | 0 | 0 | 165888 | 120.0 | 136.3 |
+| 10 | Дым: сферический источник (закрытый объём) | 0 | 0 | 49152 | 32.6 | 33.7 |
+| 11 | Твёрдые тела: падение на меш | 60 | 0 | 0 | 6.8 | 5.8 |
+| 12 | Твёрдые частицы: сыпучая среда | 2016 | 0 | 0 | 61.6 | 74.1 |
+| 13 | Твёрдые тела: пирамида и снаряд | 29 | 0 | 0 | 1.4 | 2.2 |
+| 14 | Твёрдые тела: многогранники (SAT, GJK-EPA) | 45 | 0 | 0 | 4.6 | 4.2 |
+| 15 | Твёрдые тела: башня из 100 кубиков | 100 | 0 | 0 | 1.6 | 1.1 |
+| 16 | Сочленения: 5 типов | 23 | 0 | 0 | 1.1 | 1.2 |
+| 17 | CCD: пули и тонкая стена | 33 | 0 | 0 | 2.0 | 2.0 |
+| 18 | Невыпуклые: 100 чайников (выпуклая декомпозиция) | 100 | 0 | 0 | 24.6 | 33.2 |
+| 19 | Дым + твёрдые тела (двусторонняя связь) | 8 | 0 | 49152 | 49.6 | 52.4 |
+| 20 | Мягкие тела и ткань (единый решатель частиц) | 0 | 9121 | 0 | 67.1 | 71.5 |
+| 21 | Газ + мягкие тела + ткань + твёрдые тела | 3 | 1270 | 49152 | 76.4 | 80.8 |
+| 22 | Гидродинамика: вода + воздух + тела | 4 | 7713 | 26448 | 76.7 | 77.3 |
+| 23 | Огонь: горелка, горящая штора, тела | 3 | 862 | 69960 | 159.5 | 170.3 |
+| 24 | Вода: волна в бассейне, плавающие тела (шейдер) | 5 | 36458 | 0 | 90.9 | 96.7 |
+| 25 | Плазма: магнит отклоняет поток (магнитосфера) | 0 | 0 | 73500 | 183.8 | 189.9 |
+| 26 | Плазма: токамак (кольцо плазмы в тороидальном поле) | 0 | 0 | 75264 | 125.2 | 123.6 |
+
+Пять сцен с твёрдыми телами выглядят медленнее на 15–80 %, и это **не замедление кода**: с `RF_STRICT_FP` (без слияния умножения-сложения) старая и новая версии дают побитово одинаковые траектории и одинаковое время; без него разные решения компилятора об инлайнинге меняют округление, траектории хаотичных сцен расходятся, тела засыпают на десятки кадров позже, и решатель делает больше работы при той же цене за контакт:
+
+| Сцена | Контактов в среднем, до → после (обычная сборка) | мкс на контакт, до → после | Со строгой FP: контактов до / после |
+|---|--:|--:|--:|
+| 13 пирамида и снаряд | 28.3 → 60.5 | 2.8 → 2.3 | 47.2 / 47.2 |
+| 18 100 чайников | 464 → 648 | 2.7 → 2.5 | 460.7 / 460.7 |
+| 12 сыпучая среда | 4440 → 5364 | 2.05 → 1.99 | 5281.7 / 5281.7 |
+
+Отсюда правило для замеров: сравнивать цену единицы работы (`RigidWorld::timings()` на контакт) или собирать обе стороны с `RF_STRICT_FP`; одна цифра «мс/кадр» на хаотичной сцене ничего не доказывает. Опция `RF_LTO` возвращает межфайловый инлайнинг после разреза: 100 чайников 22 → 16 мс/кадр.
+
 ## Скриншоты
 
-> Скриншоты сцен будут добавлены позже: сейчас Windows Defender (Controlled Folder Access) не даёт копировать PNG в папку репозитория из командной строки. Снимок любой сцены можно получить самостоятельно ключом `--screenshot` (см. выше).
+Снимки сцен из приложения (`--screenshot`, 1280×720): токамак, магнитосфера, огонь, вода.
+
+![Токамак: кольцо плазмы в стеклянном торе, силовые линии, намотанные с запасом q](img/scene-tokamak.png)
+
+![Магнитосфера: планета, силовые линии, снесённые в хвост, векторы скорости в экваториальной плоскости](img/scene-magnetosphere.png)
+
+![Огонь: пламя горелки под шторой, тела рядом](img/scene-fire.png)
+
+![Вода: волна в бассейне и плавающие тела](img/scene-water.png)
 
 ---
 

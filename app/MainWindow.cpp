@@ -313,18 +313,18 @@ ParamForm* MainWindow::buildTokamakForm() {
 
 ParamForm* MainWindow::buildGasForm() {
     auto* f = new ParamForm(ctrl_.get());
-    f->addDouble("Скорость потока U", 0, 100, 1, 2, [](const Snap& s) { return s.ns.inflowSpeed; },
+    f->addDouble("Скорость потока U", 0, 100, 1, 2, [](const Snap& s) { return s.gasParams.inflowSpeed; },
                  [](Simulation& s, double v) { s.grid.params.inflowSpeed = float(v); },
                  "Скорость на входной границе (и масштаб для Cp/Cd)", "м/с");
-    f->addInt("Ячеек по X *", 8, 400, [](const Snap& s) { return s.ns.resolutionX; },
+    f->addInt("Ячеек по X *", 8, 400, [](const Snap& s) { return s.gasParams.resolutionX; },
               [](Simulation& s, int v) { s.grid.params.resolutionX = v; s.reset(); }, "Разрешение сетки вдоль X; по Y/Z — пропорционально");
     f->addBool("Источник тепла и дыма (сфера)", [](const Snap& s) { return s.heat.enabled; },
                [](Simulation& s, bool v) { s.grid.source.enabled = v; });
     f->addDouble("Радиус источника", 0.02, 2, 0.02, 2, [](const Snap& s) { return s.heat.radius; },
                  [](Simulation& s, double v) { s.grid.source.radius = float(v); }, {}, "м");
-    f->addDouble("Подъёмная сила тепла", -50, 50, 0.5, 2, [](const Snap& s) { return s.ns.heatBuoyancy; },
+    f->addDouble("Подъёмная сила тепла", -50, 50, 0.5, 2, [](const Snap& s) { return s.gasParams.heatBuoyancy; },
                  [](Simulation& s, double v) { s.grid.params.heatBuoyancy = float(v); }, "Буссинеск: ускорение на единицу T", "м/с²");
-    f->addBool("Трение о поверхность", [](const Snap& s) { return s.ns.wallFriction; },
+    f->addBool("Трение о поверхность", [](const Snap& s) { return s.gasParams.wallFriction; },
                [](Simulation& s, bool v) { s.grid.params.wallFriction = v; },
                "Касательное трение газа о тела (пристеночная функция: Cf пограничного слоя по Шлихтингу)");
     f->addBool("Газ действует на тела", [](const Snap& s) { return s.gasPushesBodies; },
@@ -344,39 +344,39 @@ ParamForm* MainWindow::buildGasForm() {
                  "Дым: относительные единицы (~1); огонь: кельвины над температурой воздуха");
     f->addDouble("Плотность дыма источника", 0, 5, 0.1, 2, [](const Snap& s) { return s.heat.smoke; },
                  [](Simulation& s, double v) { s.grid.source.smoke = float(v); });
-    f->addDouble("Вес дыма", -50, 50, 0.1, 2, [](const Snap& s) { return s.ns.smokeBuoyancy; },
+    f->addDouble("Вес дыма", -50, 50, 0.1, 2, [](const Snap& s) { return s.gasParams.smokeBuoyancy; },
                  [](Simulation& s, double v) { s.grid.params.smokeBuoyancy = float(v); }, {}, "м/с²");
-    f->addDouble("Остывание газа", 0, 10, 0.05, 3, [](const Snap& s) { return s.ns.temperatureDissipation; },
+    f->addDouble("Остывание газа", 0, 10, 0.05, 3, [](const Snap& s) { return s.gasParams.temperatureDissipation; },
                  [](Simulation& s, double v) { s.grid.params.temperatureDissipation = float(v); }, {}, "1/с");
-    f->addDouble("Рассеяние дыма", 0, 5, 0.01, 3, [](const Snap& s) { return s.ns.smokeDissipation; },
+    f->addDouble("Рассеяние дыма", 0, 5, 0.01, 3, [](const Snap& s) { return s.gasParams.smokeDissipation; },
                  [](Simulation& s, double v) { s.grid.params.smokeDissipation = float(v); }, {}, "1/с");
-    f->addDouble("Сохранение вихрей", 0, 20, 0.1, 2, [](const Snap& s) { return s.ns.vorticityConfinement; },
+    f->addDouble("Сохранение вихрей", 0, 20, 0.1, 2, [](const Snap& s) { return s.gasParams.vorticityConfinement; },
                  [](Simulation& s, double v) { s.grid.params.vorticityConfinement = float(v); },
                  "Vorticity confinement: компенсирует численную диссипацию вихрей");
-    f->addDouble("Плотность среды ρ", 0.01, 5000, 0.1, 3, [](const Snap& s) { return s.ns.fluidDensity; },
+    f->addDouble("Плотность среды ρ", 0.01, 5000, 0.1, 3, [](const Snap& s) { return s.gasParams.fluidDensity; },
                  [](Simulation& s, double v) { s.grid.params.fluidDensity = float(v); }, "Воздух 1.225, вода 998", "кг/м³");
-    f->addDouble("Кинем. вязкость ν", 0, 1, 1e-5, 6, [](const Snap& s) { return s.ns.kinematicViscosity; },
+    f->addDouble("Кинем. вязкость ν", 0, 1, 1e-5, 6, [](const Snap& s) { return s.gasParams.kinematicViscosity; },
                  [](Simulation& s, double v) { s.grid.params.kinematicViscosity = float(v); }, "Воздух 1.5e-5 м²/с", "м²/с");
     for (int a = 0; a < 3; ++a) {
         const char* names[3] = {"Размер области X *", "Размер области Y *", "Размер области Z *"};
-        f->addDouble(names[a], 0.2, 50, 0.1, 2, [a](const Snap& s) { return s.ns.domainSize[a]; },
+        f->addDouble(names[a], 0.2, 50, 0.1, 2, [a](const Snap& s) { return s.gasParams.domainSize[a]; },
                      [a](Simulation& s, double v) { s.grid.params.domainSize[a] = float(v); s.reset(); }, {}, "м");
     }
     const char* faces[6] = {"Граница −X *", "Граница +X *", "Граница −Y *", "Граница +Y *", "Граница −Z *", "Граница +Z *"};
     for (int i = 0; i < 6; ++i)
-        f->addCombo(faces[i], kBC, [i](const Snap& s) { return int(s.ns.bc[i]); },
+        f->addCombo(faces[i], kBC, [i](const Snap& s) { return int(s.gasParams.bc[i]); },
                     [i](Simulation& s, int v) { s.grid.params.bc[i] = BoundaryType(v); s.reset(); });
-    f->addDouble("Число Куранта (CFL)", 0.2, 8, 0.1, 2, [](const Snap& s) { return s.ns.cfl; },
+    f->addDouble("Число Куранта (CFL)", 0.2, 8, 0.1, 2, [](const Snap& s) { return s.gasParams.cfl; },
                  [](Simulation& s, double v) { s.grid.params.cfl = float(v); });
-    f->addInt("Макс. итераций давления", 10, 5000, [](const Snap& s) { return s.ns.maxPressureIterations; },
+    f->addInt("Макс. итераций давления", 10, 5000, [](const Snap& s) { return s.gasParams.maxPressureIterations; },
               [](Simulation& s, int v) { s.grid.params.maxPressureIterations = v; });
-    f->addDouble("Точность давления", 1e-7, 1e-1, 1e-5, 7, [](const Snap& s) { return s.ns.pressureTolerance; },
+    f->addDouble("Точность давления", 1e-7, 1e-1, 1e-5, 7, [](const Snap& s) { return s.gasParams.pressureTolerance; },
                  [](Simulation& s, double v) { s.grid.params.pressureTolerance = float(v); }, "Относительная невязка PCG");
-    f->addBool("Адвекция MacCormack (2-й порядок)", [](const Snap& s) { return s.ns.maccormack; },
+    f->addBool("Адвекция MacCormack (2-й порядок)", [](const Snap& s) { return s.gasParams.maccormack; },
                [](Simulation& s, bool v) { s.grid.params.maccormack = v; });
-    f->addBool("Дымовые струйки на входе", [](const Snap& s) { return s.ns.smokeRake; },
+    f->addBool("Дымовые струйки на входе", [](const Snap& s) { return s.gasParams.smokeRake; },
                [](Simulation& s, bool v) { s.grid.params.smokeRake = v; });
-    f->addBool("Cd/Cl по площади в плане", [](const Snap& s) { return s.ns.usePlanformArea; },
+    f->addBool("Cd/Cl по площади в плане", [](const Snap& s) { return s.gasParams.usePlanformArea; },
                [](Simulation& s, bool v) { s.grid.params.usePlanformArea = v; }, "Иначе — по площади миделя");
     return f;
 }

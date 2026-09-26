@@ -5,7 +5,7 @@
 // 15-axis separating-axis search, a floor of triangles that must feel like one flat plane, a Jenga
 // tower that must stand still. Included by tests.cpp (uses its CHECK and run).
 
-#include "rigid/Narrowphase.h"
+#include "rigid/NarrowPhase.h"
 #include "rigid/RigidWorld.h"
 #include "spatial/BVH.h"
 
@@ -319,14 +319,14 @@ inline void edgeDropOnRidge() {
 
 } // namespace hard_contacts
 
-static void testHardContacts() {
+void testHardContacts() {
     hard_contacts::edgeOnEdge();
     hard_contacts::rotatedFaceOnFace();
     hard_contacts::tinyOnHuge();
     hard_contacts::deepPenetration();
 }
 
-static void testHardContactDynamics() {
+void testHardContactDynamics() {
     hard_contacts::slidingOverSeams();
     hard_contacts::jengaTower();
     hard_contacts::edgeDropOnRidge();

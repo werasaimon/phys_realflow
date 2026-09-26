@@ -1,4 +1,4 @@
-#include "grid/Combustion.h"
+#include "gas/Combustion.h"
 
 #include "core/Parallel.h"
 

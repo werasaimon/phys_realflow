@@ -2,7 +2,7 @@
 
 [← Частицы](03-particles.md) · [Оглавление](README.md) · [Огонь →](05-fire.md)
 
-**Что это и зачем.** `NSGridSolver` ([src/grid/NSGridSolver.h](../src/grid/NSGridSolver.h)) — решатель несжимаемого газа на разнесённой (MAC) сетке. Он работает как «виртуальная аэродинамическая труба» (сопротивление и подъёмная сила тел, давление по поверхности), как дым и горячий газ в закрытых и открытых объёмах, и как среда, в которой падают, плавают и горят тела и ткани. На нём же построены огонь (гл. 5) и МГД (гл. 6).
+**Что это и зачем.** `GasSolver` ([src/gas/GasSolver.h](../src/gas/GasSolver.h)) — решатель несжимаемого газа на разнесённой (MAC) сетке. Он работает как «виртуальная аэродинамическая труба» (сопротивление и подъёмная сила тел, давление по поверхности), как дым и горячий газ в закрытых и открытых объёмах, и как среда, в которой падают, плавают и горят тела и ткани. На нём же построены огонь (гл. 5) и МГД (гл. 6).
 
 ---
 
@@ -25,7 +25,7 @@ $$
 
 Скаляры (дым $S$, температура $T$, топливо $Y$, продукты сгорания $P$) переносятся потоком: $\partial\phi/\partial t + \mathbf u\cdot\nabla\phi = \text{источники}$.
 
-**Расщепление по физическим процессам** — шаг `NSGridSolver::step` ([NSGridSolver.cpp:1063](../src/grid/NSGridSolver.cpp#L1063)):
+**Расщепление по физическим процессам** — шаг `GasSolver::step` ([GasSolver.cpp:390](../src/gas/GasSolver.cpp#L390)):
 
 ```mermaid
 flowchart TB
@@ -54,9 +54,9 @@ flowchart TB
 - **Давление и скаляры** — в центрах ячеек.
 - **Компоненты скорости** — на гранях, по нормали к грани: $u$ на $x$-гранях, $v$ на $y$-гранях, $w$ на $z$-гранях.
 
-Каждая компонента — отдельный `Field3` ([Field3.h](../src/grid/Field3.h)) со своим смещением `offset` (в ячейках) и размерами:
+Каждая компонента — отдельный `Field3` ([Field3.h](../src/gas/Field3.h)) со своим смещением `offset` (в ячейках) и размерами:
 
-[src/grid/NSGridSolver.cpp:36](../src/grid/NSGridSolver.cpp#L36)
+[src/gas/GasSolver.cpp:32](../src/gas/GasSolver.cpp#L32)
 ```cpp
 u_.init(nx_ + 1, ny_, nz_, {0, 0.5f, 0.5f}, u0);
 v_.init(nx_, ny_ + 1, nz_, {0.5f, 0, 0.5f});
@@ -91,9 +91,9 @@ $$
 \phi^{n+1}(\mathbf x) = \phi^n(\mathbf x_{dep}).
 $$
 
-[src/grid/NSGridSolver.cpp:454](../src/grid/NSGridSolver.cpp#L454)
+[src/gas/Advection.cpp:15](../src/gas/Advection.cpp#L15)
 ```cpp
-Vector3 NSGridSolver::backtrace(const Vector3& gp, float dt) const {
+Vector3 GasSolver::backtrace(const Vector3& gp, float dt) const {
     Vector3 v1 = sampleVelGrid(gp);
     Vector3 mid = gp - v1 * (0.5f * dt);
     Vector3 v2 = sampleVelGrid(mid);
@@ -117,9 +117,9 @@ $$
 
 ### Общие траектории для всех скаляров
 
-Дым, температура, топливо и продукты переносятся **одним и тем же** потоком. Значит, точки отправления (и прибытия — для обратного шага MacCormack) достаточно найти **один раз** для всех скаляров ([NSGridSolver.cpp:507](../src/grid/NSGridSolver.cpp#L507)):
+Дым, температура, топливо и продукты переносятся **одним и тем же** потоком. Значит, точки отправления (и прибытия — для обратного шага MacCormack) достаточно найти **один раз** для всех скаляров ([Advection.cpp:68](../src/gas/Advection.cpp#L68)):
 
-[src/grid/NSGridSolver.cpp:523](../src/grid/NSGridSolver.cpp#L523)
+[src/gas/Advection.cpp:84](../src/gas/Advection.cpp#L84)
 ```cpp
 parallelFor(nz_, [&](int k) {
     for (int j = 0; j < ny_; ++j)
@@ -160,7 +160,7 @@ for (Field3* field : fields) {
 
 ## 4.4 Силы
 
-`addForces` ([NSGridSolver.cpp:628](../src/grid/NSGridSolver.cpp#L628)).
+`addForces` ([GasSolver.cpp:265](../src/gas/GasSolver.cpp#L265)).
 
 **Плавучесть.** Сетка не хранит гидростатического давления, поэтому подъёмная сила горячего газа добавляется явно на $y$-грани:
 
@@ -180,9 +180,9 @@ $$
 
 Сила считается в центрах ячеек и усредняется на грани.
 
-**Вязкость** — неявная диффузия $(1 - \nu\Delta t\nabla^2)\mathbf u^{new} = \mathbf u$, 20 итераций Якоби ([NSGridSolver.cpp:682](../src/grid/NSGridSolver.cpp#L682)). Пропускается, если $\nu\Delta t/\Delta x^2 < 10^{-3}$: для воздуха физическая вязкость на такой сетке много меньше численной вязкости адвекции.
+**Вязкость** — неявная диффузия $(1 - \nu\Delta t\nabla^2)\mathbf u^{new} = \mathbf u$, 20 итераций Якоби ([GasSolver.cpp:319](../src/gas/GasSolver.cpp#L319)). Пропускается, если $\nu\Delta t/\Delta x^2 < 10^{-3}$: для воздуха физическая вязкость на такой сетке много меньше численной вязкости адвекции.
 
-**Внешние импульсы** (`addImpulse`) — например, реакция сопротивления ткани. Импульс раскладывается по окрестным граням с трилинейными весами, сумма весов 1: газ получает ровно этот импульс ([NSGridSolver.cpp:299](../src/grid/NSGridSolver.cpp#L299)).
+**Внешние импульсы** (`addImpulse`) — например, реакция сопротивления ткани. Импульс раскладывается по окрестным граням с трилинейными весами, сумма весов 1: газ получает ровно этот импульс ([MovingSolids.cpp:123](../src/gas/MovingSolids.cpp#L123)).
 
 ---
 
@@ -203,13 +203,13 @@ d_c\,q_c - \sum_{n\in\text{газ}} q_n = b_c, \qquad
 b_c = -\big(u_{i+1} - u_i + v_{j+1} - v_j + w_{k+1} - w_k\big) + e_c\,\Delta x,
 $$
 
-$d_c$ — число соседей-газов плюс сторон с условием Дирихле (сток, $p = 0$). Твёрдые соседи и стенки — условие Неймана ($\partial p/\partial n = 0$): они просто не входят в сумму и в $d_c$ ([NSGridSolver.cpp:134](../src/grid/NSGridSolver.cpp#L134)). Затем $u_i \mathrel{-}= q_i - q_{i-1}$ на гранях между двумя газовыми ячейками.
+$d_c$ — число соседей-газов плюс сторон с условием Дирихле (сток, $p = 0$). Твёрдые соседи и стенки — условие Неймана ($\partial p/\partial n = 0$): они просто не входят в сумму и в $d_c$ ([GasSolver.cpp:139](../src/gas/GasSolver.cpp#L139)). Затем $u_i \mathrel{-}= q_i - q_{i-1}$ на гранях между двумя газовыми ячейками.
 
 ### Сопряжённые градиенты с предобуславливателем Якоби
 
 Матрица $\mathbf A$ симметрична и положительно (полу)определена — метод сопряжённых градиентов (PCG) в `double` с диагональным предобуславливателем $\mathbf z = \mathbf D^{-1}\mathbf r$:
 
-[src/grid/NSGridSolver.cpp:842](../src/grid/NSGridSolver.cpp#L842)
+[src/gas/PressureSolver.cpp:137](../src/gas/PressureSolver.cpp#L137)
 ```cpp
 for (; it < params.maxPressureIterations && rnorm > tol; ++it) {
     applyA(s_, As_);
@@ -253,13 +253,13 @@ $$
 \int_\Omega \nabla\cdot\mathbf u\,dV = \oint_{\partial\Omega}\mathbf u\cdot\mathbf n\,dS = 0 .
 $$
 
-Движущееся тело, сжимающее закрытый объём, или расширяющийся горящий газ в закрытом ящике это условие нарушают, и PCG не сходится. Поэтому области газа находятся заливкой (6-связность), для каждой отмечается, касается ли она стока, и в каждой **закрытой** области из правой части вычитается её среднее ([NSGridSolver.cpp:751](../src/grid/NSGridSolver.cpp#L751)). Диагностика `maxDivergence()` учитывает это среднее: она измеряет только ту часть дивергенции, за которую отвечает проекция.
+Движущееся тело, сжимающее закрытый объём, или расширяющийся горящий газ в закрытом ящике это условие нарушают, и PCG не сходится. Поэтому области газа находятся заливкой (6-связность), для каждой отмечается, касается ли она стока, и в каждой **закрытой** области из правой части вычитается её среднее ([PressureSolver.cpp:46](../src/gas/PressureSolver.cpp#L46)). Диагностика `maxDivergence()` учитывает это среднее: она измеряет только ту часть дивергенции, за которую отвечает проекция.
 
 ---
 
 ## 4.6 Граничные условия
 
-`params.bc[6]` — для сторон $-x, +x, -y, +y, -z, +z$ ([NSGridSolver.cpp:557](../src/grid/NSGridSolver.cpp#L557)):
+`params.bc[6]` — для сторон $-x, +x, -y, +y, -z, +z$ ([GasSolver.cpp:194](../src/gas/GasSolver.cpp#L194)):
 
 | Тип | Нормальная скорость на границе | Давление | Скаляры, пришедшие снаружи |
 |---|---|---|---|
@@ -277,7 +277,7 @@ Bridson, *Fluid Simulation for Computer Graphics*, гл. 5; Crane, Llamas, Tariq
 
 ### Тело → газ
 
-Каждый шаг тела **вокселизуются** ([NSGridSolver.cpp:189](../src/grid/NSGridSolver.cpp#L189)): ячейка твёрдая, если её центр внутри тела (`MovingSolid::inside`). Грани вокруг твёрдой ячейки получают скорость точки тела
+Каждый шаг тела **вокселизуются** ([MovingSolids.cpp:13](../src/gas/MovingSolids.cpp#L13)): ячейка твёрдая, если её центр внутри тела (`MovingSolid::inside`). Грани вокруг твёрдой ячейки получают скорость точки тела
 
 $$
 \mathbf u_{face} = \mathbf v + \boldsymbol\omega\times(\mathbf x_{face} - \mathbf x_{body})
@@ -291,7 +291,7 @@ $$
 
 ### Газ → тело
 
-Сила и момент давления — сумма по граням тела, выходящим в газ ([NSGridSolver.cpp:336](../src/grid/NSGridSolver.cpp#L336)):
+Сила и момент давления — сумма по граням тела, выходящим в газ ([MovingSolids.cpp:160](../src/gas/MovingSolids.cpp#L160)):
 
 $$
 \mathbf F = -\sum_{faces} p\,\mathbf n\,\Delta x^2, \qquad
@@ -300,7 +300,7 @@ $$
 
 ### Слабая (разнесённая) связь по кадрам
 
-`Simulation::stepGasWithBodies` ([Simulation.cpp:759](../src/sim/Simulation.cpp#L759)), один обмен за кадр:
+`Simulation::stepGasWithBodies` ([Coupling.cpp:190](../src/scene/Coupling.cpp#L190)), один обмен за кадр:
 
 1. **газ → тела**: импульсы давления, накопленные за шаги газа прошлого кадра, плюс **архимедова сила газа** $\rho_{gas}V\,|\mathbf g|\,\Delta t$ — сетка Буссинеска не несёт гидростатического давления, поэтому выталкивающая сила добавляется явно;
 2. подшаги твёрдых тел (с частицами — вперемешку);
@@ -329,7 +329,7 @@ $$
 \Delta\mathbf u_t = -\mathbf u_t\,\frac{\kappa}{1 + \kappa}, \qquad \kappa = \tfrac12 C_f\,|\mathbf u_t|\,\frac{\Delta t}{\Delta x}.
 $$
 
-[src/grid/NSGridSolver.cpp:415](../src/grid/NSGridSolver.cpp#L415)
+[src/gas/MovingSolids.cpp:239](../src/gas/MovingSolids.cpp#L239)
 ```cpp
 const float mag = length(rel);
 if (mag < 1e-6f) continue;
@@ -340,13 +340,13 @@ const float kk = 0.5f * cf * mag * dt / dx_;
 const Vector3 delta = rel * (-kk / (1.0f + kk));
 ```
 
-$C_f$ считает одна функция `skinFrictionCoefficient` ([NSGridSolver.h:90](../src/grid/NSGridSolver.h#L90)) — её же использует `SurfaceLoads`, поэтому решатель и нагрузки по треугольникам сообщают одно и то же трение.
+$C_f$ считает одна функция `skinFrictionCoefficient` ([GasSolver.h:90](../src/gas/GasSolver.h#L90)) — её же использует `SurfaceLoads`, поэтому решатель и нагрузки по треугольникам сообщают одно и то же трение.
 
 ---
 
 ## 4.9 Нагрузки на треугольники поверхности
 
-`computeSurfaceLoads` ([SurfaceLoads.cpp:9](../src/grid/SurfaceLoads.cpp#L9)) — распределение нагрузки по **настоящему** мешу тела, а не по ступенчатым вокселям:
+`computeSurfaceLoads` ([SurfaceLoads.cpp:9](../src/gas/SurfaceLoads.cpp#L9)) — распределение нагрузки по **настоящему** мешу тела, а не по ступенчатым вокселям:
 
 1. Для каждого треугольника газ читается на расстоянии $1\Delta x$ и $2\Delta x$ по нормали, интерполяцией **только по газовым ячейкам** (`fluidPressureAt`) — вокселизованное тело может выступать за истинную поверхность на полячейки.
 2. Давление экстраполируется к стенке линейно: $p_{wall} = 2p(1\Delta x) - p(2\Delta x)$. Чтение на одной ячейке пропустило бы рост давления к точке торможения ($C_p$ 0.7 вместо 1).
@@ -359,13 +359,13 @@ $$
 
 4. Суммы дают силы давления и трения, момент относительно опорной точки и коэффициенты $C_d, C_l, C_s, C_m$ с разделением сопротивления на **форму** и **трение**. `saveSurfaceLoadsCsv` пишет строку на треугольник: центр, нормаль, площадь, $C_p$, $C_f$, сила.
 
-Интегральные коэффициенты решателя ([NSGridSolver.cpp:911](../src/grid/NSGridSolver.cpp#L911)): $C_d = F_x/(q_\infty A_{ref})$, где $A_{ref}$ — площадь проекции вокселизованного тела (лобовая или в плане — `usePlanformArea`). Средние значения `dragCoefficientAvg()` — экспоненциальное скользящее среднее за время прохода потока через домен.
+Интегральные коэффициенты решателя ([MovingSolids.cpp:273](../src/gas/MovingSolids.cpp#L273)): $C_d = F_x/(q_\infty A_{ref})$, где $A_{ref}$ — площадь проекции вокселизованного тела (лобовая или в плане — `usePlanformArea`). Средние значения `dragCoefficientAvg()` — экспоненциальное скользящее среднее за время прохода потока через домен.
 
 ---
 
 ## 4.10 Газ ↔ ткань и газ ↔ жидкость
 
-`Simulation::applyGasDragOnCloth` ([Simulation.cpp:658](../src/sim/Simulation.cpp#L658)). Каждая частица ткани — площадка $s^2$ с нормалью из соседей по сетке. Относительный ветер $\mathbf w = \mathbf u_{gas} - \mathbf v$ раскладывается на нормальную и касательную части:
+`Simulation::applyGasDragOnCloth` ([Coupling.cpp:67](../src/scene/Coupling.cpp#L67)). Каждая частица ткани — площадка $s^2$ с нормалью из соседей по сетке. Относительный ветер $\mathbf w = \mathbf u_{gas} - \mathbf v$ раскладывается на нормальную и касательную части:
 
 $$
 \Delta\mathbf v = \mathbf n\,w_n\frac{\kappa_n}{1 + \kappa_n} + \mathbf w_t\frac{\kappa_t}{1 + \kappa_t}, \qquad
@@ -375,13 +375,13 @@ $$
 
 $C_d$ = 1.2 (плоская пластина), $C_f$ = 0.02. Неявная форма не даёт частице обогнать ветер за шаг. Реакция $-m\Delta\mathbf v$ уходит в газ в той же точке (`addImpulse`) — импульс сохраняется.
 
-`applyGasDragOnLiquid` ([Simulation.cpp:688](../src/sim/Simulation.cpp#L688)): частицы жидкости, касающиеся газа (поверхность, брызги, капли), — сферы радиуса $r$ с $C_d = 0.47$. Ветер срывает брызги и тащит поверхность, летящие капли тормозятся.
+`applyGasDragOnLiquid` ([Coupling.cpp:97](../src/scene/Coupling.cpp#L97)): частицы жидкости, касающиеся газа (поверхность, брызги, капли), — сферы радиуса $r$ с $C_d = 0.47$. Ветер срывает брызги и тащит поверхность, летящие капли тормозятся.
 
 ---
 
 ## 4.11 Параметры
 
-### `NSParams` ([NSGridSolver.h:35](../src/grid/NSGridSolver.h#L35))
+### `GasParams` ([GasSolver.h:35](../src/gas/GasSolver.h#L35))
 
 | Параметр | Смысл | Ед. | По умолчанию |
 |---|---|---|---|
@@ -401,7 +401,7 @@ $C_d$ = 1.2 (плоская пластина), $C_f$ = 0.02. Неявная фо
 | `wallFriction` | пристенное трение | — | true |
 | `bc[6]` | стороны −x, +x, −y, +y, −z, +z | — | Inflow, Outflow, Wall ×4 |
 
-### `HeatSource` ([NSGridSolver.h:57](../src/grid/NSGridSolver.h#L57))
+### `HeatSource` ([GasSolver.h:57](../src/gas/GasSolver.h#L57))
 
 Сфера `center`, `radius`, в которой поддерживаются `temperature`, `smoke`, `fuel` (горелка), и струя `velocity`.
 

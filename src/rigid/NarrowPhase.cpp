@@ -1,4 +1,4 @@
-#include "rigid/Narrowphase.h"
+#include "rigid/NarrowPhase.h"
 
 namespace rf {
 

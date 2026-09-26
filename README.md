@@ -32,7 +32,13 @@ build/realflow --preset 23            # огонь; --software-gl — ренде
 ## Структура
 
 ```
-src/      SDK (rfcore): math, spatial, rigid, particles, grid, sim — только стандартная библиотека C++
+src/      SDK (rfcore) — только стандартная библиотека C++:
+            math/ core/ spatial/   векторы, кватернионы, меши, пул потоков, BVH
+            rigid/                 RigidWorld + ContactSolver, Islands, ShockPropagation, Grab, Joints, TimeOfImpact
+            particles/             ParticleSystem + DensitySolver, ParticleContacts; SoftBody, Cloth
+            gas/                   GasSolver + Advection, PressureSolver, MovingSolids, Heat; Combustion
+            plasma/                MagneticField, Tokamak
+            scene/                 Simulation + Presets, Coupling, Snapshot
 app/      демо realflow (Qt 6, OpenGL 3.0)
 tests/    rf_tests — численные эксперименты с аналитическим ответом
 docs/     документация с формулами, кодом и графиками

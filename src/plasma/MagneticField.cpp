@@ -1,4 +1,4 @@
-#include "grid/MagneticField.h"
+#include "plasma/MagneticField.h"
 
 #include "core/Parallel.h"
 

@@ -28,7 +28,7 @@ for (int s = 0; s < ps.params.substeps; ++s) { world.step(dt); ps.step(dt); }
 
 ## 3.1 Шаг решателя
 
-`ParticleSystem::step` ([ParticleSystem.cpp:615](../src/particles/ParticleSystem.cpp#L615)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
+`ParticleSystem::step` ([ParticleSystem.cpp:305](../src/particles/ParticleSystem.cpp#L305)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
 
 ```mermaid
 flowchart TB
@@ -56,7 +56,7 @@ $$
 
 Перед шагом частиц $p$ выполняются все шаги тел, которые заканчиваются внутри него. Когда шаг частиц начинается, тела уже стоят там, где будут к его концу. При $n_r = 10$, $n_p = 3$ получаются группы 3, 3, 4.
 
-[src/sim/Simulation.cpp:745](../src/sim/Simulation.cpp#L745)
+[src/scene/Coupling.cpp:154](../src/scene/Coupling.cpp#L154)
 ```cpp
     const int nr = std::max(1, rigid.params.substeps), np = std::max(1, particles.params.substeps);
     const float hr = frameDt / float(nr), hp = frameDt / float(np);
@@ -82,7 +82,7 @@ $$
 
 ### Ядра
 
-Радиус частицы $r$, расстояние между частицами в покое $2r$, радиус ядра $h = 4r$ ([ParticleSystem.cpp:11](../src/particles/ParticleSystem.cpp#L11)). Для плотности — ядро **poly6**, для градиентов — **spiky** (у poly6 градиент исчезает в нуле, и частицы слипались бы):
+Радиус частицы $r$, расстояние между частицами в покое $2r$, радиус ядра $h = 4r$ ([ParticleSystem.cpp:17](../src/particles/ParticleSystem.cpp#L17)). Для плотности — ядро **poly6**, для градиентов — **spiky** (у poly6 градиент исчезает в нуле, и частицы слипались бы):
 
 $$
 W_{poly6}(\mathbf r) = \frac{315}{64\pi h^9}\,(h^2 - |\mathbf r|^2)^3, \qquad
@@ -105,7 +105,7 @@ inline Vector3 gradW(const Vector3& r) const {
 }
 ```
 
-Масса частицы **калибруется**, а не берётся как $\rho_0(2r)^3$: сумма ядра по полной решётке $7^3$ соседей с шагом $2r$ должна дать ровно $\rho_0$ ([ParticleSystem.cpp:16](../src/particles/ParticleSystem.cpp#L16)). Иначе жидкость в покое была бы сжата или растянута на ошибку дискретизации ядра.
+Масса частицы **калибруется**, а не берётся как $\rho_0(2r)^3$: сумма ядра по полной решётке $7^3$ соседей с шагом $2r$ должна дать ровно $\rho_0$ ([ParticleSystem.cpp:22](../src/particles/ParticleSystem.cpp#L22)). Иначе жидкость в покое была бы сжата или растянута на ошибку дискретизации ядра.
 
 ### Ограничение плотности
 
@@ -133,7 +133,7 @@ $\varepsilon$ = `relaxation`$/h^2$ — регуляризация (constraint fo
 
 **Обобщённые массы** (Macklin et al. 2014, *Unified Particle Physics*). $w_j$ — обратная масса соседа, $w_0 = 1/m$ — обратная масса частицы жидкости. Поправка положения сдвигает соседа пропорционально $w_j/w_0$ (`computeDeltaP`), поэтому в знаменателе шага Ньютона он весит столько же. Лёгкая ткань ($w_j/w_0 \approx 100$) не отлетает в 100 раз дальше, чем нужно ограничению. Закреплённая частица ($w_j = 0$) не двигается и в сумму не входит. В коде это множитель `invMass_[nb[k]] * mass_` в строке `sum2 += …` ниже.
 
-[src/particles/ParticleSystem.cpp:412](../src/particles/ParticleSystem.cpp#L412)
+[src/particles/DensitySolver.cpp:33](../src/particles/DensitySolver.cpp#L33)
 ```cpp
 const Vector3 pi = p_[i];
 float rho = mass_ * W(0);
@@ -173,11 +173,11 @@ $$
 
 $s_{corr}$ (`tensileK` = $k$ = 1e-4) — искусственное давление: слабое отталкивание на малых расстояниях против кластеризации частиц при отрицательном давлении; заодно даёт эффект поверхностного натяжения.
 
-Твёрдая частица получает долю поправок давления соседей-жидкостей, масштабированную её обратной массой ([ParticleSystem.cpp:453](../src/particles/ParticleSystem.cpp#L453)): так вода двусторонне давит на мягкие тела и ткань.
+Твёрдая частица получает долю поправок давления соседей-жидкостей, масштабированную её обратной массой ([DensitySolver.cpp:180](../src/particles/DensitySolver.cpp#L180)): так вода двусторонне давит на мягкие тела и ткань.
 
 ### Вязкость XSPH и vorticity confinement
 
-После получения скоростей ([ParticleSystem.cpp:576](../src/particles/ParticleSystem.cpp#L576)):
+После получения скоростей ([DensitySolver.cpp:162](../src/particles/DensitySolver.cpp#L162)):
 
 $$
 \mathbf v_i \leftarrow \mathbf v_i + c\sum_j V_j\,(\mathbf v_j - \mathbf v_i)\,W_{ij}
@@ -214,7 +214,7 @@ $$
 
 Первообразная $(h^2 - z^2)^4$ — многочлен $F(z) = z\big(h^8 - \tfrac43 h^6 z^2 + \tfrac65 h^4 z^4 - \tfrac47 h^2 z^6 + \tfrac19 z^8\big)$, поэтому ничего не табулируется:
 
-[src/particles/ParticleSystem.cpp:378](../src/particles/ParticleSystem.cpp#L378)
+[src/particles/DensitySolver.cpp:59](../src/particles/DensitySolver.cpp#L59)
 ```cpp
 float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
     const float h = h_, h2 = h2_;
@@ -249,13 +249,13 @@ float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
 
 ## 3.4 Столкновения частиц
 
-`collide(i, p, start, record, dt)` ([ParticleSystem.cpp:525](../src/particles/ParticleSystem.cpp#L525); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
+`collide(i, p, start, record, dt)` ([ParticleContacts.cpp:104](../src/particles/ParticleContacts.cpp#L104); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
 
 1. **Стенки домена** — отсечение положения в бокс, уменьшенный на $r$.
 2. **Статический меш** — ближайшая точка через `MeshBVH` (гл. 1.7); если знаковое расстояние $< r$, частица выталкивается вдоль псевдонормали, касательное смещение гасится на долю `wallFriction`.
 3. **Твёрдые тела** — через `RigidBody::signedDistance`. Для закреплённых тел частица просто выталкивается. Для подвижных тел контакт **только записывается** (нормаль, глубина, точка) и решается вместе с телом в `solveBodyContacts` (раздел 3.5).
 
-**Контакты между частицами разных фаз** (ткань–мягкое тело, мягкое–мягкое, несоседние частицы одной ткани) держат расстояние $2r$. Пары собираются один раз за подшаг, нормаль фиксируется по положениям **в начале** шага: пара не может поменяться сторонами внутри шага, даже если ткань отпружинит или тяжёлое тело продавит частицу ([ParticleSystem.cpp:256](../src/particles/ParticleSystem.cpp#L256)). Решаются Гауссом–Зейделем с делением коррекции по обратным массам ([ParticleSystem.cpp:286](../src/particles/ParticleSystem.cpp#L286)).
+**Контакты между частицами разных фаз** (ткань–мягкое тело, мягкое–мягкое, несоседние частицы одной ткани) держат расстояние $2r$. Пары собираются один раз за подшаг, нормаль фиксируется по положениям **в начале** шага: пара не может поменяться сторонами внутри шага, даже если ткань отпружинит или тяжёлое тело продавит частицу ([ParticleContacts.cpp:9](../src/particles/ParticleContacts.cpp#L9)). Решаются Гауссом–Зейделем с делением коррекции по обратным массам ([ParticleContacts.cpp:39](../src/particles/ParticleContacts.cpp#L39)).
 
 > **Ограничение всех позиционных решателей (FleX тоже):** при большом отношении масс соприкасающихся частиц (тяжёлое тело на очень лёгкой ткани, больше ~1:10) лёгкая сторона забирает почти всю коррекцию, опора сходится медленно. Используйте реалистичные материалы (холст 1–2 кг/м² под поролоном) или больше `solidIterations`.
 
@@ -287,7 +287,7 @@ $$
 
 И главное — контакты одного тела решаются **по очереди** (Гаусс–Зейдель). Каждый следующий контакт видит тело, уже сдвинутое предыдущими: текущая глубина равна исходной минус то, насколько тело с тех пор ушло от частицы.
 
-[src/particles/ParticleSystem.cpp:492](../src/particles/ParticleSystem.cpp#L492)
+[src/particles/ParticleContacts.cpp:71](../src/particles/ParticleContacts.cpp#L71)
 ```cpp
 for (size_t b = 0; b < bodies.size(); ++b) {
     if (contacts[b].empty()) continue;
@@ -326,7 +326,7 @@ for (size_t b = 0; b < bodies.size(); ++b) {
 
 Müller, Heidelberger, Teschner, Gross 2005, *Meshless Deformations Based on Shape Matching*; кластеры — как в FleX.
 
-Мягкое тело заполняется частицами на решётке с шагом $2r$ внутри замкнутого меша (`addSoftBody`, [ParticleSystem.cpp:89](../src/particles/ParticleSystem.cpp#L89)). Частицы группируются в **перекрывающиеся кластеры**: центры на решётке с шагом $3\cdot 2r$, радиус $4\cdot 2r$. Один большой кластер — твёрдое тело; много маленьких — тело гнётся и сминается.
+Мягкое тело заполняется частицами на решётке с шагом $2r$ внутри замкнутого меша (`addSoftBody`, [ParticleSystem.cpp:95](../src/particles/ParticleSystem.cpp#L95)). Частицы группируются в **перекрывающиеся кластеры**: центры на решётке с шагом $3\cdot 2r$, радиус $4\cdot 2r$. Один большой кластер — твёрдое тело; много маленьких — тело гнётся и сминается.
 
 Для каждого кластера с частицами $\mathbf p_i$ и положениями покоя $\mathbf q_i$ относительно центра масс покоя:
 
@@ -390,7 +390,7 @@ $$
 
 где $\sigma$ = `areaDensity` [кг/м²]. Через ту же $A_p$ = `Cloth::particleArea` считаются тепло и топливо при горении и сопротивление ткани в газе ([Cloth.cpp:262](../src/particles/Cloth.cpp#L262)). Масса, горение и сопротивление поэтому согласованы, а сумма масс частиц в точности равна массе листа. Раньше масса считалась по $A_p$, а тепло и топливо — по $s^2$ с шагом сетки $s = |\mathbf u|/(W-1)$. Для квадратного листа из 11×11 частиц это $1/100$ против $1/121$ площади листа, то есть расхождение 21 %.
 
-[src/particles/ParticleSystem.cpp:131](../src/particles/ParticleSystem.cpp#L131)
+[src/particles/ParticleSystem.cpp:134](../src/particles/ParticleSystem.cpp#L134)
 ```cpp
     c.particleArea = length(cross(u, v)) / float(c.width * c.height);
     const float invMass = 1.0f / (material.areaDensity * c.particleArea);
@@ -432,7 +432,7 @@ $$
 
 ### Малые шаги (Macklin et al. 2019)
 
-*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:215](../src/particles/ParticleSystem.cpp#L215)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
+*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:221](../src/particles/ParticleSystem.cpp#L221)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
 
 Это важно для **разрыва**: натяжения нитей становятся физическими, а не отставанием недосошедшегося решателя. Иначе ткань рвалась бы под собственным весом.
 

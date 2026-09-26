@@ -16,9 +16,9 @@
 //    gas next to the wall; the momentum taken from the gas is given to the body (action = reaction)
 //  * fire: a fuel field that burns in hot gas, releasing heat, soot and expanding gas (Combustion)
 
-#include "grid/Combustion.h"
-#include "grid/Field3.h"
-#include "grid/MagneticField.h"
+#include "gas/Combustion.h"
+#include "gas/Field3.h"
+#include "plasma/MagneticField.h"
 #include "spatial/BVH.h"
 #include "math/Math.h"
 
@@ -32,7 +32,7 @@ enum class BoundaryType { Wall, Inflow, Outflow };
 enum class GridField { Speed, Pressure, PressureCoeff, Vorticity, Smoke, Temperature, VelocityX, VelocityY,
                        MagneticFlux, CurrentDensity };
 
-struct NSParams {
+struct GasParams {
     Vector3 domainSize{4.0f, 2.0f, 2.0f};  // [m]                          (*reset)
     int resolutionX = 96;                // cells along X                 (*reset)
     float inflowSpeed = 10.0f;           // [m/s]
@@ -102,9 +102,9 @@ struct MovingSolid {
     Vector3 pointVelocity(const Vector3& x) const { return velocity + cross(angularVelocity, x - position); }
 };
 
-class NSGridSolver {
+class GasSolver {
 public:
-    NSParams params;
+    GasParams params;
     HeatSource source;
     Combustion combustion; // fire (off by default); the temperature field is then in K above ambient
     // Electromagnetic field of a conducting gas (plasma): Lorentz force on the flow, induction by

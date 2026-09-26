@@ -45,7 +45,7 @@ struct RigidBody {
     }
     Vector3 applyInvInertiaWorld(const Vector3& v) const { return invInertiaWorld * v; }
     Vector3 velocityAt(const Vector3& p) const { return vel + cross(angVel, p - pos); }
-    AABB worldBounds() const;
+    AABB worldBounds() const { return shape->boundsAt(rotation(), pos); }
     // Signed distance from world point p to the body surface (negative inside) and outward normal.
     float signedDistance(const Vector3& p, Vector3& normal) const;
     float boundingRadius() const { return shape->boundingRadius(); }

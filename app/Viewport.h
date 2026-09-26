@@ -7,7 +7,7 @@
 #include "FluidSurfaceRenderer.h"
 #include "OrbitCamera.h"
 #include "ViewportTools.h"
-#include "sim/Simulation.h"
+#include "scene/Simulation.h"
 
 #include <QColor>
 #include <QMatrix4x4>

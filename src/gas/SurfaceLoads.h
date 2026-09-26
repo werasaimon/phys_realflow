@@ -11,7 +11,7 @@
 // usual coefficients. The distributions (Cp, Cf per triangle) are what aerodynamic studies need.
 
 #include "core/Mesh.h"
-#include "grid/NSGridSolver.h"
+#include "gas/GasSolver.h"
 
 #include <string>
 #include <vector>
@@ -38,7 +38,7 @@ struct SurfaceLoads {
 
 // refArea / refLength: reference area and length of the coefficients (e.g. frontal area and
 // diameter, or planform area and chord); momentRef: point about which the moment is taken.
-SurfaceLoads computeSurfaceLoads(const NSGridSolver& gas, const TriMesh& surface, const Vector3& momentRef, float refArea,
+SurfaceLoads computeSurfaceLoads(const GasSolver& gas, const TriMesh& surface, const Vector3& momentRef, float refArea,
                                  float refLength);
 
 // One row per triangle: centroid, normal, area, Cp, Cf, force.

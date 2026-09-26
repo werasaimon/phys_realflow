@@ -1,4 +1,5 @@
 #include "rigid/Joints.h"
+#include "rigid/RigidWorld.h"
 
 #include <algorithm>
 
@@ -367,6 +368,61 @@ float DistanceJoint::solvePosition(std::vector<RigidBody>& bodies) {
     float C = len - length;
     if (rope && C < 0) return 0;
     return correctAlong(bodies, dvec / len, C, pA, pB, 0.5f);
+}
+
+// ---------------------------------------------------------------------------
+// Joints in RigidWorld: creation and the position pass
+// ---------------------------------------------------------------------------
+template <class J>
+J& RigidWorld::attach(std::unique_ptr<J> j, const Vector3& anchorA, const Vector3& anchorB, const Vector3& axisW) {
+    static const RigidBody world = [] { RigidBody w; w.mass = 0; w.invMass = 0; return w; }();
+    const RigidBody& A = bodies_[j->a];
+    const RigidBody& B = j->b >= 0 ? bodies_[j->b] : world;
+    Vector3 axis = normalize(axisW);
+    j->localAnchorA = A.rot.conjugate().rotate(anchorA - A.pos);
+    j->localAnchorB = B.rot.conjugate().rotate(anchorB - B.pos);
+    j->localAxisA = A.rot.conjugate().rotate(axis);
+    j->localAxisB = B.rot.conjugate().rotate(axis);
+    j->refRel = B.rot.conjugate() * A.rot;
+    if (auto* h = dynamic_cast<HingeJoint*>(j.get())) {
+        Vector3 ref = anyPerpendicular(axis);
+        h->localRefA = A.rot.conjugate().rotate(ref);
+        h->localRefB = B.rot.conjugate().rotate(ref);
+    }
+    wake(j->a);
+    if (j->b >= 0) wake(j->b);
+    J& ref = *j;
+    joints_.push_back(std::move(j));
+    return ref;
+}
+
+BallJoint& RigidWorld::addBallJoint(int a, int b, const Vector3& p) {
+    return attach(std::make_unique<BallJoint>(a, b), p, p, Vector3(1, 0, 0));
+}
+
+HingeJoint& RigidWorld::addHingeJoint(int a, int b, const Vector3& p, const Vector3& axis) {
+    return attach(std::make_unique<HingeJoint>(a, b), p, p, axis);
+}
+
+SliderJoint& RigidWorld::addSliderJoint(int a, int b, const Vector3& axis) {
+    Vector3 p = bodies_[a].pos; // anchor at A's centre
+    return attach(std::make_unique<SliderJoint>(a, b), p, p, axis);
+}
+
+FixedJoint& RigidWorld::addFixedJoint(int a, int b) {
+    Vector3 p = b >= 0 ? (bodies_[a].pos + bodies_[b].pos) * 0.5f : bodies_[a].pos;
+    return attach(std::make_unique<FixedJoint>(a, b), p, p, Vector3(1, 0, 0));
+}
+
+DistanceJoint& RigidWorld::addDistanceJoint(int a, int b, const Vector3& pa, const Vector3& pb) {
+    DistanceJoint& j = attach(std::make_unique<DistanceJoint>(a, b), pa, pb, Vector3(1, 0, 0));
+    j.length = length(pa - pb);
+    return j;
+}
+
+void RigidWorld::solveJointPositions() {
+    for (int it = 0; it < params.jointPositionIterations; ++it)
+        for (auto& j : joints_) j->solvePosition(bodies_);
 }
 
 } // namespace rf

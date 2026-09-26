@@ -6,13 +6,14 @@
 //  * static environment: domain walls (planes) and a triangle mesh (BVH -> triangles -> GJK/EPA)
 //  * solver: sequential impulses with Coulomb friction on persistent manifolds with warm starting
 
+#include "core/Parallel.h"
 #include "spatial/BVH.h"
 #include "math/Math.h"
 #include "rigid/BroadPhase.h"
-#include "rigid/Ccd.h"
+#include "rigid/TimeOfImpact.h"
 #include "rigid/Joints.h"
 #include "rigid/RigidBody.h"
-#include "rigid/Narrowphase.h"
+#include "rigid/NarrowPhase.h"
 #include "rigid/Shapes.h"
 
 #include <memory>
@@ -112,8 +113,20 @@ public:
     int bodyLevel(int i) const { return i < int(levels_.size()) ? levels_[i] : -1; }
 
     void step(float dt);
-    void applyImpulse(int body, const Vector3& impulse, const Vector3& worldPoint);
-    void applyBiasImpulse(int body, const Vector3& impulse, const Vector3& worldPoint);
+    // The solver's impulses, applied thousands of times per step: inline here (as b2Body's), so
+    // every file of the solver can fold them into its loops.
+    void applyImpulse(int i, const Vector3& J, const Vector3& p) {
+        RigidBody& b = bodies_[i];
+        if (b.invMass == 0) return;
+        b.vel += J * b.invMass;
+        b.angVel += b.applyInvInertiaWorld(cross(p - b.pos, J));
+    }
+    void applyBiasImpulse(int i, const Vector3& J, const Vector3& p) {
+        RigidBody& b = bodies_[i];
+        if (b.invMass == 0) return;
+        b.biasVel += J * b.invMass;
+        b.biasAngVel += b.applyInvInertiaWorld(cross(p - b.pos, J));
+    }
     // Impulse from outside the solver (fluid coupling, user input): also wakes the body up.
     void applyExternalImpulse(int body, const Vector3& impulse, const Vector3& worldPoint);
     // Linear impulse through the centre of mass plus an angular impulse (e.g. gas pressure).
@@ -214,7 +227,17 @@ private:
     void prepare(float dt);
     void solve();
     void buildColors();
-    template <class F> void forEachManifold(F&& f);
+    // Every manifold, colour by colour: a colour's manifolds share no dynamic body, so a big
+    // colour is solved in parallel.
+    template <class F> void forEachManifold(F&& f) {
+        for (size_t c = 0; c < colors_.size(); ++c) {
+            const auto& batch = colors_[c];
+            if (parallelColors_ && c < 63 && batch.size() >= 64)
+                parallelFor(int(batch.size()), [&](int k) { f(manifolds_[batch[k]]); }, 16);
+            else
+                for (int i : batch) f(manifolds_[i]);
+        }
+    }
     void prepareManifold(Manifold& m, float dt);
     void solveManifold(Manifold& m);
     void computeLevels();

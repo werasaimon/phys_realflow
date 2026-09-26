@@ -11,6 +11,10 @@ endif()
 
 option(RF_BUILD_APP   "Build the Qt GUI application" ON)
 option(RF_BUILD_TESTS "Build the solver tests"       ON)
+option(RF_WERROR      "Warnings are errors (CI)"     OFF)
+option(RF_SANITIZE    "AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang, CI)" OFF)
+option(RF_STRICT_FP   "Bit-reproducible floating point across builds: no FMA contraction, no -march=native" OFF)
+option(RF_LTO         "Link-time optimisation of the SDK (inlining across its files)" OFF)
 
 # ---------------------------------------------------------------------------
 # Physics SDK: standard C++17 only - no Qt, no other libraries. The GUI program below may use Qt,
@@ -25,28 +29,56 @@ add_library(rfcore STATIC
   src/core/Mesh.h            src/core/Mesh.cpp
   src/spatial/BVH.h          src/spatial/BVH.cpp
   src/spatial/AABBTree.h     src/spatial/AABBTree.cpp
-  src/particles/ParticleSystem.h        src/particles/ParticleSystem.cpp
-  src/particles/SoftBody.h         src/particles/SoftBody.cpp
-  src/particles/Cloth.h            src/particles/Cloth.cpp
-  src/grid/NSGridSolver.h    src/grid/NSGridSolver.cpp
-  src/grid/SurfaceLoads.h    src/grid/SurfaceLoads.cpp
-  src/grid/Combustion.h      src/grid/Combustion.cpp
-  src/grid/Field3.h          src/grid/Field3.cpp
-  src/grid/MagneticField.h   src/grid/MagneticField.cpp
-  src/grid/Tokamak.h         src/grid/Tokamak.cpp
-  src/rigid/Shapes.h         src/rigid/Shapes.cpp
-  src/rigid/GjkEpa.h         src/rigid/GjkEpa.cpp
-  src/rigid/Narrowphase.h    src/rigid/Narrowphase.cpp
-  src/rigid/BroadPhase.h     src/rigid/BroadPhase.cpp
-  src/rigid/RigidWorld.h     src/rigid/RigidWorld.cpp
-  src/rigid/XpbdSolver.cpp
+  # rigid bodies
   src/rigid/RigidBody.h
-  src/rigid/Joints.h         src/rigid/Joints.cpp
-  src/rigid/Ccd.h            src/rigid/Ccd.cpp
+  src/rigid/Shapes.h              src/rigid/Shapes.cpp
+  src/rigid/GjkEpa.h              src/rigid/GjkEpa.cpp
+  src/rigid/NarrowPhase.h         src/rigid/NarrowPhase.cpp
+  src/rigid/BroadPhase.h          src/rigid/BroadPhase.cpp
+  src/rigid/TimeOfImpact.h        src/rigid/TimeOfImpact.cpp
+  src/rigid/Joints.h              src/rigid/Joints.cpp
   src/rigid/ConvexDecomposition.h src/rigid/ConvexDecomposition.cpp
-  src/sim/Simulation.h       src/sim/Simulation.cpp
+  src/rigid/RigidWorld.h          src/rigid/RigidWorld.cpp
+  src/rigid/ContactSolver.cpp
+  src/rigid/Islands.cpp
+  src/rigid/ShockPropagation.cpp
+  src/rigid/Grab.cpp
+  src/rigid/XpbdSolver.cpp
+  # particles: liquid, soft bodies, cloth
+  src/particles/ParticleSystem.h  src/particles/ParticleSystem.cpp
+  src/particles/DensitySolver.cpp
+  src/particles/ParticleContacts.cpp
+  src/particles/SoftBody.h        src/particles/SoftBody.cpp
+  src/particles/Cloth.h           src/particles/Cloth.cpp
+  # gas on the MAC grid, fire
+  src/gas/Field3.h                src/gas/Field3.cpp
+  src/gas/GasSolver.h             src/gas/GasSolver.cpp
+  src/gas/GasSolverInternal.h
+  src/gas/Advection.cpp
+  src/gas/PressureSolver.cpp
+  src/gas/MovingSolids.cpp
+  src/gas/Heat.cpp
+  src/gas/Combustion.h            src/gas/Combustion.cpp
+  src/gas/SurfaceLoads.h          src/gas/SurfaceLoads.cpp
+  # plasma
+  src/plasma/MagneticField.h      src/plasma/MagneticField.cpp
+  src/plasma/Tokamak.h            src/plasma/Tokamak.cpp
+  # scenes: the solvers together
+  src/scene/Simulation.h          src/scene/Simulation.cpp
+  src/scene/Presets.cpp
+  src/scene/Coupling.cpp
+  src/scene/Snapshot.cpp
 )
 target_include_directories(rfcore PUBLIC src)
+if(RF_LTO)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT RF_IPO_OK OUTPUT RF_IPO_MSG)
+  if(RF_IPO_OK)
+    set_property(TARGET rfcore PROPERTY INTERPROCEDURAL_OPTIMIZATION ON)
+  else()
+    message(WARNING "LTO not supported here: ${RF_IPO_MSG}")
+  endif()
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(rfcore PUBLIC Threads::Threads)
 # Guard: fail the configure step if anything but the thread library gets linked into the SDK.
@@ -56,7 +88,24 @@ if(NOT RF_CORE_LIBS STREQUAL "Threads::Threads")
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(rfcore PRIVATE -Wall -Wextra -Wno-unused-parameter)
-  target_compile_options(rfcore PUBLIC $<$<CONFIG:Release>:-O3 -march=native>)
+  if(RF_WERROR)
+    target_compile_options(rfcore PRIVATE -Werror)
+  endif()
+  if(RF_STRICT_FP)
+    # The same numbers whatever the compiler inlines: no fused multiply-add, no CPU-specific code.
+    target_compile_options(rfcore PUBLIC $<$<CONFIG:Release>:-O3> -ffp-contract=off)
+  else()
+    target_compile_options(rfcore PUBLIC $<$<CONFIG:Release>:-O3 -march=native>)
+  endif()
+  if(RF_SANITIZE)
+    target_compile_options(rfcore PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(rfcore PUBLIC -fsanitize=address,undefined)
+  endif()
+elseif(MSVC)
+  target_compile_options(rfcore PRIVATE /W4 /wd4100 /utf-8)
+  if(RF_WERROR)
+    target_compile_options(rfcore PRIVATE /WX)
+  endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -70,6 +119,8 @@ if(RF_BUILD_APP)
     app/main.cpp
     app/MainWindow.h      app/MainWindow.cpp
     app/Viewport.h        app/Viewport.cpp
+    app/Shaders.h
+    app/VolumeRenderer.cpp
     app/SimController.h   app/SimController.cpp
     app/ParamForm.h       app/ParamForm.cpp
     app/OrbitCamera.h     app/OrbitCamera.cpp
@@ -92,7 +143,15 @@ endif()
 # ---------------------------------------------------------------------------
 if(RF_BUILD_TESTS)
   enable_testing()
-  add_executable(rf_tests tests/tests.cpp)
+  add_executable(rf_tests
+    tests/main.cpp
+    tests/TestRunner.h tests/Tests.h
+    tests/MathTests.cpp
+    tests/RigidTests.cpp tests/HardContactTests.h
+    tests/ParticleTests.cpp
+    tests/GasTests.cpp
+    tests/PlasmaTests.cpp
+    tests/SceneTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()

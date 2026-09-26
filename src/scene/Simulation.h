@@ -4,9 +4,9 @@
 
 #include "spatial/BVH.h"
 #include "core/Mesh.h"
-#include "grid/NSGridSolver.h"
-#include "grid/SurfaceLoads.h"
-#include "grid/Tokamak.h"
+#include "gas/GasSolver.h"
+#include "gas/SurfaceLoads.h"
+#include "plasma/Tokamak.h"
 #include "rigid/RigidWorld.h"
 #include "particles/ParticleSystem.h"
 
@@ -186,7 +186,7 @@ struct RenderSnapshot {
     uint64_t paramsVersion = 0;
     Preset preset = Preset::DamBreak;
     ParticleParams particleParams;
-    NSParams ns;
+    GasParams gasParams;
     Tokamak tokamak;
     RigidParams rigid;
     ObstacleSettings obstacleSettings;
@@ -199,7 +199,7 @@ struct RenderSnapshot {
 class Simulation {
 public:
     ParticleSystem particles;
-    NSGridSolver grid;
+    GasSolver grid;
     RigidWorld rigid;
     Tokamak tokamak; // the Tokamak scene: its vessel, coils and plasma current (rebuilt by reset())
     ObstacleSettings obstacle;

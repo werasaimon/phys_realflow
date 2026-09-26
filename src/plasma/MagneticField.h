@@ -1,6 +1,6 @@
 #pragma once
 // Electromagnetic field of a conducting gas (plasma) or liquid metal: resistive, incompressible
-// magnetohydrodynamics (MHD) on the staggered grid of NSGridSolver. SI units.
+// magnetohydrodynamics (MHD) on the staggered grid of GasSolver. SI units.
 //   Ampere (low-frequency / MHD limit, no displacement current):  J = curl B / mu0
 //   Ohm's law in the moving conductor:                              E = -u x B + J / sigma
 //   Faraday (induction):                                            dB/dt = -curl E
@@ -19,7 +19,7 @@
 // Faraday's law are stepped one after the other). The domain walls are perfect conductors: the tangential E
 // on them is zero, so the flux through every wall stays what it was.
 
-#include "grid/Field3.h"
+#include "gas/Field3.h"
 #include "math/Math.h"
 
 #include <cstdint>
@@ -76,7 +76,7 @@ public:
     void jouleHeating(std::vector<float>& heat, float dt);
     // Boris correction: 1 / (1 + v_A^2 / c^2) on every face (x, y, z faces as u, v, w) - the factor
     // by which the field's inertia slows every acceleration there (the pressure's too: see
-    // NSGridSolver::project). 1 everywhere when speedLimit is 0.
+    // GasSolver::project). 1 everywhere when speedLimit is 0.
     void borisWeights(Field3& wx, Field3& wy, Field3& wz, float density) const;
     // Largest stable time step of the gas for the Alfven waves (the fastest signal).
     float maxTimeStep(float maxFlowSpeed, float density) const;
