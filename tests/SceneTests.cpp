@@ -144,3 +144,39 @@ void testCoherence() {
         CHECK(finite, "NACA code 'NACA' gave no wing");
     }
 }
+
+// Two runs of the same scene must agree to the bit: a result nobody can reproduce cannot be
+// debugged, and a race in the thread pool would show up here first. Rigid bodies (contacts,
+// islands, shock passes), particles (a dam break) and the gas (smoke in a closed box, PCG with
+// parallel reductions), each fingerprinted after a few frames.
+void testDeterminism() {
+    auto mix = [](uint64_t& h, float v) { // FNV-1a over the float bits
+        uint32_t bits;
+        std::memcpy(&bits, &v, 4);
+        h ^= bits;
+        h *= 1099511628211ull;
+    };
+    auto fingerprint = [&](Preset p, int frames, int resolution) {
+        Simulation sim;
+        sim.loadPreset(p);
+        if (resolution > 0) { sim.grid.params.resolutionX = resolution; sim.reset(); }
+        for (int f = 0; f < frames; ++f) sim.stepFrame();
+        uint64_t h = 14695981039346656037ull;
+        for (const RigidBody& b : sim.rigid.bodies()) for (float v : {b.pos.x, b.pos.y, b.pos.z, b.vel.x, b.vel.y, b.vel.z, b.angVel.x, b.angVel.y, b.angVel.z}) mix(h, v);
+        for (const Vector3& x : sim.particles.positions()) for (float v : {x.x, x.y, x.z}) mix(h, v);
+        if (sim.mode() == SimMode::WindTunnel)
+            for (int k = 0; k < sim.grid.nz(); ++k)
+                for (int j = 0; j < sim.grid.ny(); ++j)
+                    for (int i = 0; i < sim.grid.nx(); ++i) { const Vector3 u = sim.grid.cellVelocity(i, j, k); mix(h, u.x); mix(h, u.y); mix(h, u.z); }
+        return h;
+    };
+    struct Case { const char* name; Preset preset; int frames, resolution; };
+    const Case cases[] = {{"rigid: pyramid + projectile", Preset::RigidPyramid, 90, 0}, {"particles: dam break", Preset::DamBreak, 30, 0},
+                          {"gas: smoke in a closed box", Preset::SmokeSphere, 8, 32}};
+    for (const Case& c : cases) {
+        const uint64_t a = fingerprint(c.preset, c.frames, c.resolution), b = fingerprint(c.preset, c.frames, c.resolution);
+        std::printf("  %s: %d frames, fingerprints %016llx / %016llx %s\n", c.name, c.frames, (unsigned long long)a, (unsigned long long)b,
+                    a == b ? "equal" : "DIFFER");
+        CHECK(a == b, "%s is not reproducible run to run", c.name);
+    }
+}

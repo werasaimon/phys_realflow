@@ -52,6 +52,8 @@ int main() {
     if (std::getenv("RF_TEST")) run("tokamak: coil and plasma fields, kink below q = 1", testTokamak);
     run("presets", testSimulationPresets);
     run("coherence: scene switches, one gravity, Coulomb friction, burnt cloth", testCoherence);
+    run("determinism: two runs agree to the bit (rigid, particles, gas)", testDeterminism);
+    run("benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)", testCylinderStrouhal);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);
     return g_failures;

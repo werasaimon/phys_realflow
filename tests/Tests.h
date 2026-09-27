@@ -60,3 +60,6 @@ void testTokamak();
 // scenes (SceneTests.cpp)
 void testSimulationPresets();
 void testCoherence();
+void testDeterminism();
+// validation against published benchmarks (docs/00-vision.md, "Мировые эталоны")
+void testCylinderStrouhal();

@@ -446,3 +446,57 @@ void testFireScene() {
     CHECK(Tmax + 293 > 1100 && Tmax + 293 < 2300, "flame temperature out of the physical range (%f K)", Tmax + 293);
     CHECK(hrrMax < 2e6f, "heat release ran away (%f W)", hrrMax);
 }
+
+// Validation against a published benchmark: the vortex street behind a circular cylinder at
+// Re = 100 sheds at the Strouhal number St = f D / U = 0.164 in an unbounded flow (Williamson
+// 1996; Roshko 1954: 0.198 (1 - 19.7 / Re) = 0.159). Walls raise it: at 12.5 % blockage (D / H)
+// about 0.17, at 25 % about 0.20 (Sahin & Owens 2004) - the tunnel here is 8 D high. The
+// cylinder spans the whole depth (a quasi-2D flow, half a diameter deep), the lift coefficient
+// oscillates at the shedding frequency; a small nudge in the wake at the start saves the seconds
+// the instability would take to grow out of round-off.
+void testCylinderStrouhal() {
+    GasSolver g;
+    g.params.domainSize = {4, 4, 0.5f};
+    g.params.resolutionX = 96; // dx = 4.2 cm, 12 cells across the cylinder
+    const float D = 0.5f, U = 1.0f, Re = 100.0f;
+    g.params.inflowSpeed = U;
+    g.params.kinematicViscosity = U * D / Re;
+    g.params.smokeRake = false;
+    TriMesh cyl = primitives::cylinder(0.5f * D, 0.6f);
+    MeshBVH bvh;
+    bvh.build(cyl);
+    g.reset({-1.2f, -2, -0.25f}, &bvh);
+    Disturbance nudge;
+    nudge.center = {0.6f, 0.15f, 0.0f};
+    nudge.radius = 0.2f;
+    nudge.velocity = {U, 0.3f * U, 0.0f};
+    g.applyDisturbance(nudge);
+    std::vector<std::pair<float, float>> cl; // (t, Cl)
+    double t = 0, cdSum = 0;
+    int cdCount = 0;
+    while (t < 40.0) {
+        t += g.step(0.1f);
+        cl.push_back({float(t), g.liftCoefficient()});
+        if (t > 20.0) { cdSum += g.dragCoefficient(); ++cdCount; }
+    }
+    // Shedding frequency from the zero crossings of Cl over the last 20 s, amplitude from its extremes.
+    int crossings = 0;
+    float first = -1, last = -1, clMax = -1e9f, clMin = 1e9f;
+    for (size_t i = 1; i < cl.size(); ++i) {
+        if (cl[i].first < 20.0f) continue;
+        clMax = std::max(clMax, cl[i].second);
+        clMin = std::min(clMin, cl[i].second);
+        if ((cl[i - 1].second < 0) != (cl[i].second < 0)) {
+            if (first < 0) first = cl[i].first;
+            last = cl[i].first;
+            ++crossings;
+        }
+    }
+    const float f = crossings > 2 ? float(crossings - 1) / 2.0f / (last - first) : 0.0f, St = f * D / U;
+    std::printf("  cylinder Re 100, 12.5%% blockage: St = %.3f (Williamson 0.164 unbounded, ~0.17 confined), Cl amplitude %.2f, Cd mean %.2f "
+                "(2D reference ~1.3), %d zero crossings in %.0f s, residual %.1e\n",
+                St, 0.5f * (clMax - clMin), cdSum / std::max(1, cdCount), crossings, last - first, g.lastResidual());
+    CHECK(crossings >= 6, "no vortex shedding: %d zero crossings of Cl", crossings);
+    CHECK(St > 0.145f && St < 0.195f, "Strouhal number %f vs 0.164 (0.17 confined)", St);
+    CHECK(0.5f * (clMax - clMin) > 0.05f, "lift oscillation too weak: %f", 0.5f * (clMax - clMin));
+}
