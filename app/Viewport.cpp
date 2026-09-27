@@ -456,9 +456,9 @@ void Viewport::drawProbe(const QMatrix4x4& vp) {
 void Viewport::setSnapshot(std::shared_ptr<const rf::RenderSnapshot> s) {
     snap_ = std::move(s);
     ++snapSerial_;
-    if (snap_ && (!framedOnce_ || snap_->preset != lastPreset_)) {
+    if (snap_ && (!framedOnce_ || snap_->sceneName != lastSceneName_)) {
         framedOnce_ = true;
-        lastPreset_ = snap_->preset;
+        lastSceneName_ = snap_->sceneName;
         frameScene();
     }
     update();
@@ -1181,7 +1181,7 @@ void Viewport::drawOverlay() {
     f.setBold(true);
     p.setFont(f);
     p.setPen(QColor(235, 238, 245));
-    p.drawText(14, 24, QString::fromStdString(rf::presetName(snap_->preset)));
+    p.drawText(14, 24, QString::fromStdString(snap_->sceneName));
     f.setBold(false);
     f.setPointSizeF(9);
     p.setFont(f);

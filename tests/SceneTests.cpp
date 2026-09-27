@@ -4,17 +4,29 @@
 #include "Tests.h"
 
 void testSimulationPresets() {
+    // The registry of samples/ and enum Preset agree: one scene per value, in order, named.
+    const std::vector<SampleEntry>& all = samples();
+    CHECK(int(all.size()) == int(Preset::Count), "samples(): %zu scenes for %d presets", all.size(), int(Preset::Count));
+    for (int p = 0; p < int(all.size()); ++p) {
+        const SampleEntry& e = all[p];
+        CHECK(int(e.id) == p, "sample %d registered as preset %d", p, int(e.id));
+        CHECK(e.name && e.name[0] && e.category && e.category[0], "sample %d has no name or category", p);
+        CHECK(e.create != nullptr, "sample %d cannot be created", p);
+    }
     Simulation sim;
     for (int p = 0; p < int(Preset::Count); ++p) {
-        sim.loadPreset(Preset(p));
+        loadSample(sim, Preset(p));
+        CHECK(sim.scene() && sim.scene()->name == all[p].name, "preset %d: the loaded scene is not '%s'", p, all[p].name);
         if (sim.mode() == SimMode::WindTunnel) sim.grid.params.resolutionX = 32, sim.reset();
-        for (int f = 0; f < 3; ++f) sim.stepFrame();
+        const int frames = Preset(p) == Preset::Terrain ? 1 : 3; // the terrain's 150 bodies on 50 000 triangles: heavier
+        for (int f = 0; f < frames; ++f) sim.stepFrame();
         RenderSnapshot snap;
         sim.fillSnapshot(snap);
         bool finite = true;
         for (const Vector3& q : snap.particles) finite &= std::isfinite(q.x + q.y + q.z);
         for (const auto& b : snap.bodies) finite &= std::isfinite(b.pos.x + b.pos.y + b.pos.z);
-        CHECK(finite, "preset %s produced NaN", presetName(Preset(p)));
+        CHECK(finite, "preset %s produced NaN", all[p].name);
+        CHECK(snap.sceneName == all[p].name, "snapshot names the scene '%s', expected '%s'", snap.sceneName.c_str(), all[p].name);
     }
 }
 
@@ -24,23 +36,23 @@ void testCoherence() {
     // 1) The water of the Hydro scene does not stay in the gas grid of the next (gas-only) scene.
     {
         Simulation sim;
-        sim.loadPreset(Preset::Hydro);
+        loadSample(sim, Preset::Hydro);
         sim.grid.params.resolutionX = 32;
         sim.reset();
         for (int f = 0; f < 3; ++f) sim.stepFrame();
-        sim.loadPreset(Preset::TunnelSphere);
+        loadSample(sim, Preset::TunnelSphere);
         sim.grid.params.resolutionX = 32;
         sim.reset();
         for (int f = 0; f < 2; ++f) sim.stepFrame();
         CHECK(sim.grid.liquidCellCount() == 0, "phantom water in the tunnel: %d cells", sim.grid.liquidCellCount());
         CHECK(!sim.surfaceLoads().triangles.empty(), "tunnel loads missing");
-        sim.loadPreset(Preset::RigidPyramid);
+        loadSample(sim, Preset::RigidPyramid);
         CHECK(sim.surfaceLoads().triangles.empty(), "surface loads of the old scene kept");
     }
     // 2) XPBD after a reset to fewer bodies: fresh contacts (the old ones index bodies that are gone).
     {
         Simulation sim;
-        sim.loadPreset(Preset::RigidPyramid);
+        loadSample(sim, Preset::RigidPyramid);
         sim.rigid.params.solver = RigidSolver::XPBD;
         sim.rigid.params.substeps = 31; // leaves the collision counter unaligned
         for (int i = 0; i < 60; ++i) sim.rigid.addSphere({-1.5f + 0.05f * i, 0.2f, 1.0f}, 0.1f, 500.0f, Vector3(1));
@@ -98,10 +110,10 @@ void testCoherence() {
     // 6) One gravity for the scene; a preset restores the default everywhere.
     {
         Simulation sim;
-        sim.loadPreset(Preset::Fire);
+        loadSample(sim, Preset::Fire);
         sim.setGravity({0.0f, -1.62f, 0.0f});
         CHECK(sim.particles.params.gravity.y == -1.62f && sim.grid.combustion.gravity == 1.62f, "gravity not shared");
-        sim.loadPreset(Preset::Fire);
+        loadSample(sim, Preset::Fire);
         CHECK(sim.gravity().y == -9.81f && sim.particles.params.gravity.y == -9.81f, "preset gravity not restored");
     }
     // 7) Fabric that cannot tear, burnt through along a band: the part below falls off the rod.
@@ -158,7 +170,7 @@ void testDeterminism() {
     };
     auto fingerprint = [&](Preset p, int frames, int resolution) {
         Simulation sim;
-        sim.loadPreset(p);
+        loadSample(sim, p);
         if (resolution > 0) { sim.grid.params.resolutionX = resolution; sim.reset(); }
         for (int f = 0; f < frames; ++f) sim.stepFrame();
         uint64_t h = 14695981039346656037ull;

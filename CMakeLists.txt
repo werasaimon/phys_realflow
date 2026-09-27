@@ -27,6 +27,7 @@ add_library(rfcore STATIC
   src/math/MatrixNxN.h       src/math/MatrixNxN.cpp
   src/core/Parallel.h        src/core/Parallel.cpp
   src/core/Mesh.h            src/core/Mesh.cpp
+  src/core/Format.h
   src/spatial/BVH.h          src/spatial/BVH.cpp
   src/spatial/AABBTree.h     src/spatial/AABBTree.cpp
   # rigid bodies
@@ -62,14 +63,35 @@ add_library(rfcore STATIC
   src/gas/SurfaceLoads.h          src/gas/SurfaceLoads.cpp
   # plasma
   src/plasma/MagneticField.h      src/plasma/MagneticField.cpp
-  src/plasma/Tokamak.h            src/plasma/Tokamak.cpp
-  # scenes: the solvers together
+  # the scene facade: the solvers together; the scenes themselves are in samples/
+  src/scene/Scene.h
   src/scene/Simulation.h          src/scene/Simulation.cpp
-  src/scene/Presets.cpp
+  src/scene/Obstacle.cpp
   src/scene/Coupling.cpp
   src/scene/Snapshot.cpp
 )
 target_include_directories(rfcore PUBLIC src)
+
+# ---------------------------------------------------------------------------
+# Sample scenes (as Box2D's samples/): solutions built on the engine, used by the app and the tests
+# ---------------------------------------------------------------------------
+add_library(rfsamples STATIC
+  samples/Samples.h               samples/Samples.cpp
+  samples/SamplesInternal.h
+  samples/Models.h                samples/Models.cpp
+  samples/LiquidScenes.cpp
+  samples/SoftBodyScenes.cpp
+  samples/RigidScenes.cpp
+  samples/WindTunnelScenes.cpp
+  samples/SmokeScenes.cpp
+  samples/FireScene.cpp
+  samples/HydroScene.cpp
+  samples/plasma/Tokamak.h        samples/plasma/Tokamak.cpp
+  samples/plasma/TokamakScene.h   samples/plasma/TokamakScene.cpp
+  samples/plasma/MagnetosphereScene.cpp
+)
+target_include_directories(rfsamples PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(rfsamples PUBLIC rfcore)
 if(RF_LTO)
   include(CheckIPOSupported)
   check_ipo_supported(RESULT RF_IPO_OK OUTPUT RF_IPO_MSG)
@@ -128,7 +150,7 @@ if(RF_BUILD_APP)
     app/FluidSurfaceRenderer.h app/FluidSurfaceRenderer.cpp
     app/PlotPanel.h       app/PlotPanel.cpp
   )
-  target_link_libraries(realflow PRIVATE rfcore
+  target_link_libraries(realflow PRIVATE rfcore rfsamples
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets Qt6::Charts)
   # Software OpenGL (Mesa llvmpipe, shipped with Qt) next to the program: with --software-gl the
   # same shaders run on the CPU - for PCs without a usable GPU / driver.
@@ -152,6 +174,6 @@ if(RF_BUILD_TESTS)
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
     tests/SceneTests.cpp)
-  target_link_libraries(rf_tests PRIVATE rfcore)
+  target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()

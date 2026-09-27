@@ -1,4 +1,4 @@
-#include "plasma/Tokamak.h"
+#include "samples/plasma/Tokamak.h"
 
 #include <cmath>
 #include <complex>

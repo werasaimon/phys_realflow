@@ -254,7 +254,7 @@ void testLiquidWalls() {
     CHECK(std::fabs(atWall - 0.5f) < 1e-3f && inside == 0.0f, "wall volume wrong (%f, %f)", atWall, inside);
 
     Simulation sim;
-    sim.loadPreset(Preset::Water);
+    loadSample(sim, Preset::Water);
     const ParticleSystem& P = sim.particles;
     // The bug's signature is the density: particles lined up on a corner edge reached 10x rest
     // density (10 279 kg/m^3 measured before the fix). Speed is no test - the dam-break front
@@ -275,7 +275,7 @@ void testLightBodyInWater() {
     // particles at once must not kick it (before the Gauss-Seidel body contacts: 155 m/s and
     // 9000 rad/s, from summing impulses computed against an immovable body), and it must float.
     Simulation sim;
-    sim.loadPreset(Preset::Water);
+    loadSample(sim, Preset::Water);
     const RigidBody& ball = sim.rigid.bodies()[2];
     float vMax = 0, wMax = 0, yEnd = 0;
     for (int f = 1; f <= 360; ++f) {

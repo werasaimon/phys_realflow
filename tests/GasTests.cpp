@@ -10,7 +10,7 @@ void testGasBodies() {
     //    divergence-free around the moving boundaries, the bodies come to rest on the floor.
     {
         Simulation sim;
-        sim.loadPreset(Preset::SmokeBodies);
+        loadSample(sim, Preset::SmokeBodies);
         float worstRel = 0, gasMax = 0;
         const float y0 = sim.rigid.bodies()[0].pos.y;
         for (int f = 0; f < 60; ++f) sim.stepFrame();
@@ -37,7 +37,7 @@ void testGasBodies() {
     //    the sides, and the pressure force opposes the motion.
     {
         Simulation sim;
-        sim.loadPreset(Preset::SmokeSphere);
+        loadSample(sim, Preset::SmokeSphere);
         sim.grid.source.enabled = false;
         sim.grid.params.heatBuoyancy = sim.grid.params.smokeBuoyancy = 0;
         sim.reset();
@@ -59,7 +59,7 @@ void testGasBodies() {
     float vy[2];
     for (int on = 0; on < 2; ++on) {
         Simulation sim;
-        sim.loadPreset(Preset::SmokeSphere);
+        loadSample(sim, Preset::SmokeSphere);
         sim.grid.source.enabled = false;
         sim.grid.params.heatBuoyancy = sim.grid.params.smokeBuoyancy = 0;
         sim.grid.params.fluidDensity = 50.0f;
@@ -79,7 +79,7 @@ void testGasBodies() {
 void testSurfaceLoads() {
     // Sphere in the tunnel: loads on every triangle of the real mesh.
     Simulation sim;
-    sim.loadPreset(Preset::TunnelSphere);
+    loadSample(sim, Preset::TunnelSphere);
     sim.grid.params.resolutionX = 64;
     sim.reset();
     while (sim.grid.time() < 1.2f) sim.stepFrame();
@@ -120,7 +120,7 @@ void testGasParticles() {
     float handkerchiefY[2] = {0, 0};
     for (int on = 0; on < 2; ++on) {
         Simulation sim;
-        sim.loadPreset(Preset::GasSoftCloth);
+        loadSample(sim, Preset::GasSoftCloth);
         sim.gasPushesBodies = on != 0;
         float worstRel = 0;
         for (int f = 1; f <= 120; ++f) {
@@ -156,7 +156,7 @@ void testHydro() {
     float flagX[2] = {0, 0};
     for (int windOn = 0; windOn < 2; ++windOn) {
         Simulation sim;
-        sim.loadPreset(Preset::Hydro);
+        loadSample(sim, Preset::Hydro);
         sim.grid.params.inflowSpeed = windOn ? 3.0f : 0.0f;
         sim.reset();
         float worstRel = 0;
@@ -223,7 +223,7 @@ void testGridSphere() {
 void testGridWingLift() {
     auto liftAt = [](float aoa) {
         Simulation sim;
-        sim.loadPreset(Preset::TunnelWing);
+        loadSample(sim, Preset::TunnelWing);
         sim.grid.params.resolutionX = 64;
         sim.obstacle.angleOfAttackDeg = aoa;
         sim.rebuildObstacle();
@@ -238,7 +238,7 @@ void testGridWingLift() {
 void testSmokeClosedBox() {
     // Closed box (all walls), hot smoky sphere: gas must rise, stay divergence-free and bounded.
     Simulation sim;
-    sim.loadPreset(Preset::SmokeSphere);
+    loadSample(sim, Preset::SmokeSphere);
     GasSolver& g = sim.grid;
     CHECK(g.nx() == 32 && g.ny() == 48 && g.nz() == 32, "grid %d %d %d", g.nx(), g.ny(), g.nz());
     float smoke1 = 0;
@@ -419,7 +419,7 @@ void testFireScene() {
     // Burner + cotton curtain: the flame ignites the curtain, the fire climbs it and burns through
     // threads; the flame stays at physical temperatures (oxygen-limited) and the scene stays finite.
     Simulation sim;
-    sim.loadPreset(Preset::Fire);
+    loadSample(sim, Preset::Fire);
     const ParticleSystem& P = sim.particles;
     float ignition = -1, Tmax = 0, hrrMax = 0, topFire = -1e9f;
     for (int f = 1; f <= 300; ++f) {

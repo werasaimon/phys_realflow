@@ -4,6 +4,8 @@
 #include "TestRunner.h"
 #include "Tests.h"
 
+#include "samples/plasma/TokamakScene.h"
+
 void testMagneticField() {
     // The walls are perfect conductors: the magnetic flux through them is frozen. The analytic
     // checks are therefore set up away from the walls the field crosses.
@@ -138,7 +140,7 @@ void testMagnetosphere() {
     // where the dipole's magnetic pressure balances the ram pressure - 0.29 m (pressure balance)
     // to 0.37 m (field doubled by the magnetopause currents) - and flow around.
     Simulation sim;
-    sim.loadPreset(Preset::Magnetosphere);
+    loadSample(sim, Preset::Magnetosphere);
     GasSolver& g = sim.grid;
     while (g.time() < 1.0f) sim.stepFrame();
     float standoff = -1; // where, coming from upstream, the flow has slowed to half the wind speed
@@ -158,10 +160,14 @@ void testTokamak() {
     //    current by Ampere's law around the channel (the loop potential is exact, so the torus
     //    changes nothing there); B_theta above the axis against the straight-column value (the
     //    torus bends it by ~r / R0); the single loop's potential against its on-axis field.
+    // The tokamak is a sample scene (samples/plasma), not a part of the engine: the test builds
+    // it itself and keeps a pointer to set its parameters before each reset.
     Simulation sim;
-    sim.loadPreset(Preset::Tokamak);
+    auto scenePtr = std::make_unique<TokamakScene>();
+    TokamakScene* ts = scenePtr.get();
+    sim.load(std::move(scenePtr));
     {
-        const Tokamak& t = sim.tokamak;
+        const Tokamak& t = ts->tokamak;
         const MagneticField& m = sim.grid.magnetic;
         const float R0 = t.majorRadius, a = t.minorRadius, dx = sim.grid.dx();
         auto toroidal = [&](float R) { return m.fieldAt(t.centre + Vector3(R, 0.0f, 0.0f)).z; }; // phi_hat = +z at phi = 0
@@ -197,9 +203,9 @@ void testTokamak() {
     struct Run { float qa; bool unstable; float seconds; };
     const Run runs[3] = {{0.7f, true, 1.6f}, {1.5f, false, 1.0f}, {0.25f, false, 1.0f}};
     for (const Run& r : runs) {
-        sim.tokamak.safetyFactorEdge = r.qa;
-        sim.reset();
-        const Tokamak& t = sim.tokamak;
+        ts->tokamak.safetyFactorEdge = r.qa;
+        sim.reset(); // build() reads the scene's tokamak again
+        const Tokamak& t = ts->tokamak;
         const MagneticField& m = sim.grid.magnetic;
         const float dx = sim.grid.dx(), a = t.minorRadius, gap = t.vesselRadius - a;
         std::vector<std::pair<float, float>> series = {{0.0f, t.kinkAmplitude(m, dx)}};

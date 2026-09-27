@@ -299,7 +299,7 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 `Simulation::stepGasWithBodies` ([Coupling.cpp:190](../src/scene/Coupling.cpp#L190)) один раз за кадр:
 
-[src/scene/Coupling.cpp:216](../src/scene/Coupling.cpp#L216)
+[src/scene/Coupling.cpp:194](../src/scene/Coupling.cpp#L194)
 ```cpp
 if (grid.combustion.enabled) {
     std::vector<FireOutput> fire;
@@ -352,7 +352,7 @@ if (grid.combustion.enabled) {
 
 ## 5.8 Сцена «Огонь» и наблюдаемая физика
 
-Пресет 23 ([Presets.cpp:251](../src/scene/Presets.cpp#L251), [Presets.cpp:554](../src/scene/Presets.cpp#L554)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
+Сцена 23 ([samples/FireScene.cpp](../samples/FireScene.cpp)): угол комнаты 1.2 × 1.6 × 1.0 м, открытый сверху, сетка 3 см. На полу — газовая горелка (сфера 6 см, топливо 1, перегрев 400 K, струя 0.5 м/с вверх). Рядом висит хлопковая штора 0.6 × 1.1 м (0.2 кг/м²) на штанге на высоте 0.55 м; её нижний край — на ладонь выше пламени горелки. Вокруг — ящик, чайник, брошенный мяч и мягкий куб.
 
 Тест `fire: burner ignites a curtain, it burns through` (300 кадров = 5 с):
 

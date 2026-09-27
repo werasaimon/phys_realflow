@@ -1,6 +1,6 @@
 // How the solvers of Simulation act on each other within a frame: bodies and particles
 // interleaved in time, the gas pushing bodies, cloth and liquid and they in turn being its
-// moving walls, the loads on the obstacle, and the tokamak's position control.
+// moving walls, and the loads on the obstacle.
 #include "scene/Simulation.h"
 
 #include "core/Parallel.h"
@@ -165,28 +165,6 @@ void Simulation::stepBodiesAndParticles(bool gasDrag) {
     }
 }
 
-void Simulation::controlTokamakPosition() {
-    // Radial position control, as the vertical-field coils of a real machine: a PD law on the
-    // measured outward shift of the ring (the n = 0 part of its current centroid) around the
-    // vertical field of the equilibrium in the shell (Tokamak.h). Without it the ring, never
-    // quite in the equilibrium of the formulas on a grid, swings in and out for seconds, and the
-    // swing's flow eats the current through the dissipation of the induction step.
-    const Tokamak& t = tokamak;
-    if (!t.positionControl || !t.verticalField) return;
-    const float shift = t.measuredShift(grid.magnetic, grid.dx());
-    const float dt = grid.time() - tokamakControlTime_;
-    const float rate = tokamakControlTime_ > 0 && dt > 1e-5f ? (shift - tokamakShift_) / dt : 0.0f;
-    tokamakShift_ = shift;
-    tokamakControlTime_ = grid.time();
-    float gain, damping;
-    t.controlGains(grid.params.fluidDensity, gain, damping);
-    const float bv = t.verticalFieldStrength() + gain * shift + damping * rate;
-    if (std::fabs(bv - tokamakBv_) < 0.002f * std::fabs(t.verticalFieldStrength())) return; // unchanged: keep the field
-    tokamakBv_ = bv;
-    const Tokamak tc = t;
-    grid.magnetic.setBackgroundFromPotential([tc, bv](const Vector3& x) { return tc.coilPotential(x, bv); });
-}
-
 void Simulation::stepGasWithBodies() {
     // Weak (staggered) two-way coupling, one exchange per frame:
     //  1) gas -> bodies: pressure impulses integrated over the previous frame's gas steps, plus the
@@ -194,7 +172,7 @@ void Simulation::stepGasWithBodies() {
     //  2) rigid substeps;
     //  3) bodies -> gas: the bodies at their new poses and velocities are the moving boundaries of
     //     the gas steps that cover the same frame time.
-    if (rigid.anyHeld() && time_ >= releaseTime_) rigid.releaseHeld();
+    if (rigid.anyHeld() && time_ >= releaseTime) rigid.releaseHeld();
     const int nb = int(rigid.bodies().size());
     if (gasPushesBodies) {
         const float rho = grid.params.fluidDensity;

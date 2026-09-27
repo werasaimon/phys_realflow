@@ -20,6 +20,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 
 class Viewport : public QOpenGLWidget, protected QOpenGLExtraFunctions {
     Q_OBJECT
@@ -153,7 +154,7 @@ private:
     qint64 probeTime_ = 0;
     float brushRadius_ = 0.15f;
     bool framedOnce_ = false;
-    rf::Preset lastPreset_ = rf::Preset::Count;
+    std::string lastSceneName_; // the scene is framed again when another one is loaded
 
     int colormap_ = Turbo;
     bool showDomain_ = true, showFloor_ = true, showConvexParts_ = false;

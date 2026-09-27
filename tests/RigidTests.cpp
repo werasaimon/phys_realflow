@@ -650,7 +650,7 @@ void testTeapots() {
     // 100 non-convex bodies (compound of convex parts) dropped into a box: no deep penetration
     // between parts, everything comes to rest inside the domain.
     Simulation sim;
-    sim.loadPreset(Preset::RigidTeapots);
+    loadSample(sim, Preset::RigidTeapots);
     CHECK(sim.rigid.bodies().size() == 100, "bodies %zu", sim.rigid.bodies().size());
     float worst = 0, ms = 0, peakMs = 0;
     for (int f = 0; f < 420; ++f) {

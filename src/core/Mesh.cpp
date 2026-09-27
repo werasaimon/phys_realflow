@@ -250,6 +250,29 @@ TriMesh torus(float major, float minor, int seg, int rings) {
     return m;
 }
 
+TriMesh heightfield(float sizeX, float sizeZ, int nx, int nz, const std::function<float(float, float)>& height) {
+    TriMesh m;
+    nx = std::max(nx, 1);
+    nz = std::max(nz, 1);
+    m.positions.reserve(size_t(nx + 1) * size_t(nz + 1));
+    for (int k = 0; k <= nz; ++k)
+        for (int i = 0; i <= nx; ++i) {
+            const float x = -0.5f * sizeX + sizeX * float(i) / float(nx);
+            const float z = -0.5f * sizeZ + sizeZ * float(k) / float(nz);
+            m.positions.push_back({x, height(x, z), z});
+        }
+    auto id = [&](int i, int k) { return uint32_t(k * (nx + 1) + i); };
+    m.triangles.reserve(size_t(nx) * size_t(nz) * 2);
+    // (i, k), (i, k+1), (i+1, k+1): (+z) x (+x) = +y, the normal points up. Not orientOutward():
+    // the sheet is open, its signed volume means nothing.
+    for (int k = 0; k < nz; ++k)
+        for (int i = 0; i < nx; ++i) {
+            m.triangles.push_back({id(i, k), id(i, k + 1), id(i + 1, k + 1)});
+            m.triangles.push_back({id(i, k), id(i + 1, k + 1), id(i + 1, k)});
+        }
+    return m;
+}
+
 TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
     float mC = 0.02f, pC = 0.4f, tC = 0.12f; // 2412, also for a code that is not four digits
     const bool digits = code.size() == 4 && std::all_of(code.begin(), code.end(), [](char c) { return c >= '0' && c <= '9'; });

@@ -37,8 +37,10 @@ src/      SDK (rfcore) — только стандартная библиоте�
             rigid/                 RigidWorld + ContactSolver, Islands, ShockPropagation, Grab, Joints, TimeOfImpact
             particles/             ParticleSystem + DensitySolver, ParticleContacts; SoftBody, Cloth
             gas/                   GasSolver + Advection, PressureSolver, MovingSolids, Heat; Combustion
-            plasma/                MagneticField, Tokamak
-            scene/                 Simulation + Presets, Coupling, Snapshot
+            plasma/                MagneticField
+            scene/                 Simulation (фасад) + Obstacle, Coupling, Snapshot; интерфейс Scene
+samples/  готовые сцены (rfsamples) — решения на движке, как samples/ у Box2D:
+            Liquid, WindTunnel, Smoke, Rigid (+ рельеф), SoftBody, Fire, Hydro; plasma/ Tokamak, Magnetosphere
 app/      демо realflow (Qt 6, OpenGL 3.0)
 tests/    rf_tests — численные эксперименты с аналитическим ответом
 docs/     документация с формулами, кодом и графиками

@@ -4,6 +4,7 @@
 #include "math/Math.h"
 
 #include <array>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,6 +54,10 @@ TriMesh cone(float radius, float length, int segments = 48); // apex pointing to
 // Torus about the Y axis: a circle of radius `minor` in the (R, y) plane, centred at R = major,
 // swept around the axis.
 TriMesh torus(float major, float minor, int segments = 64, int rings = 24);
+// Height field: an open sheet of sizeX x sizeZ metres centred on the origin in the XZ plane,
+// nx x nz cells of two triangles each, y = height(x, z). Wound so that the face normals point
+// up (+Y): the static-mesh contacts are one-sided, bodies rest on the upper side. A terrain.
+TriMesh heightfield(float sizeX, float sizeZ, int nx, int nz, const std::function<float(float, float)>& height);
 // Procedural teapot as closed parts whose union is the solid (body, lid knob, spout, curved
 // handle); non-convex overall. Height ~ size, centred on the origin, spout along +X.
 std::vector<TriMesh> teapotParts(float size);

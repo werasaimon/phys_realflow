@@ -5,6 +5,7 @@
 #include <QMainWindow>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class ParamForm;
@@ -37,7 +38,8 @@ private:
     ParamForm* buildGasForm();
     ParamForm* buildBrushForm();
     ParamForm* buildRigidForm();
-    ParamForm* buildTokamakForm();
+    ParamForm* buildSceneForm(const std::vector<rf::SceneParam>& params);
+    void rebuildSceneForm(const rf::RenderSnapshot& s); // when another scene is loaded
     QGroupBox* addGroup(class QVBoxLayout* col, const QString& title, ParamForm* form);
 
     // Runtime
@@ -60,14 +62,15 @@ private:
     Viewport* view_ = nullptr;
     QTimer* timer_ = nullptr;
     uint64_t lastSerial_ = 0, lastParamsVersion_ = 0, lastFrame_ = 0;
-    rf::Preset lastPreset_ = rf::Preset::Count;
+    std::string lastSceneName_;
     qint64 lastInfoUpdate_ = 0;
 
     QComboBox* presetCombo_ = nullptr;
     QAction* playAct_ = nullptr;
     std::vector<ParamForm*> forms_;
     QGroupBox *objectBox_ = nullptr, *fluidBox_ = nullptr, *gasBox_ = nullptr, *brushBox_ = nullptr,
-              *rigidBox_ = nullptr, *fieldBox_ = nullptr, *particleBox_ = nullptr, *tokamakBox_ = nullptr;
+              *rigidBox_ = nullptr, *fieldBox_ = nullptr, *particleBox_ = nullptr, *sceneBox_ = nullptr;
+    ParamForm* sceneForm_ = nullptr; // the loaded scene's knobs, inside sceneBox_
     QTableWidget* info_ = nullptr;
     PlotPanel* plots_ = nullptr;
     QLabel* status_ = nullptr;

@@ -4,6 +4,9 @@
 #include "PlotPanel.h"
 #include "Viewport.h"
 
+#include "samples/Models.h"
+#include "samples/Samples.h"
+
 #include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
@@ -30,6 +33,7 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <random>
 
 using namespace rf;
@@ -139,17 +143,18 @@ void MainWindow::buildActions() {
 
     presetCombo_ = new QComboBox;
     presetCombo_->setMinimumWidth(320);
-    SimMode prevMode = presetMode(Preset(0));
-    for (int p = 0; p < int(Preset::Count); ++p) {
-        if (presetMode(Preset(p)) != prevMode) {
+    // The sample scenes (samples/Samples.h), grouped by category with a separator between groups.
+    std::string prevCategory = samples().empty() ? "" : samples()[0].category;
+    for (const SampleEntry& e : samples()) {
+        if (e.category != prevCategory) {
             presetCombo_->insertSeparator(presetCombo_->count());
-            prevMode = presetMode(Preset(p));
+            prevCategory = e.category;
         }
-        presetCombo_->addItem(QString::fromStdString(presetName(Preset(p))), p);
+        presetCombo_->addItem(QString::fromStdString(e.name), int(e.id));
     }
     connect(presetCombo_, &QComboBox::activated, this, [this](int idx) {
         int p = presetCombo_->itemData(idx).toInt();
-        ctrl_->post([p](Simulation& s) { s.loadPreset(Preset(p)); });
+        ctrl_->post([p](Simulation& s) { loadSample(s, p); });
     });
 
     tb->addWidget(new QLabel("  Сцена "));
@@ -202,9 +207,11 @@ QGroupBox* MainWindow::addGroup(QVBoxLayout* col, const QString& title, ParamFor
     auto* g = new QGroupBox(title);
     auto* l = new QVBoxLayout(g);
     l->setContentsMargins(4, 8, 4, 4);
-    l->addWidget(form);
+    if (form) {
+        l->addWidget(form);
+        forms_.push_back(form);
+    }
     col->addWidget(g);
-    forms_.push_back(form);
     return g;
 }
 
@@ -293,22 +300,35 @@ ParamForm* MainWindow::buildFluidForm() {
     return f;
 }
 
-ParamForm* MainWindow::buildTokamakForm() {
+// The knobs of the loaded scene (Scene::params, e.g. the tokamak's safety factor): one row per
+// knob, built again whenever another scene is loaded. Setting a knob rebuilds the scene
+// (Simulation::setSceneParam resets it), so no reset() here.
+ParamForm* MainWindow::buildSceneForm(const std::vector<SceneParam>& params) {
     auto* f = new ParamForm(ctrl_.get());
-    f->addDouble("Запас устойчивости q(a) *", 0.2, 8, 0.1, 2, [](const Snap& s) { return s.tokamak.safetyFactorEdge; },
-                 [](Simulation& s, double v) { s.tokamak.safetyFactorEdge = float(v); s.reset(); },
-                 "Ток плазмы I_p = 2π a² B0 / (μ0 R0 q(a)). Между 2a²/(a²+b²) = 0.4 и 1 шнур скручивается в винт — "
-                 "кинк-неустойчивость (Крускал–Шафранов); выше 1 держит натяжение линий, ниже 0.4 — стенка");
-    f->addDouble("Тороидальное поле B0 *", 0.5, 20, 0.5, 1, [](const Snap& s) { return s.tokamak.toroidalField * 1000; },
-                 [](Simulation& s, double v) { s.tokamak.toroidalField = float(v) / 1000; s.reset(); },
-                 "Поле катушек на магнитной оси; B_φ = B0 R0 / R. Скорость Альфвена растёт с ним, шаг по времени падает", "мТл");
-    f->addBool("Вертикальное поле Шафранова *", [](const Snap& s) { return s.tokamak.verticalField; },
-               [](Simulation& s, bool v) { s.tokamak.verticalField = v; s.reset(); },
-               "Держит кольцо от расширения по большому радиусу; без него его держат только токи изображения в стенке");
-    f->addDouble("Затравка кинка *", 0, 0.2, 0.01, 2, [](const Snap& s) { return s.tokamak.seedDisplacement; },
-                 [](Simulation& s, double v) { s.tokamak.seedDisplacement = float(v); s.reset(); },
-                 "Винтовое смещение шнура в начале (m = 1, n = 1), доля малого радиуса a");
+    for (size_t i = 0; i < params.size(); ++i) {
+        const SceneParam& p = params[i];
+        const QString label = QString::fromStdString(p.name) + " *";
+        const QString tip = QString::fromStdString(p.tip);
+        if (p.toggle)
+            f->addBool(label, [i](const Snap& s) { return i < s.sceneParams.size() && s.sceneParams[i].value > 0.5f; },
+                       [i](Simulation& s, bool v) { s.setSceneParam(int(i), v ? 1.0f : 0.0f); }, tip);
+        else
+            f->addDouble(label, p.min, p.max, p.step, p.decimals,
+                         [i](const Snap& s) { return i < s.sceneParams.size() ? double(s.sceneParams[i].value) : 0.0; },
+                         [i](Simulation& s, double v) { s.setSceneParam(int(i), float(v)); }, tip);
+    }
     return f;
+}
+
+void MainWindow::rebuildSceneForm(const Snap& s) {
+    if (sceneForm_) {
+        forms_.erase(std::remove(forms_.begin(), forms_.end(), sceneForm_), forms_.end());
+        sceneForm_->deleteLater();
+    }
+    sceneForm_ = buildSceneForm(s.sceneParams);
+    sceneBox_->layout()->addWidget(sceneForm_);
+    forms_.push_back(sceneForm_);
+    sceneBox_->setVisible(!s.sceneParams.empty());
 }
 
 ParamForm* MainWindow::buildGasForm() {
@@ -617,7 +637,7 @@ void MainWindow::buildParameterDock() {
     col->setSpacing(8);
 
     gasBox_ = addGroup(col, "Газ / поток — сетка Навье–Стокса", buildGasForm());
-    tokamakBox_ = addGroup(col, "Токамак", buildTokamakForm());
+    sceneBox_ = addGroup(col, "Сцена", nullptr); // filled by rebuildSceneForm() for the loaded scene
     brushBox_ = addGroup(col, "Кисть возмущения", buildBrushForm());
     fluidBox_ = addGroup(col, "Жидкость — частицы SPH", buildFluidForm());
     objectBox_ = addGroup(col, "Объект / препятствие", buildObjectForm());
@@ -829,7 +849,7 @@ void MainWindow::updateInfo(const Snap& s) {
             it->setText(QString::fromStdString(c == 0 ? s.info[r].first : s.info[r].second));
         }
     status_->setText(QString("%1  ·  кадр %2  ·  t = %3 с  ·  %4")
-                         .arg(QString::fromStdString(presetName(s.preset)))
+                         .arg(QString::fromStdString(s.sceneName))
                          .arg(s.frame)
                          .arg(s.time, 0, 'f', 3)
                          .arg(ctrl_->isRunning() ? "идёт расчёт" : "пауза"));
@@ -838,17 +858,18 @@ void MainWindow::updateInfo(const Snap& s) {
 void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
     view_->setSnapshot(s);
 
+    const bool sceneChanged = s->sceneName != lastSceneName_;
+    if (sceneChanged) rebuildSceneForm(*s);
     if (s->paramsVersion != lastParamsVersion_) {
         lastParamsVersion_ = s->paramsVersion;
         for (ParamForm* f : forms_) f->refresh(*s);
         updateModeVisibility(s->mode);
-        tokamakBox_->setVisible(s->preset == Preset::Tokamak);
-        int idx = presetCombo_->findData(int(s->preset));
+        int idx = presetCombo_->findText(QString::fromStdString(s->sceneName));
         if (idx >= 0) presetCombo_->setCurrentIndex(idx);
     }
-    if (s->preset != lastPreset_ || s->frame < lastFrame_) {
+    if (sceneChanged || s->frame < lastFrame_) {
         plots_->clear();
-        lastPreset_ = s->preset;
+        lastSceneName_ = s->sceneName;
     }
     if (s->frame != lastFrame_ && s->frame > 0) plots_->append(s->time, s->plots);
     lastFrame_ = s->frame;
@@ -859,7 +880,7 @@ void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
         updateInfo(*s);
     }
 
-    if (auto_.active && int(s->preset) == auto_.preset && int(s->frame) >= auto_.frames && ++auto_.settle == 1) {
+    if (auto_.active && s->sceneName == samples()[auto_.preset].name && int(s->frame) >= auto_.frames && ++auto_.settle == 1) {
         ctrl_->setRunning(false);
         QTimer::singleShot(300, this, [this] {
             if (!auto_.shot.isEmpty()) view_->grabFramebuffer().save(auto_.shot);
@@ -870,8 +891,8 @@ void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
 }
 
 void MainWindow::runAutomation(int preset, int frames, const QString& shot, const QString& csv) {
-    preset = std::clamp(preset, 0, int(Preset::Count) - 1);
-    ctrl_->post([preset](Simulation& s) { s.loadPreset(Preset(preset)); });
+    preset = std::clamp(preset, 0, int(samples().size()) - 1);
+    ctrl_->post([preset](Simulation& s) { loadSample(s, preset); });
     auto_.active = !shot.isEmpty() || !csv.isEmpty();
     if (!auto_.active) {
         if (!ctrl_->isRunning()) togglePlay(); // opened from the command line: start simulating

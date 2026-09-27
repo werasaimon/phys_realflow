@@ -106,6 +106,7 @@ public:
     int addCompound(std::shared_ptr<const CompoundShape> shape, const Vector3& pos, const Quaternion& rot, float density, const Vector3& color);
     int addBody(std::shared_ptr<const ConvexShape> shape, const Vector3& pos, const Quaternion& rot, float density, const Vector3& color);
 
+    const AABB& domain() const { return domain_; }
     void setDomain(const AABB& d) { domain_ = d; }
     void setStaticMesh(const MeshBVH* bvh) { mesh_ = bvh; }
     void setBroadPhase(std::unique_ptr<BroadPhase> bp) { broadphase_ = std::move(bp); }

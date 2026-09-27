@@ -6,6 +6,8 @@
 #include "gas/GasSolver.h"
 #include "rigid/RigidWorld.h"
 #include "scene/Simulation.h"
+#include "samples/Samples.h"
+#include "samples/Models.h"
 #include "particles/ParticleSystem.h"
 #include "rigid/BroadPhase.h"
 #include "spatial/AABBTree.h"

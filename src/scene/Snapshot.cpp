@@ -3,21 +3,10 @@
 // volume, the bodies, the particles, the readouts and the plots.
 #include "scene/Simulation.h"
 
+#include "core/Format.h"
 #include "core/Parallel.h"
 
-#include <cstdarg>
-#include <cstdio>
-
 namespace rf {
-
-static std::string fmt(const char* f, ...) {
-    char buf[256];
-    va_list ap;
-    va_start(ap, f);
-    std::vsnprintf(buf, sizeof(buf), f, ap);
-    va_end(ap);
-    return buf;
-}
 
 // ---------------------------------------------------------------------------
 // Snapshot extraction
@@ -115,15 +104,8 @@ void Simulation::computeFieldLines(RenderSnapshot& s) const {
     const float dx = grid.dx();
     const AABB dom = grid.domain();
     std::vector<Vector3> seeds;
-    if (preset_ == Preset::Tokamak) {
-        // Seeds in the poloidal plane phi = 0 at a few minor radii: the lines wind around the
-        // torus and show the twist, q(r) toroidal turns per poloidal turn.
-        const Tokamak& t = tokamak;
-        for (float f : {0.35f, 0.7f, 1.0f, 1.5f})
-            for (int q = 0; q < 4; ++q) {
-                const float th = 0.5f * kPi * float(q);
-                seeds.push_back(t.centre + Vector3(t.majorRadius + f * t.minorRadius * std::cos(th), f * t.minorRadius * std::sin(th), 0.0f));
-            }
+    if (scene_) scene_->fieldLineSeeds(*this, seeds); // the scene knows where its field is interesting
+    if (!seeds.empty()) {
     } else if (grid.hasObstacle() && obstacleMesh_ && !obstacleMesh_->empty()) {
         const AABB ob = obstacleMesh_->bounds();
         const Vector3 c = ob.center();
@@ -285,11 +267,11 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
     s.mode = mode_;
     s.time = time_;
     s.stepMs = lastStepMs_;
-    s.preset = preset_;
+    s.sceneName = scene_ ? scene_->name : std::string();
+    s.sceneParams = sceneParams();
     s.paramsVersion = paramsVersion_;
     s.particleParams = particles.params;
     s.gasParams = grid.params;
-    s.tokamak = tokamak;
     s.rigid = rigid.params;
     s.obstacleSettings = obstacle;
     s.vis = vis;
@@ -367,16 +349,16 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         else s.colorLabel = "";
         if (s.particles.empty()) { lo = 0; hi = 1; }
         range(lo, hi);
-        s.info.push_back({"Частиц", fmt("%zu", particles.size())});
-        s.info.push_back({"Радиус частицы", fmt("%.1f мм", particles.params.particleRadius * 1000)});
-        s.info.push_back({"Масса частицы", fmt("%.3g кг", particles.particleMass())});
-        s.info.push_back({"Ошибка плотности", fmt("%.2f %%", particles.averageDensityError() * 100)});
-        s.info.push_back({"Макс. скорость", fmt("%.2f м/с", particles.maxSpeed())});
-        s.info.push_back({"Тел", fmt("%zu", rigid.bodies().size())});
+        s.info.push_back({"Частиц", format("%zu", particles.size())});
+        s.info.push_back({"Радиус частицы", format("%.1f мм", particles.params.particleRadius * 1000)});
+        s.info.push_back({"Масса частицы", format("%.3g кг", particles.particleMass())});
+        s.info.push_back({"Ошибка плотности", format("%.2f %%", particles.averageDensityError() * 100)});
+        s.info.push_back({"Макс. скорость", format("%.2f м/с", particles.maxSpeed())});
+        s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
         if (!particles.softBodies().empty() || !particles.cloths().empty()) {
-            s.info.push_back({"Мягких тел / тканей", fmt("%zu / %zu", particles.softBodies().size(), particles.cloths().size())});
-            s.info.push_back({"Частиц жидкости / твёрдых", fmt("%zu / %zu", particles.fluidCount(), particles.size() - particles.fluidCount())});
-            s.info.push_back({"Контактов частиц", fmt("%zu", particles.particleContactCount())});
+            s.info.push_back({"Мягких тел / тканей", format("%zu / %zu", particles.softBodies().size(), particles.cloths().size())});
+            s.info.push_back({"Частиц жидкости / твёрдых", format("%zu / %zu", particles.fluidCount(), particles.size() - particles.fluidCount())});
+            s.info.push_back({"Контактов частиц", format("%zu", particles.particleContactCount())});
         }
         s.plots.push_back({"Ошибка плотности, %", particles.averageDensityError() * 100});
         s.plots.push_back({"Макс. скорость, м/с", particles.maxSpeed()});
@@ -420,26 +402,12 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
             const MagneticField& m = grid.magnetic;
             const float B = m.maxField(), rho = grid.params.fluidDensity;
             const float L = grid.hasObstacle() ? std::max(obstacle.size, grid.dx()) : grid.domain().extent().x;
-            s.info.push_back({"Магнитное поле, макс.", fmt("%.1f мТл", B * 1000)});
-            s.info.push_back({"Скорость Альфвена v_A", fmt("%.2f м/с (предел Бориса %.1f)", B / std::sqrt(MagneticField::kMu0 * rho),
+            s.info.push_back({"Магнитное поле, макс.", format("%.1f мТл", B * 1000)});
+            s.info.push_back({"Скорость Альфвена v_A", format("%.2f м/с (предел Бориса %.1f)", B / std::sqrt(MagneticField::kMu0 * rho),
                                                          m.speedLimit)});
-            s.info.push_back({"Маг. число Рейнольдса Rm", fmt("%.3g", grid.params.inflowSpeed * L / m.resistivity())});
-            s.info.push_back({"Энергия поля", fmt("%.3g Дж", m.energy())});
-            s.info.push_back({"div B (отн.)", fmt("%.1e", m.maxDivergence())});
-            if (preset_ == Preset::Tokamak) {
-                const Tokamak& t = tokamak;
-                s.info.push_back({"Ток плазмы I_p", fmt("%.0f А (задано %.0f А)", t.measuredCurrent(m, grid.dx()), t.plasmaCurrent())});
-                s.info.push_back({"Запас устойчивости q(0) / q(a)", fmt("%.2f / %.2f", t.safetyFactor(0), t.safetyFactor(t.minorRadius))});
-                s.info.push_back({"Кинк m = 1, n = 1",
-                                  t.kinkUnstable() ? fmt("растёт: %.2f < q(a) < 1, γ = %.2f 1/с", t.wallLimit(), t.kinkGrowthRate(grid.params.fluidDensity))
-                                  : t.safetyFactorEdge >= 1 ? "устойчив: q(a) ≥ 1 (предел Крускала–Шафранова)"
-                                                            : fmt("устойчив: стенка держит шнур при q(a) < %.2f", t.wallLimit())});
-                s.info.push_back({"Вертикальное поле B_v", fmt("%.3f мТл (равновесие в оболочке %.3f)", tokamakBv_ * 1000,
-                                                                t.verticalFieldStrength() * 1000)});
-                s.info.push_back({"Сдвиг кольца наружу", fmt("%.1f мм (без B_v по Шафранову %.1f мм)", t.measuredShift(m, grid.dx()) * 1000,
-                                                              t.equilibriumShift() * 1000)});
-                s.plots.push_back({"Амплитуда кинка, мм", t.kinkAmplitude(m, grid.dx()) * 1000});
-            }
+            s.info.push_back({"Маг. число Рейнольдса Rm", format("%.3g", grid.params.inflowSpeed * L / m.resistivity())});
+            s.info.push_back({"Энергия поля", format("%.3g Дж", m.energy())});
+            s.info.push_back({"div B (отн.)", format("%.1e", m.maxDivergence())});
         }
         s.gridNx = grid.nx();
         s.gridNy = grid.ny();
@@ -465,62 +433,62 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         }
         float L = obstacle.size;
         float Re = grid.params.inflowSpeed * L / std::max(grid.params.kinematicViscosity, 1e-9f);
-        s.info.push_back({"Сетка", fmt("%d × %d × %d  (%.1f тыс. ячеек)", grid.nx(), grid.ny(), grid.nz(),
+        s.info.push_back({"Сетка", format("%d × %d × %d  (%.1f тыс. ячеек)", grid.nx(), grid.ny(), grid.nz(),
                                        grid.nx() * grid.ny() * grid.nz() / 1000.0f)});
-        s.info.push_back({"Шаг сетки dx", fmt("%.1f мм", grid.dx() * 1000)});
-        s.info.push_back({"Шаг по времени", fmt("%.2f мс", lastGridDt_ * 1000)});
+        s.info.push_back({"Шаг сетки dx", format("%.1f мм", grid.dx() * 1000)});
+        s.info.push_back({"Шаг по времени", format("%.2f мс", lastGridDt_ * 1000)});
         if (grid.combustion.enabled) {
             float Tmax = 0;
             for (float t : grid.temperature().d) Tmax = std::max(Tmax, t);
-            s.info.push_back({"Мощность пламени", fmt("%.1f кВт", grid.heatReleaseRate() / 1000)});
-            s.info.push_back({"Макс. температура", fmt("%.0f K (%.0f °C)", Tmax + grid.combustion.ambientTemperature, Tmax + grid.combustion.ambientTemperature - 273.15f)});
+            s.info.push_back({"Мощность пламени", format("%.1f кВт", grid.heatReleaseRate() / 1000)});
+            s.info.push_back({"Макс. температура", format("%.0f K (%.0f °C)", Tmax + grid.combustion.ambientTemperature, Tmax + grid.combustion.ambientTemperature - 273.15f)});
             int burnt = 0;
             for (const Cloth& c : particles.cloths()) burnt += c.burntThreads;
-            if (!particles.cloths().empty()) s.info.push_back({"Прогоревших нитей", fmt("%d", burnt)});
+            if (!particles.cloths().empty()) s.info.push_back({"Прогоревших нитей", format("%d", burnt)});
         }
-        if (grid.hasObstacle()) s.info.push_back({"Число Рейнольдса", fmt("%.3g", Re)});
+        if (grid.hasObstacle()) s.info.push_back({"Число Рейнольдса", format("%.3g", Re)});
         if (grid.hasObstacle()) {
             Vector3 F = grid.bodyForce();
-            s.info.push_back({"Cd (сред.)", fmt("%.3f", grid.dragCoefficientAvg())});
-            s.info.push_back({"Cl (сред.)", fmt("%.3f", grid.liftCoefficientAvg())});
-            s.info.push_back({"Cd / Cl мгн.", fmt("%.3f / %.3f", grid.dragCoefficient(), grid.liftCoefficient())});
+            s.info.push_back({"Cd (сред.)", format("%.3f", grid.dragCoefficientAvg())});
+            s.info.push_back({"Cl (сред.)", format("%.3f", grid.liftCoefficientAvg())});
+            s.info.push_back({"Cd / Cl мгн.", format("%.3f / %.3f", grid.dragCoefficient(), grid.liftCoefficient())});
             if (std::fabs(grid.dragCoefficientAvg()) > 1e-4f)
-                s.info.push_back({"L/D", fmt("%.2f", grid.liftCoefficientAvg() / grid.dragCoefficientAvg())});
-            s.info.push_back({"Сила F", fmt("(%.2f, %.2f, %.2f) Н", F.x, F.y, F.z)});
+                s.info.push_back({"L/D", format("%.2f", grid.liftCoefficientAvg() / grid.dragCoefficientAvg())});
+            s.info.push_back({"Сила F", format("(%.2f, %.2f, %.2f) Н", F.x, F.y, F.z)});
             if (grid.params.wallFriction) {
                 float cdf = grid.frictionForce().x / (grid.dynamicPressure() * std::max(grid.referenceArea(), 1e-9f));
-                s.info.push_back({"из них трение (Cd тр.)", fmt("%.3f", cdf)});
+                s.info.push_back({"из них трение (Cd тр.)", format("%.3f", cdf)});
             }
             const SurfaceLoads& SL = surfaceLoads_;
             if (!SL.triangles.empty()) {
-                s.info.push_back({"По полигонам: Cd", fmt("%.3f (давл. %.3f + трение %.3f)", SL.cd, SL.cdPressure, SL.cdFriction)});
-                s.info.push_back({"По полигонам: Cl / Cm", fmt("%.3f / %.3f", SL.cl, SL.cm)});
-                s.info.push_back({"Треугольников, смоч. площадь", fmt("%zu, %.4f м²", SL.triangles.size(), SL.wettedArea)});
+                s.info.push_back({"По полигонам: Cd", format("%.3f (давл. %.3f + трение %.3f)", SL.cd, SL.cdPressure, SL.cdFriction)});
+                s.info.push_back({"По полигонам: Cl / Cm", format("%.3f / %.3f", SL.cl, SL.cm)});
+                s.info.push_back({"Треугольников, смоч. площадь", format("%zu, %.4f м²", SL.triangles.size(), SL.wettedArea)});
             }
             s.info.push_back({grid.params.usePlanformArea ? "Площадь (в плане)" : "Площадь (миделя)",
-                              fmt("%.4f м²", grid.referenceArea())});
+                              format("%.4f м²", grid.referenceArea())});
             s.plots.push_back({"Cd", grid.dragCoefficient()});
             s.plots.push_back({"Cl", grid.liftCoefficient()});
         }
-        s.info.push_back({"Итераций давления", fmt("%d (невязка %.1e)", grid.lastPressureIterations(), grid.lastResidual())});
-        s.info.push_back({"Макс. скорость", fmt("%.2f м/с", grid.maxVelocity())});
-        s.info.push_back({"Макс. |div u| после проекции", fmt("%.2e 1/с", grid.maxDivergence())});
-        s.info.push_back({"Дым в объёме", fmt("%.4f м³", grid.totalSmoke())});
+        s.info.push_back({"Итераций давления", format("%d (невязка %.1e)", grid.lastPressureIterations(), grid.lastResidual())});
+        s.info.push_back({"Макс. скорость", format("%.2f м/с", grid.maxVelocity())});
+        s.info.push_back({"Макс. |div u| после проекции", format("%.2e 1/с", grid.maxDivergence())});
+        s.info.push_back({"Дым в объёме", format("%.4f м³", grid.totalSmoke())});
         if (particles.fluidCount() > 0)
-            s.info.push_back({"Вода: частиц / ячеек в воздухе", fmt("%zu / %d", particles.fluidCount(), grid.liquidCellCount())});
+            s.info.push_back({"Вода: частиц / ячеек в воздухе", format("%zu / %d", particles.fluidCount(), grid.liquidCellCount())});
         if (particles.hasSolids()) {
             int torn = 0;
             for (const Cloth& c : particles.cloths()) torn += c.tornThreads;
-            s.info.push_back({"Мягких тел / тканей", fmt("%zu / %zu (порвано нитей %d)", particles.softBodies().size(),
+            s.info.push_back({"Мягких тел / тканей", format("%zu / %zu (порвано нитей %d)", particles.softBodies().size(),
                                                              particles.cloths().size(), torn)});
         }
         if (!rigid.bodies().empty()) {
-            s.info.push_back({"Тел в газе", fmt("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
+            s.info.push_back({"Тел в газе", format("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
                                                 rigid.sleepingCount())});
-            s.info.push_back({"Сила газа на тело (макс.)", fmt("%.3f Н", gasForceMax_)});
-            if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", fmt("%.1f с", std::max(0.0f, releaseTime_ - time_))});
+            s.info.push_back({"Сила газа на тело (макс.)", format("%.3f Н", gasForceMax_)});
+            if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", format("%.1f с", std::max(0.0f, releaseTime - time_))});
         }
-        if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", fmt("%zu", s.arrowPos.size())});
+        if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", format("%zu", s.arrowPos.size())});
         if (!grid.hasObstacle()) {
             s.plots.push_back({"Макс. скорость, м/с", grid.maxVelocity()});
             s.plots.push_back({"Дым, дм³", grid.totalSmoke() * 1000.0f});
@@ -528,15 +496,15 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         break;
     }
     case SimMode::Rigid: {
-        s.domain = rigidDomain_;
+        s.domain = rigid.domain();
         s.colorMin = 0;
         s.colorMax = 1;
-        s.info.push_back({"Тел", fmt("%zu", rigid.bodies().size())});
-        s.info.push_back({"Контактов", fmt("%zu", rigid.contactCount())});
-        s.info.push_back({"Спящих тел", fmt("%zu", rigid.sleepingCount())});
-        s.info.push_back({"CCD: остановлено тел за шаг", fmt("%zu", rigid.ccdHits())});
-        s.info.push_back({"Сочленений", fmt("%zu", rigid.joints().size())});
-        s.info.push_back({"Кин. энергия", fmt("%.2f Дж", rigid.kineticEnergy())});
+        s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
+        s.info.push_back({"Контактов", format("%zu", rigid.contactCount())});
+        s.info.push_back({"Спящих тел", format("%zu", rigid.sleepingCount())});
+        s.info.push_back({"CCD: остановлено тел за шаг", format("%zu", rigid.ccdHits())});
+        s.info.push_back({"Сочленений", format("%zu", rigid.joints().size())});
+        s.info.push_back({"Кин. энергия", format("%.2f Дж", rigid.kineticEnergy())});
         s.plots.push_back({"Кин. энергия, Дж", rigid.kineticEnergy()});
         break;
     }
@@ -555,8 +523,9 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         s.grabAnchor = particles.grabAnchor();
         s.grabTarget = particles.grabTarget();
     }
-    s.info.insert(s.info.begin(), {"Время", fmt("%.3f с", time_)});
-    s.info.push_back({"Шаг расчёта", fmt("%.1f мс", lastStepMs_)});
+    if (scene_) scene_->describe(*this, s); // the scene's own readings, after the generic ones
+    s.info.insert(s.info.begin(), {"Время", format("%.3f с", time_)});
+    s.info.push_back({"Шаг расчёта", format("%.1f мс", lastStepMs_)});
 }
 
 } // namespace rf

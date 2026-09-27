@@ -44,8 +44,8 @@ flowchart TB
         rigid["rigid/<br/>RigidWorld + ContactSolver, Islands,<br/>ShockPropagation, Grab, Joints,<br/>TimeOfImpact, XpbdSolver;<br/>Shapes, GjkEpa, NarrowPhase,<br/>BroadPhase, ConvexDecomposition"]
         particles["particles/<br/>ParticleSystem + DensitySolver,<br/>ParticleContacts;<br/>SoftBody, Cloth"]
         gas["gas/<br/>GasSolver + Advection,<br/>PressureSolver, MovingSolids, Heat;<br/>Field3, Combustion, SurfaceLoads"]
-        plasma["plasma/<br/>MagneticField, Tokamak"]
-        scene["scene/<br/>Simulation + Presets,<br/>Coupling, Snapshot"]
+        plasma["plasma/<br/>MagneticField"]
+        scene["scene/<br/>Simulation (фасад) + Obstacle,<br/>Coupling, Snapshot; Scene"]
         math --> spatial
         core --> spatial
         spatial --> rigid
@@ -57,10 +57,14 @@ flowchart TB
         particles --> scene
         plasma --> scene
     end
+    subgraph SAMPLES["Сцены rfsamples — решения на движке"]
+        samples["samples/<br/>Liquid, WindTunnel, Smoke, Rigid (+ рельеф),<br/>SoftBody, Fire, Hydro; plasma/Tokamak,<br/>TokamakScene, MagnetosphereScene; Samples (реестр)"]
+    end
     subgraph APP["Демо realflow — Qt 6"]
         app["app/<br/>MainWindow, Viewport (OpenGL 3.0),<br/>FluidSurfaceRenderer, PlotPanel"]
     end
-    scene --> app
+    scene --> samples
+    samples --> app
 ```
 
 ### Как устроен код
@@ -71,6 +75,20 @@ flowchart TB
 - **Большой класс разрезан на файлы по одной ответственности**, как `b2_world` / `b2_island` / `b2_contact_solver`: методы `RigidWorld` живут в `RigidWorld.cpp` (тела, шаг), `ContactSolver.cpp` (контакты), `Islands.cpp` (острова и сон), `ShockPropagation.cpp`, `Grab.cpp`; методы `GasSolver` — в `GasSolver.cpp`, `Advection.cpp`, `PressureSolver.cpp`, `MovingSolids.cpp`, `Heat.cpp`; `ParticleSystem` — в `ParticleSystem.cpp`, `DensitySolver.cpp`, `ParticleContacts.cpp`; `Simulation` — в `Simulation.cpp`, `Presets.cpp`, `Coupling.cpp`, `Snapshot.cpp`.
 - **Каждый файл начинается с комментария**, что в нём лежит и где остальное; у каждой формулы в коде — комментарий со ссылкой на статью.
 - Никакой шаблонной магии: обычные классы, `std::vector`, `std::function`.
+- **Сцены — не часть движка.** Ядро (`rfcore`) не знает ни одной сцены: ни плотины, ни токамака. Сцена — класс, наследующий `Scene` ([src/scene/Scene.h](../src/scene/Scene.h)) и собирающий установку из решателей через фасад `Simulation`; готовые сцены лежат в `samples/` (как `samples/` у Box2D) и собираются в библиотеку `rfsamples`, которую линкуют приложение и тесты. Токамак — установка, а не решатель: `samples/plasma/Tokamak` (катушки, ток, сосуд, регулятор положения, диагностики) поверх `plasma/MagneticField` (МГД).
+
+### Фасад и сцены
+
+Фасад — класс `Simulation` ([src/scene/Simulation.h](../src/scene/Simulation.h)): в нём три решателя (`rigid`, `particles`, `grid`), препятствие-меш, шаг кадра со связками между решателями и снимок для отрисовки. Сцена (`Scene`) получает его в четырёх точках жизни:
+
+| Метод сцены | Когда | Что делает |
+|---|---|---|
+| `configure(sim)` | один раз при загрузке, все параметры сброшены к умолчаниям | свои параметры, препятствие, вид; правки пользователя после этого переживают `reset()` |
+| `build(sim)` | при каждом `reset()` | сначала коробка: `useLiquidTank(box)`, `useGasBox(originFraction)` или `useRigidArena(box)`; потом тела, частицы, ткань, поля |
+| `afterStep(sim)` | раз в кадр после решателей | регуляторы, события по времени (регулятор положения кольца токамака) |
+| `describe(sim, snapshot)`, `fieldLineSeeds`, `params()` / `setParam` | при снимке и из панели | свои показания и графики, затравки силовых линий, ручки сцены — панель приложения строит их одинаково для любой сцены |
+
+Своя сцена в любом приложении — тот же класс без реестра: `sim.load(std::make_unique<MyScene>())`. Реестр `samples()` ([samples/Samples.h](../samples/Samples.h)) нужен только меню и командной строке: категория, имя, фабрика; номер сцены равен значению `enum class Preset` и не меняется, чтобы номера в этой документации оставались верны.
 
 Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/scene/Simulation.cpp:37](../src/scene/Simulation.cpp#L37)):
 
@@ -90,7 +108,7 @@ flowchart TB
 
 Гравитация в сцене **одна**. `Simulation::setGravity` передаёт один и тот же $\mathbf g$ всем трём решателям. Газу огня нужен только модуль $|\mathbf g|$: горячий газ поднимается против $\mathbf g$ с плавучестью $|\mathbf g|\,\Delta T/(T_0 + \Delta T)$ (глава 5). Загрузка сцены возвращает $\mathbf g = (0, -9.81, 0)$ везде.
 
-[src/scene/Simulation.cpp:17](../src/scene/Simulation.cpp#L17)
+[src/scene/Simulation.cpp:18](../src/scene/Simulation.cpp#L18)
 ```cpp
 void Simulation::setGravity(const Vector3& g) {
     rigid.params.gravity = g;
@@ -182,7 +200,7 @@ realflow.exe --preset 23 --frames 300 --screenshot fire.png --size 1280x720
 
 ## Сцены (пресеты)
 
-Индекс совпадает с порядком `enum class Preset` ([src/scene/Simulation.h:22](../src/scene/Simulation.h#L22)), названия — из `presetName` ([src/scene/Presets.cpp:9](../src/scene/Presets.cpp#L9)).
+Индекс совпадает со значением `enum class Preset` ([samples/Samples.h](../samples/Samples.h)); имя и категория — в реестре `samples()`, который каждая группа сцен пополняет своей функцией `add*Samples` (например [samples/RigidScenes.cpp](../samples/RigidScenes.cpp)).
 
 | `--preset` | Название | Режим | Что показывает |
 |---:|---|---|---|
@@ -211,6 +229,7 @@ realflow.exe --preset 23 --frames 300 --screenshot fire.png --size 1280x720
 | 22 | Гидродинамика: вода + воздух + тела | WindTunnel | ветер над водой, флаг, плавание |
 | 23 | Огонь: горелка, горящая штора, тела | WindTunnel | воспламенение и прогорание хлопка |
 | 24 | Вода: волна в бассейне, плавающие тела (шейдер) | Fluid | экранный рендер воды, лёгкий мяч |
+| 27 | Твёрдые тела: рельеф из 50 000 треугольников (статичный меш + BVH) | Rigid | большой статичный меш как земля (как `btBvhTriangleMeshShape` в Bullet): высотное поле 12 × 12 м, 51 200 треугольников, 150 тел скатываются по холмам; каждое тело запрашивает BVH меша — 17 мс/кадр |
 | 25 | Плазма: магнит отклоняет поток (магнитосфера) | WindTunnel | МГД: солнечный ветер и магнитосфера Земли, магнитопауза Чепмена–Ферраро (гл. 6) |
 
 ---
