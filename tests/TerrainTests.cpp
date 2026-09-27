@@ -38,7 +38,7 @@ void testTerrain() {
     const float dt = 1.0f / 60 / w.params.substeps;
     float worstMs = 0, totalMs = 0;
     int steps = 0;
-    for (int f = 0; f < 60 * 8; ++f) { // 8 s: the last ones roll to the valley floor and sleep
+    for (int f = 0; f < 60 * 12; ++f) { // 12 s: bodies bounce off the hills (e = 0.2 on every hit), the last ones roll to the valley floor and sleep
         auto t0 = std::chrono::steady_clock::now();
         for (int k = 0; k < w.params.substeps; ++k) w.step(dt);
         const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -55,10 +55,10 @@ void testTerrain() {
         if (b.sleeping) ++asleep;
         maxSpeed = std::max(maxSpeed, length(b.vel));
     }
-    std::printf("  terrain: %d bodies, %d below the surface, %d asleep after 8 s, max speed %.3f m/s; %.2f ms/frame (worst %.2f)\n",
+    std::printf("  terrain: %d bodies, %d below the surface, %d asleep after 12 s, max speed %.3f m/s; %.2f ms/frame (worst %.2f)\n",
                 n, below, asleep, maxSpeed, totalMs / steps, worstMs);
     CHECK(below == 0, "%d bodies fell through the terrain", below);
-    CHECK(maxSpeed < 0.3f, "bodies still moving at %.3f m/s after 8 s", maxSpeed);
+    CHECK(maxSpeed < 0.3f, "bodies still moving at %.3f m/s after 12 s", maxSpeed);
     CHECK(asleep >= n * 9 / 10, "only %d of %d bodies asleep", asleep, n);
     CHECK(totalMs / steps < 40.0f, "a frame of 150 bodies on 51 200 triangles costs %.1f ms", totalMs / steps);
 }

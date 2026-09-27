@@ -271,11 +271,6 @@ void RigidWorld::prepareContactPoints(Manifold& m, float dt) {
         // 600 Hz). Only a dynamic body falls; a static support does not.
         const Vector3 gRel = params.gravity * ((A.invMass > 0 ? 1.0f : 0.0f) - (B && B->invMass > 0 ? 1.0f : 0.0f));
         const float vnImpact = vn - dot(gRel, n) * dt;
-        // An impact, not a resting touch: faster than the threshold, and the gap (if any) closes
-        // within this step. The bounce is applied by applyRestitution() after the solve, never as
-        // a target inside the iterations (see there for why).
-        const bool impact = vn < -params.restitutionThreshold && (p.depth >= 0 || vn * dt < p.depth);
-        p.bounce = impact ? -m.restitution * vnImpact : 0.0f;
         if (p.depth < 0) {
             // Speculative contact: allow closing the gap in this step, but not more. Gaps smaller
             // than the slop count as touching (dead zone): otherwise sub-millimetre differences
@@ -293,6 +288,14 @@ void RigidWorld::prepareContactPoints(Manifold& m, float dt) {
                 p.positionBias = 0;
             }
         }
+        // An impact, not a resting touch: faster than the threshold, and the solver will have to
+        // stop the approach in this step (vn below the target velocityBias just set). The bounce is
+        // applied by applyRestitution() after the solve, never as a target inside the iterations
+        // (see there for why). Comparing with the whole gap (vn dt < depth) instead missed every
+        // hit that entered the slop zone within the step: the contact was already pushing, the
+        // hit was inelastic (a row of balls took a 2 m/s hit as one lump at 2/6 of it).
+        const bool impact = vn < -params.restitutionThreshold && vn < p.velocityBias;
+        p.bounce = impact ? -m.restitution * vnImpact : 0.0f;
         p.jn = p.jp = 0;
     }
 }

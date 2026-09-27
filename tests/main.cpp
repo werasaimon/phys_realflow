@@ -82,6 +82,7 @@ int main() {
     run("determinism: two runs agree to the bit (rigid, particles, gas)", testDeterminism);
     run("benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)", testCylinderStrouhal);
     run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
+    run("Newton's cradle on the floor: the hit passes down the row", testNewtonCradle);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
     run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
@@ -98,6 +99,9 @@ int main() {
     run("magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998)", testMagnetForce);
     run("magnets: two free magnets pull together, momentum conserved", testMagnetsAttract);
     run("scene graph: every role and shape builds and runs", testGraphSceneBuilds);
+    run("scene graph: a plane made cloth hangs from its pinned edge", testGraphCloth);
+    run("scene graph: a smoke emitter on a thrown box leaves a trail", testGraphEmitterFollows);
+    run("scene graph: a flammable curtain over a hot emitter catches fire", testGraphFlammableCloth);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);

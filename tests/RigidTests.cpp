@@ -739,6 +739,35 @@ static Vector3 momentum(const RigidWorld& w) {
     return P;
 }
 
+// Newton's cradle on the floor: six steel balls in a row 1 cm apart, e = 1, no friction; the first
+// comes in at 2 m/s. Momentum and energy pass down the row: the last ball leaves at 2 m/s, the
+// others stop. Found by the editor's example: the hit used to be perfectly inelastic (all six at
+// 2/6 of the speed), because a contact entering the slop zone within the step was already pushing
+// but was not counted as an impact (prepareContactPoints: the impact test now uses the solver's
+// own target velocity).
+void testNewtonCradle() {
+    RigidWorld w;
+    w.setDomain(AABB({-2, 0, -1}, {2, 2, 1}));
+    w.params.sleeping = false;
+    w.params.linearDamping = w.params.angularDamping = 0;
+    w.params.rollingResistance = 0;
+    const float r = 0.05f, gap = 0.01f;
+    for (int i = 0; i < 6; ++i) {
+        const int b = w.addSphere({-0.5f + i * (2 * r + gap), r, 0}, r, 7800, Vector3(1));
+        w.bodies()[b].restitution = 1.0f;
+        w.bodies()[b].friction = w.bodies()[b].staticFriction = 0;
+    }
+    w.bodies()[0].vel = {2, 0, 0};
+    for (int f = 0; f < 30; ++f)
+        for (int k = 0; k < w.params.substeps; ++k) w.step(1.0f / 60 / w.params.substeps);
+    float restMax = 0;
+    for (int i = 0; i < 5; ++i) restMax = std::max(restMax, std::fabs(w.bodies()[i].vel.x));
+    const float last = w.bodies()[5].vel.x;
+    std::printf("  Newton's cradle on the floor: last ball %.4f m/s (expected 2), others at most %.4f m/s\n", last, restMax);
+    CHECK(std::fabs(last - 2.0f) < 0.02f, "the last ball leaves at %f m/s, expected 2", last);
+    CHECK(restMax < 0.02f, "the other balls must stop, one moves at %f m/s", restMax);
+}
+
 void testNoetherRigid() {
     const float dt = 1.0f / 600;
     // 1) Time translation -> energy. An elastic ball (e = 1) dropped from 1 m: E = m g h + m v^2 / 2
@@ -781,7 +810,10 @@ void testNoetherRigid() {
     // 2) Space translation -> momentum; rotation -> angular momentum about a fixed point. Two boxes
     //    in zero gravity, a glancing hit that spins them both: the internal impulses (normal and
     //    friction) cancel pairwise, so P and L about the origin stay what they were.
-    {
+    //    The same hit at two time steps: the contact impulses cancel exactly (same point, opposite
+    //    sign), so what drift is left is the discretisation of the free rotation of the spun boxes
+    //    (it grows like dt w^2: the bouncing hit spins them to 5-8 rad/s). It must shrink with dt.
+    auto glancing = [&](int substeps, float& worstP, float& worstL, float& spinC) {
         RigidWorld w;
         w.setDomain(AABB({-10, -10, -10}, {10, 10, 10}));
         w.params.gravity = Vector3(0.0f);
@@ -794,22 +826,25 @@ void testNoetherRigid() {
         w.bodies()[a].vel = {3, 0, 0};
         w.bodies()[a].angVel = {0, 0, 2};
         w.bodies()[c].vel = {-1, 0, 0};
-        (void)c;
         const Vector3 P0 = momentum(w), L0 = angularMomentumAboutOrigin(w);
-        float worstP = 0, worstL = 0;
-        for (int k = 0; k < 600; ++k) {
-            w.step(dt);
+        worstP = worstL = 0;
+        for (int k = 0; k < 600 * substeps; ++k) {
+            w.step(dt / float(substeps));
             worstP = std::max(worstP, length(momentum(w) - P0) / length(P0));
             worstL = std::max(worstL, length(angularMomentumAboutOrigin(w) - L0) / length(L0));
         }
-        std::printf("  glancing collision: |P| %.4f -> %.4f kg m/s (worst %.1e rel), |L| %.4f -> %.4f kg m^2/s (worst %.1e rel), spins %.2f / %.2f rad/s\n",
-                    length(P0), length(momentum(w)), worstP, length(L0), length(angularMomentumAboutOrigin(w)), worstL, length(w.bodies()[a].angVel),
-                    length(w.bodies()[c].angVel));
-        CHECK(worstP < 1e-4f, "momentum drifts %e", worstP);
-        // The contact impulses cancel exactly (same point, opposite sign); what remains is the
-        // free-rotation integration of the spun boxes - the same 1e-3 seen in part 3 below.
-        CHECK(worstL < 2e-3f, "angular momentum drifts %e", worstL);
-        CHECK(length(w.bodies()[c].angVel) > 0.3f, "the glancing hit must spin the second box (%f rad/s)", length(w.bodies()[c].angVel));
+        spinC = length(w.bodies()[c].angVel);
+    };
+    {
+        float p1, l1, s1, p2, l2, s2;
+        glancing(1, p1, l1, s1);
+        glancing(2, p2, l2, s2);
+        std::printf("  glancing collision: worst |P| drift %.1e / %.1e, worst |L| drift %.1e at dt = 1/600, %.1e at 1/1200 (spin of the hit box %.2f rad/s)\n",
+                    p1, p2, l1, l2, s1);
+        CHECK(p1 < 1e-4f && p2 < 1e-4f, "momentum drifts %e / %e", p1, p2);
+        CHECK(l2 < l1, "angular momentum drift must shrink with the step: %e at dt, %e at dt/2", l1, l2);
+        CHECK(l2 < 2e-3f, "angular momentum drifts %e at dt/2", l2);
+        CHECK(s1 > 0.3f, "the glancing hit must spin the second box (%f rad/s)", s1);
     }
     // 3) Rotation symmetry of a free body: a box spun about its middle axis of inertia flips over
     //    and over (Dzhanibekov / tennis racket) while |L| and the rotational energy stay constant.

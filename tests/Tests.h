@@ -67,6 +67,7 @@ void testCoherence();
 void testDeterminism();
 // validation against published benchmarks (docs/00-vision.md, "Мировые эталоны")
 void testCylinderStrouhal();
+void testNewtonCradle();        // RigidTests.cpp: a row of balls passes a hit on (restitution through the slop zone)
 void testNoetherRigid();        // RigidTests.cpp: energy, momentum, angular momentum of the rigid solver
 void testGridConvergence();     // GasTests.cpp: order of convergence of the gas solver on refined grids
 void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Martin & Moyce 1952
@@ -87,3 +88,6 @@ void testSceneGraphRoundTrip();
 void testMagnetForce();
 void testMagnetsAttract();
 void testGraphSceneBuilds();
+void testGraphCloth();
+void testGraphEmitterFollows();
+void testGraphFlammableCloth();

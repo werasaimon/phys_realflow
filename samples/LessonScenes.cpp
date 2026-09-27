@@ -116,9 +116,6 @@ public:
         // A hit at 0.8 m/s must bounce: below the default threshold (1 m/s) a touch is treated as
         // resting, so the threshold goes down for this lesson.
         sim.rigid.params.restitutionThreshold = 0.2f;
-        // Gaps under the slop (4 mm) count as touching, and a row of "touching" balls behaves like
-        // one lump. No stacks here, so the slop can be small and the 5 mm gaps stay real gaps.
-        sim.rigid.params.slop = 0.0005f;
         sim.vis.showSlice = sim.vis.showStreamlines = false;
     }
     void build(Simulation& sim) override {
