@@ -1,3 +1,6 @@
+// Soft bodies by shape matching (Müller et al. 2005) on overlapping clusters of particles: every
+// cluster pulls its particles towards its best-fit rigid pose; the skin is a mesh bound to the
+// clusters by smooth weights. The data layout is in SoftBody.h.
 #include "particles/SoftBody.h"
 
 namespace rf {

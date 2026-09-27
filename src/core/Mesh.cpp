@@ -1,3 +1,6 @@
+// Triangle meshes and the primitives the scenes are built from: box, sphere, cylinder, cone,
+// torus, wing (NACA), a height field, the teapot and the bunny; loading a mesh from a file, and
+// the geometry helpers (bounds, volume, orientation, subdivision). The class is in Mesh.h.
 #include "core/Mesh.h"
 
 #include <algorithm>
@@ -273,7 +276,11 @@ TriMesh heightfield(float sizeX, float sizeZ, int nx, int nz, const std::functio
     return m;
 }
 
-TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
+// The NACA four-digit airfoil (Abbott & von Doenhoff, "Theory of Wing Sections"): the digits are
+// the maximum camber (% of chord), its position (tenths of chord) and the thickness (% of chord);
+// the camber line and the thickness distribution give the upper (U) and lower (L) surfaces at
+// n + 1 cosine-spaced stations (dense at the leading edge).
+static void nacaProfile(const std::string& code, float chord, int n, std::vector<Vector3>& U, std::vector<Vector3>& L) {
     float mC = 0.02f, pC = 0.4f, tC = 0.12f; // 2412, also for a code that is not four digits
     const bool digits = code.size() == 4 && std::all_of(code.begin(), code.end(), [](char c) { return c >= '0' && c <= '9'; });
     if (digits) {
@@ -282,7 +289,6 @@ TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
         tC = ((code[2] - '0') * 10 + (code[3] - '0')) / 100.0f;
     }
     tC = std::max(tC, 0.01f);
-    std::vector<Vector3> U(n + 1), L(n + 1);
     for (int i = 0; i <= n; ++i) {
         float xi = 0.5f * (1.0f - std::cos(kPi * i / n));
         float yt = (i == 0 || i == n) ? 0.0f : nacaThickness(xi, tC);
@@ -300,6 +306,12 @@ TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
         U[i] = Vector3(xi - yt * std::sin(th), yc + yt * std::cos(th), 0) * chord;
         L[i] = Vector3(xi + yt * std::sin(th), yc - yt * std::cos(th), 0) * chord;
     }
+}
+
+// A straight wing: the airfoil extruded over the span, closed with two end caps.
+TriMesh nacaWing(const std::string& code, float chord, float span, int n) {
+    std::vector<Vector3> U(n + 1), L(n + 1);
+    nacaProfile(code, chord, n, U, L);
     // Closed loop: U0..Un then L(n-1)..L1.
     const int loopN = 2 * n;
     auto loopPt = [&](int k) { return k <= n ? U[k] : L[2 * n - k]; };

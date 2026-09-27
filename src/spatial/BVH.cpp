@@ -1,3 +1,6 @@
+// The static bounding volume hierarchy over triangles or boxes (built once, top-down), and MeshBVH:
+// a triangle mesh with its BVH, the closest point, signed distance and inside test the solvers
+// use for static geometry. See BVH.h.
 #include "spatial/BVH.h"
 
 #include <algorithm>

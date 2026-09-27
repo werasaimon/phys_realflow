@@ -1,3 +1,6 @@
+// Dense matrices of any size for the few places that need them (least squares, eigenvalues of
+// small systems) and solveSmall() for n <= 4 in float without heap allocation, the solver's hot
+// path. Declared in MatrixNxN.h.
 #include "math/MatrixNxN.h"
 
 #include <cmath>

@@ -1,3 +1,6 @@
+// The contact manifolds of the narrow phase: for every pair of shape types the points, normals and
+// depths where they touch - analytic for spheres, SAT plus clipping for boxes, GJK/EPA plus face
+// clipping for convex hulls and triangles. The dispatch table and the overview are in NarrowPhase.h.
 #include "rigid/NarrowPhase.h"
 
 #include "core/Parallel.h"
@@ -241,23 +244,39 @@ bool NarrowPhase::sphereConvex(const PosedShape& A, const PosedShape& B, Contact
 // ---------------------------------------------------------------------------
 // Box-box: separating axis theorem
 // ---------------------------------------------------------------------------
+// Box against box: the separating axis theorem over the 15 candidate axes (3 + 3 face normals,
+// 9 edge cross products) finds the axis of least overlap; a face axis gives a face contact by
+// clipping (Sutherland-Hodgman), an edge axis a single point between the two edges.
 bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifold& m) {
+    BoxAxis best, bestEdge;
+    if (!boxSeparatingAxes(A, B, best, bestEdge)) return false;
+    if (best.kind == 2) {
+        boxEdgeContact(A, B, best, m);
+        return true;
+    }
+    std::vector<ContactPoint>& pts = scratch().boxPoints; // the worker's scratch: no allocation per pair
+    pts.clear();
+    if (!boxFaceContact(A, B, best, pts)) {
+        if (bestEdge.sep != -kInf) { boxEdgeContact(A, B, bestEdge, m); return true; }
+        return false;
+    }
+    reduceManifold(pts, 4);
+    for (auto& p : pts) m.points.push_back(p);
+    return true;
+}
+
+// SAT: project both boxes on every candidate axis; the first axis with a gap larger than the
+// margin separates them (false). Otherwise the axis of least penetration wins, with face axes
+// preferred - another axis must be clearly better - so the manifold stays the same face from
+// step to step (stable stacking). The best edge axis is kept apart as a fallback.
+bool NarrowPhase::boxSeparatingAxes(const PosedShape& A, const PosedShape& B, BoxAxis& best, BoxAxis& bestEdge) {
     const Vector3 hA = static_cast<const BoxShape*>(A.shape)->halfExtents();
     const Vector3 hB = static_cast<const BoxShape*>(B.shape)->halfExtents();
     const Vector3 a[3] = {A.R.col(0), A.R.col(1), A.R.col(2)};
     const Vector3 b[3] = {B.R.col(0), B.R.col(1), B.R.col(2)};
     const Vector3 T = B.p - A.p;
     const float scale = std::min(minComp(hA), minComp(hB));
-
-    enum Kind { FaceA, FaceB, Edge };
-    struct Best {
-        float sep = -kInf;
-        Vector3 axis; // from A towards B
-        Kind kind = FaceA;
-        int i = 0, j = 0;
-    } best, bestEdge;
-
-    auto test = [&](Vector3 L, Kind kind, int i, int j) {
+    auto test = [&](Vector3 L, int kind, int i, int j) {
         float len = length(L);
         if (len < 1e-5f) return true; // parallel edges: axis degenerate, covered by face axes
         L /= len;
@@ -270,38 +289,48 @@ bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifo
         // Face axes are preferred: another axis must be clearly better (stable manifolds).
         const float tol = 0.95f, abs = 0.005f * scale;
         bool better = best.sep == -kInf || sep > tol * best.sep + abs;
-        if (kind == FaceA && best.sep != -kInf) better = sep > best.sep;
+        if (kind == 0 && best.sep != -kInf) better = sep > best.sep;
         if (better) best = {sep, axis, kind, i, j};
-        if (kind == Edge && sep > bestEdge.sep) bestEdge = {sep, axis, kind, i, j};
+        if (kind == 2 && sep > bestEdge.sep) bestEdge = {sep, axis, kind, i, j};
         return true;
     };
     for (int i = 0; i < 3; ++i)
-        if (!test(a[i], FaceA, i, 0)) return false;
+        if (!test(a[i], 0, i, 0)) return false;
     for (int j = 0; j < 3; ++j)
-        if (!test(b[j], FaceB, 0, j)) return false;
+        if (!test(b[j], 1, 0, j)) return false;
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
-            if (!test(cross(a[i], b[j]), Edge, i, j)) return false;
+            if (!test(cross(a[i], b[j]), 2, i, j)) return false;
+    return true;
+}
 
-    auto edgeContact = [&](const Best& e) {
-        const Vector3& L = e.axis;
-        Vector3 pa = A.p, pb = B.p;
-        for (int k = 0; k < 3; ++k) {
-            if (k != e.i) pa += a[k] * (dot(a[k], L) > 0 ? hA[k] : -hA[k]);
-            if (k != e.j) pb += b[k] * (dot(b[k], L) < 0 ? hB[k] : -hB[k]);
-        }
-        Vector3 c1, c2;
-        closestSegmentSegment(pa - a[e.i] * hA[e.i], pa + a[e.i] * hA[e.i], pb - b[e.j] * hB[e.j], pb + b[e.j] * hB[e.j], c1, c2);
-        m.add((c1 + c2) * 0.5f, -L, -e.sep);
-    };
-
-    if (best.kind == Edge) {
-        edgeContact(best);
-        return true;
+// Edge-edge contact on axis e: the two edges are the ones whose supporting corners lie along
+// the axis; the contact point is midway between their closest points.
+void NarrowPhase::boxEdgeContact(const PosedShape& A, const PosedShape& B, const BoxAxis& e, ContactManifold& m) {
+    const Vector3 hA = static_cast<const BoxShape*>(A.shape)->halfExtents();
+    const Vector3 hB = static_cast<const BoxShape*>(B.shape)->halfExtents();
+    const Vector3 a[3] = {A.R.col(0), A.R.col(1), A.R.col(2)};
+    const Vector3 b[3] = {B.R.col(0), B.R.col(1), B.R.col(2)};
+    const Vector3& L = e.axis;
+    Vector3 pa = A.p, pb = B.p;
+    for (int k = 0; k < 3; ++k) {
+        if (k != e.i) pa += a[k] * (dot(a[k], L) > 0 ? hA[k] : -hA[k]);
+        if (k != e.j) pb += b[k] * (dot(b[k], L) < 0 ? hB[k] : -hB[k]);
     }
+    Vector3 c1, c2;
+    closestSegmentSegment(pa - a[e.i] * hA[e.i], pa + a[e.i] * hA[e.i], pb - b[e.j] * hB[e.j], pb + b[e.j] * hB[e.j], c1, c2);
+    m.add((c1 + c2) * 0.5f, -L, -e.sep);
+}
 
-    // Face contact: clip the incident face against the side planes of the reference face.
-    const bool refIsA = best.kind == FaceA;
+// Face contact: the face of the other box most anti-parallel to the reference face normal (the
+// incident face) is clipped against the four side planes of the reference face; the clipped
+// corners below the reference plane (within the margin) are the contact points. False if none.
+bool NarrowPhase::boxFaceContact(const PosedShape& A, const PosedShape& B, const BoxAxis& best, std::vector<ContactPoint>& pts) {
+    const Vector3 hA = static_cast<const BoxShape*>(A.shape)->halfExtents();
+    const Vector3 hB = static_cast<const BoxShape*>(B.shape)->halfExtents();
+    const Vector3 a[3] = {A.R.col(0), A.R.col(1), A.R.col(2)};
+    const Vector3 b[3] = {B.R.col(0), B.R.col(1), B.R.col(2)};
+    const bool refIsA = best.kind == 0;
     const PosedShape& ref = refIsA ? A : B;
     const Vector3* ra = refIsA ? a : b;
     const Vector3* ia = refIsA ? b : a;
@@ -336,19 +365,11 @@ bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifo
 
     Vector3 refCenter = ref.p + n * rh[r];
     const Vector3 nBA = refIsA ? -n : n;
-    std::vector<ContactPoint>& pts = S.boxPoints;
-    pts.clear();
     for (const Vector3& x : poly) {
         float sep = dot(n, x - refCenter);
         if (sep <= margin) pts.push_back({x - n * (0.5f * sep), nBA, -sep});
     }
-    if (pts.empty()) {
-        if (bestEdge.sep != -kInf) { edgeContact(bestEdge); return true; }
-        return false;
-    }
-    reduceManifold(pts, 4);
-    for (auto& p : pts) m.points.push_back(p);
-    return true;
+    return !pts.empty();
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +378,33 @@ bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifo
 // Contact manifold from the supporting faces of both shapes along the contact normal n (from B to A),
 // in the spirit of Jolt's ManifoldBetweenTwoFaces: the incident feature is clipped against the side
 // planes of the reference face and only points below the reference plane are kept.
+// The incident feature (a face, an edge or a vertex) is cut by the side planes of the reference
+// face, one edge of the reference polygon at a time: what sticks out sideways cannot touch.
+void NarrowPhase::clipIncidentFace(const std::vector<Vector3>& ref, const Vector3& refNormal, std::vector<Vector3>& inc,
+                                   std::vector<Vector3>& clipped) {
+    Vector3 c(0.0f);
+    for (const Vector3& r : ref) c += r;
+    c /= float(ref.size());
+    for (size_t i = 0; i < ref.size() && !inc.empty(); ++i) {
+        const Vector3& r0 = ref[i];
+        const Vector3& r1 = ref[(i + 1) % ref.size()];
+        Vector3 side = normalize(cross(r1 - r0, refNormal));
+        if (dot(side, c - r0) > 0) side = -side; // outward side plane
+        float d = dot(side, r0);
+        if (inc.size() >= 3) {
+            clipPolygon(inc, side, d, clipped);
+            inc.swap(clipped);
+        } else if (inc.size() == 2) {
+            float d0 = dot(side, inc[0]) - d, d1 = dot(side, inc[1]) - d;
+            if (d0 > 0 && d1 > 0) inc.clear();
+            else if (d0 > 0) inc[0] = inc[0] + (inc[1] - inc[0]) * (d0 / (d0 - d1));
+            else if (d1 > 0) inc[1] = inc[1] + (inc[0] - inc[1]) * (d1 / (d1 - d0));
+        } else if (dot(side, inc[0]) > d) {
+            inc.clear();
+        }
+    }
+}
+
 bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
     NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
     std::vector<Vector3>&fa = S.fa, &fb = S.fb, &inc = S.inc, &clipped = S.cut;
@@ -387,28 +435,7 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
     inc = refIsB ? fa : fb;
     Vector3 nr = faceNormal(ref);
     if (dot(nr, refIsB ? n : -n) < 0) nr = -nr; // reference normal pointing towards the other shape
-    Vector3 c(0.0f);
-    for (const Vector3& r : ref) c += r;
-    c /= float(ref.size());
-
-    for (size_t i = 0; i < ref.size() && !inc.empty(); ++i) {
-        const Vector3& r0 = ref[i];
-        const Vector3& r1 = ref[(i + 1) % ref.size()];
-        Vector3 side = normalize(cross(r1 - r0, nr));
-        if (dot(side, c - r0) > 0) side = -side; // outward side plane
-        float d = dot(side, r0);
-        if (inc.size() >= 3) {
-            clipPolygon(inc, side, d, clipped);
-            inc.swap(clipped);
-        } else if (inc.size() == 2) {
-            float d0 = dot(side, inc[0]) - d, d1 = dot(side, inc[1]) - d;
-            if (d0 > 0 && d1 > 0) inc.clear();
-            else if (d0 > 0) inc[0] = inc[0] + (inc[1] - inc[0]) * (d0 / (d0 - d1));
-            else if (d1 > 0) inc[1] = inc[1] + (inc[0] - inc[1]) * (d1 / (d1 - d0));
-        } else if (dot(side, inc[0]) > d) {
-            inc.clear();
-        }
-    }
+    clipIncidentFace(ref, nr, inc, clipped);
     // Depth of every clipped point along the contact normal n, from the other shape's supporting
     // plane along n (not along the reference face's own normal, which may differ by up to ~25 deg):
     // then the deepest point is exactly the EPA penetration, and all depths agree with n.
@@ -452,8 +479,18 @@ bool NarrowPhase::convexConvex(const PosedShape& A, const PosedShape& B, Contact
         m.points.push_back(single);
         return true;
     }
-
     // 2) Fallback for vertex contacts: perturbation method (Bullet) around the EPA normal.
+    perturbationManifold(A, B, n, pts);
+    reduceManifold(pts, 4);
+    for (auto& p : pts) m.points.push_back(p);
+    return true;
+}
+
+// Perturbation manifold (Bullet's btPerturbedContactResult): the smaller shape is tilted by a
+// small angle around four directions perpendicular to the normal and the penetration is found
+// again each time; the points that come back close to the normal, un-tilted, are the corners of
+// the contact patch a single GJK/EPA query cannot see.
+void NarrowPhase::perturbationManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
     bool perturbA = B.shape->type() == ShapeType::Triangle ||
                     (A.shape->type() != ShapeType::Triangle && A.shape->boundingRadius() <= B.shape->boundingRadius());
     const PosedShape& P = perturbA ? A : B;
@@ -481,9 +518,6 @@ bool NarrowPhase::convexConvex(const PosedShape& A, const PosedShape& B, Contact
         for (const ContactPoint& c : pts) dup |= length(c.position - pos) < mergeDist;
         if (!dup) pts.push_back({pos, n, depth});
     }
-    reduceManifold(pts, 4);
-    for (auto& p : pts) m.points.push_back(p);
-    return true;
 }
 
 } // namespace rf

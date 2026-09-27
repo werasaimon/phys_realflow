@@ -79,11 +79,14 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
             acc[k] = std::max(old + (target - vn) / kk, 0.0f);
             applyImpulse(ui, p.normal * ((acc[k] - old) * s), p.position);
         }
+    if (shockFrictionPass_) dragAlongSupport(m, U, upperIsA, acc, np);
+}
 
-    // Friction in the same one-directional pass: the upper body is dragged along by (or held on)
-    // its frozen support up to the Coulomb limit, so a sideways pull reaches the top of a column in
-    // one sweep instead of one level per iteration (which shears a stack into a "staircase").
-    if (!shockFrictionPass_) return;
+// Friction in the same one-directional pass: the upper body is dragged along by (or held on) its
+// frozen support up to the Coulomb limit, so a sideways pull reaches the top of a column in one
+// sweep instead of one level per iteration (which shears a stack into a "staircase"). `acc` are
+// the normal impulses this pass just applied on top of the manifold's own.
+void RigidWorld::dragAlongSupport(Manifold& m, RigidBody& U, bool upperIsA, const float* acc, int np) {
     float normalTotal = 0;
     Vector3 c(0.0f), nrm(0.0f);
     for (int k = 0; k < np; ++k) {

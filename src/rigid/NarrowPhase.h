@@ -53,6 +53,21 @@ public:
 private:
     static constexpr int kTypes = 5; // Compound is dispatched part by part before the table
     Algorithm table_[kTypes][kTypes] = {};
+
+    // The steps of boxBox(): the best separating axis of the 15 (SAT), and the contact it gives.
+    struct BoxAxis {
+        float sep = -kInf; // separation along the axis (negative: overlap)
+        Vector3 axis;      // from A towards B
+        int kind = 0;      // 0: a face of A, 1: a face of B, 2: an edge of A against an edge of B
+        int i = 0, j = 0;  // the face / edge indices
+    };
+    static bool boxSeparatingAxes(const PosedShape& A, const PosedShape& B, BoxAxis& best, BoxAxis& bestEdge);
+    static void boxEdgeContact(const PosedShape& A, const PosedShape& B, const BoxAxis& e, ContactManifold& m);
+    static bool boxFaceContact(const PosedShape& A, const PosedShape& B, const BoxAxis& best, std::vector<ContactPoint>& pts);
+    // The steps of faceManifold() and convexConvex().
+    static void clipIncidentFace(const std::vector<Vector3>& ref, const Vector3& refNormal, std::vector<Vector3>& inc,
+                                 std::vector<Vector3>& clipped);
+    static void perturbationManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts);
 };
 
 } // namespace rf

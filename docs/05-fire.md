@@ -57,7 +57,7 @@ $$
 - Ячейка, богатая топливом, горит **только так быстро, как в неё подмешивается свежий воздух**, и никогда не нагревается выше адиабатической температуры пламени: $H$ = `heatRelease` = 1800 K над окружающим воздухом.
 - $e$ — скорость расширения сгоревшего газа [1/с]. Она входит в правую часть уравнения давления как источник дивергенции ($\nabla\cdot\mathbf u = e$, гл. 4.5). Расширение выталкивает пламя наружу и заставляет его клубиться.
 
-[src/gas/Combustion.cpp:19](../src/gas/Combustion.cpp#L19)
+[src/gas/Combustion.cpp:22](../src/gas/Combustion.cpp#L22)
 ```cpp
 for (int c = b; c < e; ++c) {
     expansionRate[c] = 0;
@@ -225,7 +225,7 @@ $$
 T_{heated} = T_g + \frac{R}{hA_2} + \left(T - T_g - \frac{R}{hA_2}\right)e^{-hA_2\Delta t/C}.
 $$
 
-[src/particles/Cloth.cpp:299](../src/particles/Cloth.cpp#L299)
+[src/particles/Cloth.cpp:302](../src/particles/Cloth.cpp#L302)
 ```cpp
 const float Tabs = T + T0;
 const float radiation = m.emissivity * area * (irradiance[k] - 2.0f * sigma * (Tabs * Tabs * Tabs * Tabs - T0 * T0 * T0 * T0));
@@ -252,7 +252,7 @@ $$
 
 $g$ монотонно растёт, $g(T_{heated}) \ge 0$, а при $T_{end} = T_{heated} - H_p m_v/C$ (всё разложилось) $g \le 0$. Корень ищется **бисекцией**, 30 шагов:
 
-[src/particles/Cloth.cpp:309](../src/particles/Cloth.cpp#L309)
+[src/particles/Cloth.cpp:312](../src/particles/Cloth.cpp#L312)
 ```cpp
 const float volatileMass = freshMass * (1.0f - m.charMassFraction) * unburnt; // [kg] left to decompose
 float decomposed = 0;                                                         // fraction of `unburnt`

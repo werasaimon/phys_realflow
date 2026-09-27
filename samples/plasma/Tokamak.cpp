@@ -1,3 +1,6 @@
+// The tokamak as a device: the coils' potentials (toroidal and vertical field), the plasma
+// current's potential from exact current loops, the vessel, the equilibrium shift, the kink limits
+// and the diagnostics measured on the grid. The physics is explained in Tokamak.h.
 #include "samples/plasma/Tokamak.h"
 
 #include <cmath>

@@ -18,6 +18,7 @@ enum class Preset {
     TunnelSphere, TunnelCylinder, TunnelWing, TunnelStreamlined, TunnelCube, SmokePlume, SmokeSphere,
     RigidFalling, RigidGranular, RigidPyramid, RigidConvex, RigidTower, RigidJoints, RigidCcd, RigidTeapots,
     SmokeBodies, SoftCloth, GasSoftCloth, Hydro, Fire, Water, Magnetosphere, Tokamak, Terrain,
+    Dzhanibekov, NewtonCradle, GalileoTower, // lessons: one law each, its number next to the theory
     Count
 };
 
@@ -44,5 +45,6 @@ void addSoftBodySamples(std::vector<SampleEntry>& out);    // SoftBodyScenes.cpp
 void addHydroSamples(std::vector<SampleEntry>& out);       // HydroScene.cpp
 void addFireSamples(std::vector<SampleEntry>& out);        // FireScene.cpp
 void addPlasmaSamples(std::vector<SampleEntry>& out);      // plasma/MagnetosphereScene.cpp, plasma/TokamakScene.cpp
+void addLessonSamples(std::vector<SampleEntry>& out);      // LessonScenes.cpp: Dzhanibekov, Newton's cradle, Galileo
 
 } // namespace rf

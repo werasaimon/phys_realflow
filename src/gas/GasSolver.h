@@ -220,6 +220,38 @@ private:
     void computeDiagnostics();
     void injectSources();
     void computeDiag();
+    // The steps of reset() (GasSolver.cpp).
+    void chooseGrid();
+    void allocateFields();
+    void voxelizeStaticObstacle(const MeshBVH* obstacle);
+    void measureObstacle();
+    void findStaticWallCells();
+    // The steps of step() (GasSolver.cpp).
+    float chooseTimeStep(float maxDt);
+    void advectAll(float dt);
+    void burn(float dt);
+    void applyForces(float dt);
+    void induceMagneticField(float dt);
+    void reportStep(float dt) const;
+    void dissipateScalars(float dt);
+    void averageCoefficients(float dt);
+    // The steps of project() (PressureSolver.cpp).
+    void buildPressureRightHandSide(float dt);
+    void removeMeanDivergence();
+    void buildWeightedDiagonal(bool weighted);
+    void solvePressurePcg(bool weighted);
+    void applyPressureMatrix(const std::vector<double>& x, std::vector<double>& out, bool weighted) const;
+    void subtractPressureGradient(bool weighted);
+    double faceWeightU(int i, int j, int k, bool weighted) const;
+    double faceWeightV(int i, int j, int k, bool weighted) const;
+    double faceWeightW(int i, int j, int k, bool weighted) const;
+    // The steps of voxelizeMovingSolids() and applyWallFriction() (MovingSolids.cpp).
+    void collectSolidCells(std::vector<std::vector<size_t>>& cells);
+    void markSolidCells(const std::vector<std::vector<size_t>>& cells, std::vector<size_t>& entered, bool& changed);
+    void pushScalarsOutOfSolids(const std::vector<size_t>& entered);
+    void collectWallCells(std::vector<size_t>& wallCells);
+    struct WallFrictionChange { int comp; size_t face; float dv; }; // a velocity change of one face
+    void rubWallCell(size_t c, float dt, std::vector<WallFrictionChange>& changes);
     // The 8 cell centres around a world point with trilinear weights, gas cells only (weights
     // renormalised). If none of them is gas, the nearest gas cell within 2 cells (weight 1).
     int fluidStencil(const Vector3& world, size_t cells[8], float weights[8]) const;

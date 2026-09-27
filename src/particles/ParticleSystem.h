@@ -216,6 +216,11 @@ private:
     std::vector<float> contactDepth_;                   // penetration when found
     std::vector<Vector3> bodyShift_, bodyTurn_;
     void solveBodyContacts(float dt); // after a collision pass
+    // The steps of step() (ParticleSystem.cpp).
+    void beginStep(int n);
+    void predictPositions(float dt);
+    void solveIteration(int it, bool solids, float dt);
+    void finishStep(float dt);
 
     const MeshBVH* mesh_ = nullptr;
     RigidWorld* rigid_ = nullptr;

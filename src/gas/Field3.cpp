@@ -1,3 +1,5 @@
+// A scalar field on the grid (cell centres or faces): storage, trilinear sampling at a point and
+// the index arithmetic. The velocity components and every scalar of the gas are Field3s (Field3.h).
 #include "gas/Field3.h"
 
 #include <algorithm>

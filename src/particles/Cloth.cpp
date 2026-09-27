@@ -1,3 +1,6 @@
+// Cloth as a grid of particles with distance constraints (XPBD): stretching along warp and weft,
+// bending, tethers, tearing along threads and seams when a thread is overstretched, and burning.
+// The material and the data layout are in Cloth.h.
 #include "particles/Cloth.h"
 
 #include "core/Parallel.h"

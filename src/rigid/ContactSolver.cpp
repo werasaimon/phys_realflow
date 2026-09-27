@@ -40,77 +40,86 @@ void RigidWorld::addManifold(std::vector<Manifold>& out, int a, int b, ContactMa
     out.push_back(std::move(m));
 }
 
+// Contacts of one body with the static environment: the six domain walls and the static triangle
+// mesh (a terrain, a vessel). Static bodies never collide with it.
 void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
+    if (bodies_[i].invMass == 0) return;
+    if (params.collideWithDomain) collideWalls(i, out);
+    if (mesh_ && !mesh_->empty()) collideStaticMesh(i, out);
+}
+
+// Domain walls: one manifold per plane (static ids -1 .. -6). A sphere touches a wall at one
+// point; a box, hull or compound at every vertex within the contact margin of the plane.
+void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
     const RigidBody& body = bodies_[i];
-    if (body.invMass == 0) return;
     const PosedShape ps = body.posed();
-
-    // Domain walls: one manifold per plane (static ids -1 .. -6).
-    if (params.collideWithDomain) {
-        const Vector3 normals[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-        const Vector3 points[6] = {domain_.lo, domain_.hi, domain_.lo, domain_.hi, domain_.lo, domain_.hi};
-        // The worker's scratch, kept between calls: no allocation per body and wall.
-        CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
-        std::vector<Vector3>& verts = S.verts;
-        ContactManifold& wallContacts = S.wall;
-        verts.clear();
-        if (body.type() == ShapeType::Box) {
-            Vector3 h = body.halfExtents();
-            for (int k = 0; k < 8; ++k)
-                verts.push_back(ps.p + ps.R * Vector3((k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z));
-        } else if (body.type() == ShapeType::ConvexHull) {
-            for (const Vector3& v : static_cast<const ConvexHullShape*>(body.shape.get())->vertices()) verts.push_back(ps.p + ps.R * v);
-        } else if (body.type() == ShapeType::Compound) {
-            for (const auto& c : static_cast<const CompoundShape*>(body.shape.get())->children())
-                for (const Vector3& v : c.shape->vertices()) verts.push_back(ps.p + ps.R * (c.R * v + c.t));
-        }
-        for (int w = 0; w < 6; ++w) {
-            const Vector3& n = normals[w];
-            // Early out with the support point along -n.
-            const float margin = params.contactMargin;
-            if (dot(ps.support(-n) - points[w], n) >= margin) continue;
-            ContactManifold& cm = wallContacts;
-            cm.points.clear();
-            if (body.type() == ShapeType::Sphere) {
-                float d = dot(body.pos - points[w], n) - body.radius();
-                cm.add(body.pos - n * (body.radius() + 0.5f * d), n, -d);
-            } else {
-                for (const Vector3& v : verts) {
-                    float d = dot(v - points[w], n);
-                    if (d < margin) cm.add(v - n * (0.5f * d), n, -d);
-                }
-            }
-            addManifold(out, i, -1 - w, cm);
-        }
+    const Vector3 normals[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    const Vector3 points[6] = {domain_.lo, domain_.hi, domain_.lo, domain_.hi, domain_.lo, domain_.hi};
+    // The worker's scratch, kept between calls: no allocation per body and wall.
+    CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
+    std::vector<Vector3>& verts = S.verts;
+    ContactManifold& wallContacts = S.wall;
+    verts.clear();
+    if (body.type() == ShapeType::Box) {
+        Vector3 h = body.halfExtents();
+        for (int k = 0; k < 8; ++k)
+            verts.push_back(ps.p + ps.R * Vector3((k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z));
+    } else if (body.type() == ShapeType::ConvexHull) {
+        for (const Vector3& v : static_cast<const ConvexHullShape*>(body.shape.get())->vertices()) verts.push_back(ps.p + ps.R * v);
+    } else if (body.type() == ShapeType::Compound) {
+        for (const auto& c : static_cast<const CompoundShape*>(body.shape.get())->children())
+            for (const Vector3& v : c.shape->vertices()) verts.push_back(ps.p + ps.R * (c.R * v + c.t));
     }
-
-    // Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7). The query box
-    // is widened by the contact margin, as for walls and body pairs: speculative contacts.
-    if (mesh_ && !mesh_->empty()) {
-        AABB bb = body.worldBounds();
-        bb.lo -= Vector3(params.contactMargin);
-        bb.hi += Vector3(params.contactMargin);
-        if (!mesh_->bounds().overlaps(bb)) return;
-        // A terrain sends thousands of candidate triangles per step: the two manifolds are the
-        // worker's scratch, cleared, never reallocated.
-        CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
-        ContactManifold &meshContacts = S.mesh, &triangleContacts = S.triangle;
-        ContactManifold& cm = meshContacts;
+    for (int w = 0; w < 6; ++w) {
+        const Vector3& n = normals[w];
+        // Early out with the support point along -n.
+        const float margin = params.contactMargin;
+        if (dot(ps.support(-n) - points[w], n) >= margin) continue;
+        ContactManifold& cm = wallContacts;
         cm.points.clear();
-        mesh_->bvh().queryAABB(bb, [&](uint32_t t) {
-            Vector3 a, b, c;
-            mesh_->triangle(t, a, b, c);
-            TriangleShape tri(a, b, c);
-            PosedShape pt{&tri, Matrix3x3(), Vector3(0.0f)};
-            ContactManifold& local = triangleContacts;
-            local.points.clear();
-            if (!narrow_.collide(ps, pt, local)) return;
-            const Vector3& fn = mesh_->faceNormal(t);
-            for (const ContactPoint& p : local.points)
-                if (dot(p.normal, fn) > 0.2f) cm.points.push_back(p); // one-sided: never pull through the surface
-        });
-        addManifold(out, i, -7, cm);
+        if (body.type() == ShapeType::Sphere) {
+            float d = dot(body.pos - points[w], n) - body.radius();
+            cm.add(body.pos - n * (body.radius() + 0.5f * d), n, -d);
+        } else {
+            for (const Vector3& v : verts) {
+                float d = dot(v - points[w], n);
+                if (d < margin) cm.add(v - n * (0.5f * d), n, -d);
+            }
+        }
+        addManifold(out, i, -1 - w, cm);
     }
+}
+
+// Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7). The query box
+// is widened by the contact margin, as for walls and body pairs: speculative contacts. The mesh
+// is one-sided: a contact normal pointing against the face normal would pull the body through
+// the surface and is dropped.
+void RigidWorld::collideStaticMesh(int i, std::vector<Manifold>& out) const {
+    const RigidBody& body = bodies_[i];
+    const PosedShape ps = body.posed();
+    AABB bb = body.worldBounds();
+    bb.lo -= Vector3(params.contactMargin);
+    bb.hi += Vector3(params.contactMargin);
+    if (!mesh_->bounds().overlaps(bb)) return;
+    // A terrain sends thousands of candidate triangles per step: the two manifolds are the
+    // worker's scratch, cleared, never reallocated.
+    CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
+    ContactManifold &meshContacts = S.mesh, &triangleContacts = S.triangle;
+    ContactManifold& cm = meshContacts;
+    cm.points.clear();
+    mesh_->bvh().queryAABB(bb, [&](uint32_t t) {
+        Vector3 a, b, c;
+        mesh_->triangle(t, a, b, c);
+        TriangleShape tri(a, b, c);
+        PosedShape pt{&tri, Matrix3x3(), Vector3(0.0f)};
+        ContactManifold& local = triangleContacts;
+        local.points.clear();
+        if (!narrow_.collide(ps, pt, local)) return;
+        const Vector3& fn = mesh_->faceNormal(t);
+        for (const ContactPoint& p : local.points)
+            if (dot(p.normal, fn) > 0.2f) cm.points.push_back(p); // one-sided: never pull through the surface
+    });
+    addManifold(out, i, -7, cm);
 }
 
 void RigidWorld::collide() {
@@ -223,14 +232,29 @@ void RigidWorld::buildColors() {
     // an allocation next step).
 }
 
+// One manifold before the iterations: what every contact point needs (effective mass, bias,
+// bounce), the friction patch, the coupling matrix of the points, the rotational lock, and the
+// warm start from last step's impulses. Each part is a step below.
 void RigidWorld::prepareManifold(Manifold& m, float dt) {
-    RigidBody& A = bodies_[m.a];
-    RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+    const RigidBody& A = bodies_[m.a];
     auto oldIt = params.warmStarting ? cache_.find(key(m.a, m.b)) : cache_.end();
     const CachedPair* old = oldIt != cache_.end() ? &oldIt->second : nullptr;
     const float cell = contactCell(A);
+    prepareContactPoints(m, dt);
+    prepareFrictionPatch(m);
+    prepareNormalMassMatrix(m);
+    prepareRotationalLock(m, old);
+    if (!old) return;
+    warmStartManifold(m, *old, cell);
+}
 
-    // --- Normal constraints per point ------------------------------------------------------
+// Every point of the manifold as one normal constraint: its effective mass along the normal, the
+// target velocity of a speculative gap or the Baumgarte push of a penetration, and whether the
+// touch is an impact that should bounce (the bounce itself is applied later by applyRestitution).
+// The centre and mean normal of the patch are accumulated on the way.
+void RigidWorld::prepareContactPoints(Manifold& m, float dt) {
+    RigidBody& A = bodies_[m.a];
+    RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     m.center = Vector3(0.0f);
     m.normal = Vector3(0.0f);
     for (SolverPoint& p : m.points) {
@@ -271,6 +295,15 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
         }
         p.jn = p.jp = 0;
     }
+}
+
+// Friction is solved once per manifold at the centre of the contact patch (ReactPhysics3D): the
+// mean normal, two tangents, the patch radius (lever of the twist), the effective masses along
+// the tangents and about the normal, and the rolling mass; the friction impulses start at zero
+// (the warm start refills them).
+void RigidWorld::prepareFrictionPatch(Manifold& m) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     const float np = float(m.points.size());
     m.center /= np;
     m.normal = normalize(m.normal);
@@ -297,8 +330,14 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
     m.jt1 = m.jt2 = m.jtwist = 0;
     m.jroll = Vector3(0.0f);
     m.jlock = Vector3(0.0f);
+}
 
-    // Effective-mass matrix of the normal constraints: K_ij = J_i M^-1 J_j^T.
+// Effective-mass matrix of the normal constraints, K_ij = J_i M^-1 J_j^T: how an impulse at point j
+// changes the normal velocity at point i through the two bodies. The block solver needs the
+// whole matrix to load the (<= 4) points of a face contact together.
+void RigidWorld::prepareNormalMassMatrix(Manifold& m) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     const int npt = std::min<int>(int(m.points.size()), 4);
     for (int i = 0; i < npt; ++i)
         for (int j = 0; j < npt; ++j) {
@@ -314,10 +353,15 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
             }
             m.K[i][j] = k;
         }
+}
 
-    // Rotational lock: a face contact (>= 3 points) that is (nearly) at rest relative to the other
-    // body keeps its relative orientation qB^-1 qA. The error E = q_rel q_ref^-1 lives on SO(3); its
-    // logarithm (a rotation vector in B's frame) drives an angular constraint like a fixed joint.
+// Rotational lock: a face contact (>= 3 points) that is (nearly) at rest relative to the other
+// body keeps its relative orientation qB^-1 qA. The error E = q_rel q_ref^-1 lives on SO(3); its
+// logarithm (a rotation vector in B's frame) drives an angular constraint like a fixed joint. A
+// lock from the last step is kept (old) until a real relative rotation shows up.
+void RigidWorld::prepareRotationalLock(Manifold& m, const CachedPair* old) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     const Quaternion qB = B ? B->rot : Quaternion();
     const Quaternion qRel = qB.conjugate() * A.rot;
     m.locked = false;
@@ -336,21 +380,26 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
             if (length(m.lockError) > 0.2f) m.locked = false; // really rotating: release the lock
         }
     }
-    if (!old) return;
+}
 
-    // --- Warm start -------------------------------------------------------------------------------
-    // Normal: matched points (same position hash / nearest) inherit their impulse. When the
-    // contact configuration changed (e.g. 4 corners -> 2 edge points) the unmatched new points
-    // share what is left of last step's total, and the total is preserved, so support is neither
-    // lost nor doubled when points appear, vanish or jump.
+// Warm start (Catto): last step's impulses are applied again before the iterations, so a resting
+// stack starts every step already carrying its weight. Normal: matched points (same position hash
+// / nearest) inherit their impulse. When the contact configuration changed (e.g. 4 corners -> 2
+// edge points) the unmatched new points share what is left of last step's total, and the total is
+// preserved, so support is neither lost nor doubled when points appear, vanish or jump. Friction
+// lives on the manifold: independent of how the individual points moved.
+void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cell) {
+    RigidBody& A = bodies_[m.a];
+    RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+    const Vector3& n = m.normal;
     float oldTotal = 0;
-    for (const SolverPoint& q : old->points) oldTotal += q.jn;
+    for (const SolverPoint& q : old.points) oldTotal += q.jn;
     float matched = 0;
     int unmatched = 0;
     char hit[8] = {0}; // addManifold keeps <= 4 points
     for (int k = 0; k < m.points.size() && k < 8; ++k) {
         SolverPoint& p = m.points[k];
-        if (const SolverPoint* q = findCached(old->points, p, cell)) {
+        if (const SolverPoint* q = findCached(old.points, p, cell)) {
             p.jn = q->jn;
             matched += q->jn;
             hit[k] = 1;
@@ -375,11 +424,11 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
         if (B) applyImpulse(m.b, -p.normal * p.jn, p.position);
     }
     // Friction lives on the manifold: independent of how the individual points moved.
-    m.jt1 = dot(old->friction, m.t1);
-    m.jt2 = dot(old->friction, m.t2);
-    m.jtwist = old->twist;
-    m.jroll = old->roll;
-    if (m.locked && old->locked) m.jlock = old->lock;
+    m.jt1 = dot(old.friction, m.t1);
+    m.jt2 = dot(old.friction, m.t2);
+    m.jtwist = old.twist;
+    m.jroll = old.roll;
+    if (m.locked && old.locked) m.jlock = old.lock;
     Vector3 J = m.t1 * m.jt1 + m.t2 * m.jt2;
     applyImpulse(m.a, J, m.center);
     if (B) applyImpulse(m.b, -J, m.center);
@@ -393,37 +442,22 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
 // the manifold are found together as the exact solution of the small LCP by enumerating active
 // sets, largest first. A small CFM on the diagonal makes 4 coplanar points (rank-3 K) well posed
 // and selects the minimum-energy, i.e. symmetric, load distribution.
-void RigidWorld::blockNormalSolve(Manifold& m) {
-    RigidBody& A = bodies_[m.a];
-    RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
-    const int n = int(m.points.size());
-    float a[4], b[4], Kc[4][4];
-    float trace = 0;
-    for (int i = 0; i < n; ++i) trace += m.K[i][i];
-    const float cfm = params.blockCfm * trace / float(n);
-    for (int i = 0; i < n; ++i) {
-        const SolverPoint& p = m.points[i];
-        a[i] = p.jn;
-        Vector3 v = A.velocityAt(p.position) - (B ? B->velocityAt(p.position) : Vector3(0.0f));
-        b[i] = dot(v, p.normal) - p.velocityBias;
-        for (int j = 0; j < n; ++j) Kc[i][j] = m.K[i][j] + (i == j ? cfm : 0.0f);
-    }
-    // Incremental form: v(x) = K (x - a) + v0  ->  K x + (v0 - K a).
-    float bb[4];
-    for (int i = 0; i < n; ++i) {
-        bb[i] = b[i];
-        for (int j = 0; j < n; ++j) bb[i] -= m.K[i][j] * a[j];
-    }
-    // Total enumeration of active sets (exact for <= 4 points). K + cfm I is positive definite, so
-    // the LCP solution is unique and the search order only affects speed: first x = 0 (the whole
-    // manifold separates - common for speculative points), then the active set of the previous
-    // iteration (it rarely changes between iterations), then all sets, largest first.
-    float xBest[4] = {0, 0, 0, 0};
-    auto tryMask = [&](int mask) {
+// The small LCP of one manifold: K x + b >= 0, x >= 0, x^T (K x + b) = 0 for the (<= 4) normal
+// impulses x. An active set is a guess of which points push (x > 0); the guess is right when the
+// pushing points end at zero normal velocity and the others are not being pulled into contact.
+namespace {
+struct ContactLcp {
+    int n = 0;
+    float bb[4];     // the velocities the points would have with no impulse at all
+    float Kc[4][4];  // the effective-mass matrix with the CFM on its diagonal
+    float x[4] = {0, 0, 0, 0}; // the solution found by the last successful tryActiveSet
+
+    // Solves the points of `mask` as equalities and checks the complementarity of the rest.
+    bool tryActiveSet(int mask) {
         int idx[4], k = 0;
         for (int i = 0; i < n; ++i)
             if (mask & (1 << i)) idx[k++] = i;
-        float x[4] = {0, 0, 0, 0};
+        float xs4[4] = {0, 0, 0, 0};
         if (k > 0) {
             float Ms[4][4], rs[4], xs[4];
             for (int i = 0; i < k; ++i) {
@@ -433,32 +467,60 @@ void RigidWorld::blockNormalSolve(Manifold& m) {
             if (!solveSmall(k, Ms, rs, xs)) return false;
             for (int i = 0; i < k; ++i)
                 if (xs[i] < 0.0f) return false;
-            for (int i = 0; i < k; ++i) x[idx[i]] = xs[i];
+            for (int i = 0; i < k; ++i) xs4[idx[i]] = xs[i];
         }
         for (int i = 0; i < n; ++i) {
             if (mask & (1 << i)) continue;
             float w = bb[i];
-            for (int j = 0; j < n; ++j) w += Kc[i][j] * x[j];
+            for (int j = 0; j < n; ++j) w += Kc[i][j] * xs4[j];
             if (w < -1e-5f) return false;
         }
-        for (int i = 0; i < n; ++i) xBest[i] = x[i];
+        for (int i = 0; i < n; ++i) x[i] = xs4[i];
         return true;
-    };
+    }
+};
+} // namespace
+
+void RigidWorld::blockNormalSolve(Manifold& m) {
+    RigidBody& A = bodies_[m.a];
+    RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+    ContactLcp lcp;
+    const int n = lcp.n = int(m.points.size());
+    float a[4], b[4];
+    float trace = 0;
+    for (int i = 0; i < n; ++i) trace += m.K[i][i];
+    const float cfm = params.blockCfm * trace / float(n);
+    for (int i = 0; i < n; ++i) {
+        const SolverPoint& p = m.points[i];
+        a[i] = p.jn;
+        Vector3 v = A.velocityAt(p.position) - (B ? B->velocityAt(p.position) : Vector3(0.0f));
+        b[i] = dot(v, p.normal) - p.velocityBias;
+        for (int j = 0; j < n; ++j) lcp.Kc[i][j] = m.K[i][j] + (i == j ? cfm : 0.0f);
+    }
+    // Incremental form: v(x) = K (x - a) + v0  ->  K x + (v0 - K a).
+    for (int i = 0; i < n; ++i) {
+        lcp.bb[i] = b[i];
+        for (int j = 0; j < n; ++j) lcp.bb[i] -= m.K[i][j] * a[j];
+    }
+    // Total enumeration of active sets (exact for <= 4 points). K + cfm I is positive definite, so
+    // the LCP solution is unique and the search order only affects speed: first x = 0 (the whole
+    // manifold separates - common for speculative points), then the active set of the previous
+    // iteration (it rarely changes between iterations), then all sets, largest first.
     const int full = (1 << n) - 1;
-    bool found = tryMask(0);
+    bool found = lcp.tryActiveSet(0);
     int foundMask = 0;
-    if (!found && m.activeSet > 0 && m.activeSet <= full && tryMask(m.activeSet)) found = true, foundMask = m.activeSet;
+    if (!found && m.activeSet > 0 && m.activeSet <= full && lcp.tryActiveSet(m.activeSet)) found = true, foundMask = m.activeSet;
     for (int size = n; size >= 1 && !found; --size)
         for (int mask = full; mask >= 1 && !found; --mask) {
             if (int(std::bitset<32>(unsigned(mask)).count()) != size || mask == m.activeSet) continue;
-            if (tryMask(mask)) found = true, foundMask = mask;
+            if (lcp.tryActiveSet(mask)) found = true, foundMask = mask;
         }
     if (found) m.activeSet = foundMask;
-    // No valid active set (numerical corner case): x = 0.
+    // No valid active set (numerical corner case): x = 0. Apply the change of every impulse.
     for (int i = 0; i < n; ++i) {
         SolverPoint& p = m.points[i];
-        float d = xBest[i] - p.jn;
-        p.jn = xBest[i];
+        float d = lcp.x[i] - p.jn;
+        p.jn = lcp.x[i];
         if (d == 0) continue;
         applyImpulse(m.a, p.normal * d, p.position);
         if (B) applyImpulse(m.b, -p.normal * d, p.position);
@@ -514,36 +576,64 @@ void RigidWorld::applyRestitution() {
     }
 }
 
+// One Gauss-Seidel visit of a manifold: the normal impulses (no penetration), the split impulse
+// (penetration recovery on the pseudo velocities), then the friction of the patch limited by the
+// normal load just found.
 void RigidWorld::solveManifold(Manifold& m) {
+    const float total = solveNormalImpulses(m);
+    solveSplitImpulse(m);
+    solveFriction(m, total);
+}
+
+// Velocity of A relative to B at a point of the pair (B static: A's velocity).
+Vector3 RigidWorld::relativeVelocity(const Manifold& m, const Vector3& point) const {
+    const RigidBody& A = bodies_[m.a];
+    return A.velocityAt(point) - (m.b >= 0 ? bodies_[m.b].velocityAt(point) : Vector3(0.0f));
+}
+
+// An impulse J on A at a point, and -J on B (Newton's third law).
+void RigidWorld::applyPairImpulse(const Manifold& m, const Vector3& J, const Vector3& point) {
+    applyImpulse(m.a, J, point);
+    if (m.b >= 0) applyImpulse(m.b, -J, point);
+}
+
+// A pure angular impulse L on A and -L on B (twist, rolling, the rotational lock).
+void RigidWorld::applyPairAngularImpulse(const Manifold& m, const Vector3& L) {
     RigidBody& A = bodies_[m.a];
     RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
-    auto relVel = [&](const Vector3& p) { return A.velocityAt(p) - (B ? B->velocityAt(p) : Vector3(0.0f)); };
-    auto apply = [&](const Vector3& J, const Vector3& p) {
-        applyImpulse(m.a, J, p);
-        if (B) applyImpulse(m.b, -J, p);
-    };
-    auto applyAngular = [&](const Vector3& L) {
-        if (A.invMass > 0) A.angVel += A.applyInvInertiaWorld(L);
-        if (B && B->invMass > 0) B->angVel -= B->applyInvInertiaWorld(L);
-    };
-    // Normal impulses of the manifold as one block: the (<= 4) points are relaxed together until
-    // they agree, instead of letting whichever corner is solved first take the whole load (which
-    // makes boxes landing flat start to rock).
-    float total = 0;
+    if (A.invMass > 0) A.angVel += A.applyInvInertiaWorld(L);
+    if (B && B->invMass > 0) B->angVel -= B->applyInvInertiaWorld(L);
+}
+
+// Normal impulses of the manifold as one block: the (<= 4) points are relaxed together until they
+// agree, instead of letting whichever corner is solved first take the whole load (which makes
+// boxes landing flat start to rock). Points that cannot form a block (one point, or the block
+// solver off) are relaxed one after another. Returns the total normal impulse - the load that
+// limits the friction.
+float RigidWorld::solveNormalImpulses(Manifold& m) {
     if (params.blockSolver && m.points.size() >= 2 && m.points.size() <= 4) {
         blockNormalSolve(m);
     } else {
         const int localIters = m.points.size() > 1 ? params.manifoldIterations : 1; // one point needs one pass
         for (int local = 0; local < localIters; ++local)
             for (SolverPoint& p : m.points) {
-                float vn = dot(relVel(p.position), p.normal);
+                float vn = dot(relativeVelocity(m, p.position), p.normal);
                 float old = p.jn;
                 p.jn = std::max(old + p.massN * (p.velocityBias - vn), 0.0f);
-                apply(p.normal * (p.jn - old), p.position);
+                applyPairImpulse(m, p.normal * (p.jn - old), p.position);
             }
     }
+    float total = 0;
     for (const SolverPoint& p : m.points) total += p.jn;
-    // Split impulse: penetration recovery on the pseudo velocities only (never warm started).
+    return total;
+}
+
+// Split impulse (Catto 2006): penetration is pushed out through separate pseudo velocities that
+// move the bodies but never enter their real velocities - no energy from the position correction.
+// Never warm started.
+void RigidWorld::solveSplitImpulse(Manifold& m) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     for (SolverPoint& p : m.points) {
         if (p.positionBias <= 0) continue;
         Vector3 bvA = A.biasVel + cross(A.biasAngVel, p.position - A.pos);
@@ -555,25 +645,31 @@ void RigidWorld::solveManifold(Manifold& m) {
         applyBiasImpulse(m.a, Jp, p.position);
         if (B) applyBiasImpulse(m.b, -Jp, p.position);
     }
-    // Friction at the patch centre: Coulomb limit from the total normal load (ReactPhysics3D).
-    // Static vs kinetic: while the patch sticks (sliding speed below the threshold) the static
-    // coefficient holds it; once it breaks loose the smaller kinetic coefficient applies.
-    Vector3 vc = relVel(m.center);
+}
+
+// Friction at the patch centre: Coulomb limit from the total normal load (ReactPhysics3D). Static
+// vs kinetic: while the patch sticks (sliding speed below the threshold) the static coefficient
+// holds it; once it breaks loose the smaller kinetic coefficient applies. Then the twist about the
+// normal, the rotational lock of a resting face contact, or the rolling resistance.
+void RigidWorld::solveFriction(Manifold& m, float total) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+    Vector3 vc = relativeVelocity(m, m.center);
     float slide = length(vc - m.normal * dot(vc, m.normal));
     const float mu = slide < params.stickVelocity ? m.staticFriction : m.friction;
     const float maxF = mu * total;
     float old = m.jt1;
-    m.jt1 = clampv(old - m.massT1 * dot(relVel(m.center), m.t1), -maxF, maxF);
-    apply(m.t1 * (m.jt1 - old), m.center);
+    m.jt1 = clampv(old - m.massT1 * dot(relativeVelocity(m, m.center), m.t1), -maxF, maxF);
+    applyPairImpulse(m, m.t1 * (m.jt1 - old), m.center);
     old = m.jt2;
-    m.jt2 = clampv(old - m.massT2 * dot(relVel(m.center), m.t2), -maxF, maxF);
-    apply(m.t2 * (m.jt2 - old), m.center);
+    m.jt2 = clampv(old - m.massT2 * dot(relativeVelocity(m, m.center), m.t2), -maxF, maxF);
+    applyPairImpulse(m, m.t2 * (m.jt2 - old), m.center);
     // Twist: relative spin about the normal, limited by the friction moment of the patch.
     Vector3 wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
     const float maxTwist = maxF * std::max(m.patchRadius, 0.25f * m.lever);
     old = m.jtwist;
     m.jtwist = clampv(old - m.massTwist * dot(wRel, m.normal), -maxTwist, maxTwist);
-    applyAngular(m.normal * (m.jtwist - old));
+    applyPairAngularImpulse(m, m.normal * (m.jtwist - old));
     if (m.locked && total > 0) {
         // Angular constraint on SO(3) at velocity level: the relative angular velocity of a resting
         // face contact is driven to zero on all three axes (angular part of a fixed joint). It is
@@ -587,7 +683,7 @@ void RigidWorld::solveManifold(Manifold& m) {
         float l = length(jl);
         if (l > limit) jl *= limit / l;
         m.jlock = jl;
-        applyAngular(jl - oldL);
+        applyPairAngularImpulse(m, jl - oldL);
         return;
     }
     // Rolling resistance: damps the remaining relative rotation (tilting / rolling).
@@ -600,7 +696,7 @@ void RigidWorld::solveManifold(Manifold& m) {
         float l = length(jr);
         if (l > limit) jr *= limit / l;
         m.jroll = jr;
-        applyAngular(jr - oldR);
+        applyPairAngularImpulse(m, jr - oldR);
     }
 }
 

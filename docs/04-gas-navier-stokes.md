@@ -56,7 +56,7 @@ flowchart TB
 
 Каждая компонента — отдельный `Field3` ([Field3.h](../src/gas/Field3.h)) со своим смещением `offset` (в ячейках) и размерами:
 
-[src/gas/GasSolver.cpp:33](../src/gas/GasSolver.cpp#L33)
+[src/gas/GasSolver.cpp:65](../src/gas/GasSolver.cpp#L65)
 ```cpp
 u_.init(nx_ + 1, ny_, nz_, {0, 0.5f, 0.5f}, u0);
 v_.init(nx_, ny_ + 1, nz_, {0.5f, 0, 0.5f});
@@ -209,7 +209,7 @@ $d_c$ — число соседей-газов плюс сторон с усло
 
 Матрица $\mathbf A$ симметрична и положительно (полу)определена — метод сопряжённых градиентов (PCG) в `double` с диагональным предобуславливателем $\mathbf z = \mathbf D^{-1}\mathbf r$:
 
-[src/gas/PressureSolver.cpp:137](../src/gas/PressureSolver.cpp#L137)
+[src/gas/PressureSolver.cpp:180](../src/gas/PressureSolver.cpp#L180)
 ```cpp
 for (; it < params.maxPressureIterations && rnorm > tol; ++it) {
     applyA(s_, As_);
@@ -329,13 +329,12 @@ $$
 \Delta\mathbf u_t = -\mathbf u_t\,\frac{\kappa}{1 + \kappa}, \qquad \kappa = \tfrac12 C_f\,|\mathbf u_t|\,\frac{\Delta t}{\Delta x}.
 $$
 
-[src/gas/MovingSolids.cpp:239](../src/gas/MovingSolids.cpp#L239)
+[src/gas/MovingSolids.cpp:268](../src/gas/MovingSolids.cpp#L268)
 ```cpp
 const float mag = length(rel);
 if (mag < 1e-6f) continue;
 const float L = owner >= 0 ? moving_[owner].length : staticLength_;
 const float cf = skinFrictionCoefficient(mag * L / nu);
-// tau dA dt / (rho dx^3) = k u_t, taken implicitly (never reverses the flow).
 const float kk = 0.5f * cf * mag * dt / dx_;
 const Vector3 delta = rel * (-kk / (1.0f + kk));
 ```

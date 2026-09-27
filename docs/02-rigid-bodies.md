@@ -83,7 +83,7 @@ $$
 s_{A-B}(\mathbf d) = s_A(\mathbf d) - s_B(-\mathbf d).
 $$
 
-[src/rigid/GjkEpa.cpp:15](../src/rigid/GjkEpa.cpp#L15)
+[src/rigid/GjkEpa.cpp:19](../src/rigid/GjkEpa.cpp#L19)
 ```cpp
 SV supportAB(const PosedShape& A, const PosedShape& B, const Vector3& d) {
     Vector3 a = A.support(d), b = B.support(-d);
@@ -100,7 +100,7 @@ SV supportAB(const PosedShape& A, const PosedShape& B, const Vector3& d) {
 
 **Ранний выход.** Плоскость $\mathbf v\cdot\mathbf x = \mathbf v\cdot\mathbf w$ отделяет разность от нуля, поэтому $\operatorname{dist} \ge \mathbf v\cdot\mathbf w/|\mathbf v|$. Если эта оценка уже больше `maxDistance` (контактный зазор), GJK останавливается — так делает Jolt:
 
-[src/rigid/GjkEpa.cpp:169](../src/rigid/GjkEpa.cpp#L169)
+[src/rigid/GjkEpa.cpp:178](../src/rigid/GjkEpa.cpp#L178)
 ```cpp
 SV w = supportAB(A, B, -v);
 // Early out: the whole Minkowski difference lies beyond the plane dot(v, x) = dot(v, w).
@@ -130,23 +130,23 @@ if (dist2 - dot(v, w.w) <= 1e-6f * dist2 + 1e-10f) break;
 3. Опорная точка $\mathbf w = s_{A-B}(\mathbf n)$. Если $\mathbf w\cdot\mathbf n - d < 10^{-5}$ — граница достигнута.
 4. Иначе удаляются все грани, «видимые» из $\mathbf w$; их **горизонт** (рёбра, принадлежащие ровно одной удалённой грани) соединяется с $\mathbf w$ новыми гранями.
 
-[src/rigid/GjkEpa.cpp:298](../src/rigid/GjkEpa.cpp#L298)
+[src/rigid/GjkEpa.cpp:316](../src/rigid/GjkEpa.cpp#L316)
 ```cpp
-        // Remove the faces seen from w and collect the horizon (edges used by exactly one of them).
-        std::vector<std::pair<int, int>>& horizon = S.horizon;
-        std::vector<Face>& kept = S.kept;
-        horizon.clear();
-        kept.clear();
-        for (const Face& fc : faces) {
-            if (fc.d != kInf && dot(fc.n, w.w - V[fc.a].w) > 1e-7f) {
-                const int e[3][2] = {{fc.a, fc.b}, {fc.b, fc.c}, {fc.c, fc.a}};
-                for (auto& ed : e) {
-                    auto it = std::find(horizon.begin(), horizon.end(), std::make_pair(ed[1], ed[0]));
-                    if (it != horizon.end()) horizon.erase(it);
-                    else horizon.emplace_back(ed[0], ed[1]);
-                }
-            } else {
-                kept.push_back(fc);
+// Remove the faces seen from w and collect the horizon (edges used by exactly one of them).
+std::vector<std::pair<int, int>>& horizon = S.horizon;
+std::vector<EpaFace>& kept = S.kept;
+horizon.clear();
+kept.clear();
+for (const EpaFace& fc : faces) {
+    if (fc.d != kInf && dot(fc.n, w.w - V[fc.a].w) > 1e-7f) {
+        const int e[3][2] = {{fc.a, fc.b}, {fc.b, fc.c}, {fc.c, fc.a}};
+        for (auto& ed : e) {
+            auto it = std::find(horizon.begin(), horizon.end(), std::make_pair(ed[1], ed[0]));
+            if (it != horizon.end()) horizon.erase(it);
+            else horizon.emplace_back(ed[0], ed[1]);
+        }
+    } else {
+        kept.push_back(fc);
 ```
 
 Результат: нормаль $-\mathbf n$ (от $B$ к $A$), глубина $d$, глубочайшие точки обоих тел через барицентрические координаты проекции нуля на итоговую грань.
@@ -221,7 +221,7 @@ inline float satReference(const Vector3& ha, const Matrix3x3& Ra, const Vector3&
 
 GJK/EPA даёт нормаль и глубину, но только одну точку. Многообразие строится **отсечением опорных граней** обоих тел вдоль нормали (Jolt, `ManifoldBetweenTwoFaces`):
 
-[src/rigid/NarrowPhase.cpp:360](../src/rigid/NarrowPhase.cpp#L360)
+[src/rigid/NarrowPhase.cpp:408](../src/rigid/NarrowPhase.cpp#L408)
 ```cpp
 bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
     NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
@@ -270,7 +270,7 @@ $$
 
 Площадь четырёхугольника $\mathbf a, \mathbf x_{i_L}, \mathbf b, \mathbf x_{i_R}$ равна $\tfrac12\,(s_{i_L} - s_{i_R})$. Слагаемые независимы, поэтому лучшая точка слева и лучшая справа вместе дают **наибольшую площадь при заданной диагонали**. Диагональ $i_0 i_1$ соединяет самые далёкие друг от друга точки, и в тестах результат совпал с перебором всех четвёрок (рисунок ниже).
 
-[src/rigid/NarrowPhase.cpp:85](../src/rigid/NarrowPhase.cpp#L85)
+[src/rigid/NarrowPhase.cpp:88](../src/rigid/NarrowPhase.cpp#L88)
 ```cpp
     const float tie = 1e-4f * std::fabs(maxDepth) + 1e-6f; // equal up to rounding: a flat contact
     size_t i0 = 0;
@@ -323,7 +323,7 @@ $$
 - `min` тела $e$ проходит ниже `max` тела $f$ → интервалы начинают перекрываться на этой оси → если боксы перекрываются в 3D, пара добавляется;
 - `max` тела $e$ проходит ниже `min` тела $f$ → интервалы разошлись → пара удаляется.
 
-[src/rigid/BroadPhase.cpp:116](../src/rigid/BroadPhase.cpp#L116)
+[src/rigid/BroadPhase.cpp:119](../src/rigid/BroadPhase.cpp#L119)
 ```cpp
 while (j > 0 && before(e, E[j - 1])) {
     const Endpoint& f = E[j - 1];
@@ -384,7 +384,7 @@ $$
 m_{eff}^{-1} = w_A + (\mathbf r_A\times\mathbf n)^{\mathsf T}\mathbf I_A^{-1}(\mathbf r_A\times\mathbf n) + w_B + (\mathbf r_B\times\mathbf n)^{\mathsf T}\mathbf I_B^{-1}(\mathbf r_B\times\mathbf n).
 $$
 
-[src/rigid/ContactSolver.cpp:187](../src/rigid/ContactSolver.cpp#L187)
+[src/rigid/ContactSolver.cpp:196](../src/rigid/ContactSolver.cpp#L196)
 ```cpp
 static float effMass(const RigidBody& A, const RigidBody* B, const Vector3& ra, const Vector3& rb, const Vector3& dir) {
     float k = A.invMass + dot(cross(A.applyInvInertiaWorld(cross(ra, dir)), ra), dir);
@@ -444,14 +444,14 @@ Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
 
 Скорость подхода берётся **в момент касания**. Шаг интегрирует гравитацию в скорости до решения контактов, поэтому $v_n$ несёт лишние $g\,\Delta t$, и мяч с $e = 1$ набирал $2g\Delta t/|v_n| = 0.74\,\%$ энергии за отскок при 600 Гц (тест Нётер). Поправка: $v_n^{imp} = v_n - (\mathbf g_A - \mathbf g_B)\cdot\mathbf n\,\Delta t$, где гравитация вычитается только у динамических тел. Тем же тестом найдено, что реституция применялась лишь к контактам, зажатым CCD, — обычные удары были неупругими.
 
-[src/rigid/ContactSolver.cpp:249](../src/rigid/ContactSolver.cpp#L249)
+[src/rigid/ContactSolver.cpp:273](../src/rigid/ContactSolver.cpp#L273)
 ```cpp
         const float vnImpact = vn - dot(gRel, n) * dt;
 ```
 
 Как *применять* отскок — отдельный вопрос, и ответ дала стопка из 100 кубов. Если цель $-e\,v_n^{imp}$ стоит внутри итераций как неравенство на весь шаг (так делает Box2D v2), то в стопке нижний контакт всё время дожимает верхний куб до скорости отскока, пока на него садится следующий: каждый уровень отскакивает быстрее предыдущего, и стопка разлетается (кубы 100-этажной стопки, сброшенной с 1 см, достигали 40 м/с). Поэтому отскок — **отдельный проход после итераций** (как в Box2D v3): для манифолда, который нёс нагрузку ($j_n > 0$) и чья скорость подхода была ударной, нормальная задача решается ещё раз с целью $-e\,v_n^{imp}$ — в той же блочной форме, что и основное решение (точка за точкой первый угол получал бы весь импульс и закручивал пластину, ударенную плашмя: встречные пластины потом били друг друга на 30 м/с). Импульсы отскока **не остаются в $j_n$**: $j_n$ разогревает следующий шаг (warm start), а удар — событие одноразовое; повторное приложение его как постоянной нагрузки давало +15 % кинетической энергии стопки за подшаг (замерено по стадиям шага: до решения → после итераций → после реституции → после ударного прохода). Порядок в шаге: итерации → отскок → ударный проход: он односторонний с нулевыми аккумуляторами и разлёт отнять не может, зато снимает вдавливание нижнего куба стопки, которое отскок оставляет (с отскоком после него стопка из 200 кубов рушилась). Единственный двусторонний пересчёт внутри ударного прохода — пары одного уровня — для ударных пар пропускается: он видел разлёт и отбирал его (пуля 300 м/с вязла в ящике). Порог `restitutionThreshold` = 1 м/с, как в Box2D: медленнее — покой, не удар. Итог: стопка из 200 кубов после исправления стоит точнее, чем до него (смещение 7 мм вместо 6 см).
 
-[src/rigid/ContactSolver.cpp:475](../src/rigid/ContactSolver.cpp#L475)
+[src/rigid/ContactSolver.cpp:537](../src/rigid/ContactSolver.cpp#L537)
 ```cpp
 void RigidWorld::applyRestitution() {
     for (Manifold& m : manifolds_) {
@@ -482,13 +482,13 @@ $$
 
 где $\mathbf x$ — накопленные импульсы, $\mathbf w$ — итоговые скорости расхождения. Для $n \le 4$ точек можно **перебрать все активные множества** (подмножества точек, где $x_i > 0$): на активном множестве решить $\mathbf K_{aa}\mathbf x_a = -\mathbf b'_a$ (`solveSmall`), проверить $\mathbf x_a \ge 0$ и $\mathbf w \ge 0$ на остальных точках.
 
-[src/rigid/ContactSolver.cpp:422](../src/rigid/ContactSolver.cpp#L422)
+[src/rigid/ContactSolver.cpp:456](../src/rigid/ContactSolver.cpp#L456)
 ```cpp
-auto tryMask = [&](int mask) {
+bool tryActiveSet(int mask) {
     int idx[4], k = 0;
     for (int i = 0; i < n; ++i)
         if (mask & (1 << i)) idx[k++] = i;
-    float x[4] = {0, 0, 0, 0};
+    float xs4[4] = {0, 0, 0, 0};
     if (k > 0) {
         float Ms[4][4], rs[4], xs[4];
         for (int i = 0; i < k; ++i) {
@@ -498,17 +498,15 @@ auto tryMask = [&](int mask) {
         if (!solveSmall(k, Ms, rs, xs)) return false;
         for (int i = 0; i < k; ++i)
             if (xs[i] < 0.0f) return false;
-        for (int i = 0; i < k; ++i) x[idx[i]] = xs[i];
+        for (int i = 0; i < k; ++i) xs4[idx[i]] = xs[i];
     }
     for (int i = 0; i < n; ++i) {
         if (mask & (1 << i)) continue;
         float w = bb[i];
-        for (int j = 0; j < n; ++j) w += Kc[i][j] * x[j];
+        for (int j = 0; j < n; ++j) w += Kc[i][j] * xs4[j];
         if (w < -1e-5f) return false;
     }
-    for (int i = 0; i < n; ++i) xBest[i] = x[i];
-    return true;
-};
+    for (int i = 0; i < n; ++i) x[i] = xs4[i];
 ```
 
 Четыре копланарные точки дают вырожденную матрицу ранга 3 (нагрузку на 4 ножки стола можно распределить бесконечно многими способами). Малая регуляризация на диагонали $\varepsilon = $ `blockCfm`$\cdot\operatorname{tr}\mathbf K/n$ делает задачу корректной и выбирает решение **минимальной энергии** — симметричное. Порядок перебора: сначала $\mathbf x = 0$ (многообразие расходится — частый случай для спекулятивных точек), потом активное множество прошлой итерации, потом все остальные от больших к меньшим.
@@ -524,15 +522,15 @@ $$
 \mu = \begin{cases} \mu_s, & |\mathbf v_t| < v_{stick}\\ \mu_k, & \text{иначе}\end{cases}
 $$
 
-[src/rigid/ContactSolver.cpp:561](../src/rigid/ContactSolver.cpp#L561)
+[src/rigid/ContactSolver.cpp:657](../src/rigid/ContactSolver.cpp#L657)
 ```cpp
-Vector3 vc = relVel(m.center);
+Vector3 vc = relativeVelocity(m, m.center);
 float slide = length(vc - m.normal * dot(vc, m.normal));
 const float mu = slide < params.stickVelocity ? m.staticFriction : m.friction;
 const float maxF = mu * total;
 float old = m.jt1;
-m.jt1 = clampv(old - m.massT1 * dot(relVel(m.center), m.t1), -maxF, maxF);
-apply(m.t1 * (m.jt1 - old), m.center);
+m.jt1 = clampv(old - m.massT1 * dot(relativeVelocity(m, m.center), m.t1), -maxF, maxF);
+applyPairImpulse(m, m.t1 * (m.jt1 - old), m.center);
 ```
 
 - Коэффициенты пары: $\mu_k = \sqrt{\mu_{k,A}\mu_{k,B}}$, $\mu_s = \max(\sqrt{\mu_{s,A}\mu_{s,B}}, \mu_k)$, отскок $e = \max(e_A, e_B)$ ([ContactSolver.cpp:24](../src/rigid/ContactSolver.cpp#L24)).
@@ -567,7 +565,7 @@ $$
 
 Здесь $\mathbf v_t$ — касательная скорость верхнего тела $U$ относительно опоры, $\mu$ — статический коэффициент при $|\mathbf v_t| <$ `stickVelocity`, иначе кинетический.
 
-[src/rigid/ShockPropagation.cpp:116](../src/rigid/ShockPropagation.cpp#L116)
+[src/rigid/ShockPropagation.cpp:119](../src/rigid/ShockPropagation.cpp#L119)
 ```cpp
     const float mu = vtl < params.stickVelocity ? m.staticFriction : m.friction;
     const float used = length(m.t1 * m.jt1 + m.t2 * m.jt2);
@@ -627,7 +625,7 @@ $$
 
 где $r$ — радиус описанной сферы. Значит, если GJK даёт текущее расстояние $d$, можно безопасно продвинуться на $\Delta s = d/\text{bound}$:
 
-[src/rigid/TimeOfImpact.cpp:16](../src/rigid/TimeOfImpact.cpp#L16)
+[src/rigid/TimeOfImpact.cpp:19](../src/rigid/TimeOfImpact.cpp#L19)
 ```cpp
 for (int it = 0; it < maxIt; ++it) {
     r.iterations = it + 1;
@@ -793,12 +791,50 @@ $$
 
 Свойства тела (`RigidBody`): `restitution` = 0.2, `friction` ($\mu_k$) = 0.5, `staticFriction` ($\mu_s$) = 0.7. Статическое окружение (стенки, меш) использует $\mu_k = 0.6$, $\mu_s = 0.8$, $e = 0.1$.
 
+## 2.13 Разрушение: ячейки Вороного
+
+Тело ломается на куски так же, как это делают Cell Fracture в Blender, Blast в PhysX и Chaos в Unreal: внутри выпуклого тела разбрасываются точки-затравки, и куском затравки $i$ становится её **ячейка Вороного** — всё, что ближе к ней, чем к любой другой затравке. Ячейка — это тело, срезанное по одной плоскости на каждую другую затравку $j$: серединный перпендикуляр к отрезку $\mathbf s_i\mathbf s_j$,
+
+$$
+\mathbf n\cdot\mathbf x \le \mathbf n\cdot\tfrac12(\mathbf s_i+\mathbf s_j),\qquad \mathbf n = \frac{\mathbf s_j-\mathbf s_i}{|\mathbf s_j-\mathbf s_i|}.
+$$
+
+Пересечение полупространств с выпуклым телом выпукло, ячейки не перекрываются и заполняют тело без остатка — поэтому сумма их объёмов равна объёму тела до последнего знака, а каждая ячейка сразу годится в `ConvexHullShape` (`RigidWorld::addConvex`). Срез выпуклого многогранника плоскостью — это Сазерленд–Ходжман по каждой грани плюс одна новая грань, «крышка», собранная из точек пересечения и отсортированная по углу вокруг их центра ([src/rigid/Fracture.cpp](../src/rigid/Fracture.cpp)). Тонкость, найденная тестом на водонепроницаемость: несколько срезов через одно ребро оставляют на контуре грани коллинеарные вершины; удалять их нельзя (соседняя грань их тоже держит, иначе Т-стык и дыра), поэтому веер треугольников строится из той вершины, чей веер даёт наибольший минимальный треугольник — и ни одна нормаль не вырождается.
+
+Затравки двух видов: равномерные по телу (`uniformSeeds`) и **ударные** (`impactSeeds`): расстояние от точки удара $= R\,u^2$ при равномерном $u$, так что у места удара куски мелкие, вдали — крупные, как у стекла и камня. Ровно так распределяют затравки и в динамическом разрушении в реальном времени (Müller, Chentanez & Kim 2013, «Real time dynamic fracture with volumetric approximate convex decompositions», SIGGRAPH). Следующий шаг — динамика: ячейки склеиваются ломающимися суставами и разлетаются от удара, когда импульс в суставе превышает порог прочности материала.
+
+[src/rigid/Fracture.cpp:162](../src/rigid/Fracture.cpp#L162)
+```cpp
+std::vector<TriMesh> voronoiCells(const TriMesh& hull, const std::vector<Vector3>& seeds) {
+    const float size = maxComp(hull.bounds().extent());
+    const float eps = 1e-6f * size;
+    std::vector<TriMesh> cells;
+    cells.reserve(seeds.size());
+    for (size_t i = 0; i < seeds.size(); ++i) {
+        Polytope cell = polytopeFromMesh(hull);
+        bool alive = true;
+        for (size_t j = 0; j < seeds.size() && alive; ++j) {
+            if (j == i) continue;
+            // The bisector: keep the half-space nearer to seed i. n . x <= n . midpoint.
+            const Vector3 n = normalize(seeds[j] - seeds[i]);
+            const float d = dot(n, (seeds[i] + seeds[j]) * 0.5f);
+            alive = clipPolytope(cell, n, d, eps);
+        }
+        if (!alive) continue;
+        TriMesh m = meshFromPolytope(cell, 4.0f * eps);
+        if (!m.empty()) cells.push_back(std::move(m));
+    }
+    return cells;
+}
+```
+
 ---
 
 ## Проверка
 
 | Тест | Результат |
 |---|---|
+| `Voronoi fracture` — ящик 1 × 0.6 × 0.3 м на 40 равномерных затравок, шар r = 0.25 м на 25 ударных | 40 и 25 ячеек за 8 и 21 мс; сумма объёмов = объёму тела (ошибка 0 и 1.2·10⁻⁷), все ячейки водонепроницаемы и выпуклы, каждая затравка — в своей ячейке; 18 из 25 ударных затравок в 0.2 м от удара |
 | `Noether` — инварианты по симметриям: энергия (мяч, $e = 1$, 20 отскоков с 1 м), импульс и момент импульса (косой удар двух ящиков в невесомости), свободное вращение с неравными моментами инерции | энергия мяча дрейфует **0.37 %** за 20 отскоков (было: мяч останавливался — реституция применялась только при CCD; потом +0.74 % за отскок от гравитации шага); $|\mathbf P|$ 1.9·10⁻⁸, $|\mathbf L|$ 6.4·10⁻⁴; Джанибеков: 6 переворотов за 10 с, период 3.40 с $= 20.4/\sigma$, дрейф $|\mathbf L|$ 7.5·10⁻⁴, энергии 1.5·10⁻³ (было: переворотов нет — гироскопического члена не было) |
 | `stack of 100 boxes dropped from 1 cm` | верх на высоте 19.900 м (ожидается 19.900), смещение **3.2 мм** (было 1.7 см до переноса реституции в отдельный проход), скорости всех тел равны нулю — стопка спит |
 | `stack of 200 boxes dropped from 1 cm` | 40 м, 199 ударов каскадом: верх на 39.8995 м (ожидается 39.900), все 200 тел стоят вертикально (наклон 0) и спят, смещение вбок **7 мм** (было 6–9 см: кубы проскальзывали зигзагом при осадке — это была реституция внутри итераций, см. выше), шаг 0.8 мс |

@@ -96,14 +96,32 @@ void Simulation::extractSlice(RenderSnapshot& s) const {
     s.hasSlice = true;
 }
 
+// Magnetic field lines: traced both ways from seeds on a shell around the obstacle (the magnet)
+// or on a lattice through the domain, along B / |B| (midpoint rule), until they leave the
+// domain, enter a solid or the field vanishes.
 void Simulation::computeFieldLines(RenderSnapshot& s) const {
-    // Magnetic field lines: traced both ways from seeds on a shell around the obstacle (the magnet)
-    // or on a lattice through the domain, along B / |B| (midpoint rule), until they leave the
-    // domain, enter a solid or the field vanishes.
-    const MagneticField& m = grid.magnetic;
+    std::vector<Vector3> seeds;
+    fieldLineSeeds(seeds);
+    s.fieldLines.clear();
+    s.fieldLineStrength.clear();
+    float bmax = 1e-12f;
+    for (const Vector3& seed : seeds) {
+        std::vector<Vector3> line;
+        std::vector<float> strength;
+        traceFieldLine(seed, line, strength);
+        if (line.size() < 2) continue;
+        for (float B : strength) bmax = std::max(bmax, B);
+        s.fieldLines.push_back(std::move(line));
+        s.fieldLineStrength.push_back(std::move(strength));
+    }
+    s.fieldLineMax = bmax;
+}
+
+// Where the lines start: the scene's own seeds if it has some (a tokamak's poloidal plane), else
+// a shell around the obstacle (the magnet), else a lattice through the domain.
+void Simulation::fieldLineSeeds(std::vector<Vector3>& seeds) const {
     const float dx = grid.dx();
     const AABB dom = grid.domain();
-    std::vector<Vector3> seeds;
     if (scene_) scene_->fieldLineSeeds(*this, seeds); // the scene knows where its field is interesting
     if (!seeds.empty()) {
     } else if (grid.hasObstacle() && obstacleMesh_ && !obstacleMesh_->empty()) {
@@ -119,6 +137,14 @@ void Simulation::computeFieldLines(RenderSnapshot& s) const {
         for (int i = 1; i <= 4; ++i)
             for (int k = 1; k <= 4; ++k) seeds.push_back(dom.lo + dom.extent() * Vector3(i / 5.0f, 0.5f, k / 5.0f));
     }
+}
+
+// One line through a seed: half a cell per step along B (midpoint rule), backwards first (that
+// half is reversed into the line), then forwards; |B| along it is kept for the colouring.
+void Simulation::traceFieldLine(const Vector3& seed, std::vector<Vector3>& line, std::vector<float>& strength) const {
+    const MagneticField& m = grid.magnetic;
+    const float dx = grid.dx();
+    const AABB dom = grid.domain();
     auto blocked = [&](const Vector3& p) {
         if (!dom.contains(p)) return true;
         const Vector3 g = (p - dom.lo) / dx;
@@ -127,41 +153,29 @@ void Simulation::computeFieldLines(RenderSnapshot& s) const {
     };
     const float h = 0.5f * dx;
     const int maxSteps = 3 * (grid.nx() + grid.ny() + grid.nz());
-    s.fieldLines.clear();
-    s.fieldLineStrength.clear();
-    float bmax = 1e-12f;
-    for (const Vector3& seed : seeds) {
-        std::vector<Vector3> line;
-        std::vector<float> strength;
-        for (int dir = -1; dir <= 1; dir += 2) { // backwards (reversed into the line), then forwards
-            std::vector<Vector3> half;
-            std::vector<float> halfB;
-            Vector3 p = seed;
-            for (int it = 0; it < maxSteps && !blocked(p); ++it) {
-                const Vector3 b1 = m.fieldAt(p);
-                const float B = length(b1);
-                if (B < 1e-9f) break;
-                half.push_back(p);
-                halfB.push_back(B);
-                const Vector3 mid = p + b1 * (0.5f * h * float(dir) / B);
-                const Vector3 b2 = m.fieldAt(mid);
-                if (length2(b2) < 1e-18f) break;
-                p += normalize(b2) * (h * float(dir));
-            }
-            if (dir < 0) {
-                line.assign(half.rbegin(), half.rend());
-                strength.assign(halfB.rbegin(), halfB.rend());
-            } else if (half.size() > 1) {
-                line.insert(line.end(), half.begin() + 1, half.end());
-                strength.insert(strength.end(), halfB.begin() + 1, halfB.end());
-            }
+    for (int dir = -1; dir <= 1; dir += 2) { // backwards (reversed into the line), then forwards
+        std::vector<Vector3> half;
+        std::vector<float> halfB;
+        Vector3 p = seed;
+        for (int it = 0; it < maxSteps && !blocked(p); ++it) {
+            const Vector3 b1 = m.fieldAt(p);
+            const float B = length(b1);
+            if (B < 1e-9f) break;
+            half.push_back(p);
+            halfB.push_back(B);
+            const Vector3 mid = p + b1 * (0.5f * h * float(dir) / B);
+            const Vector3 b2 = m.fieldAt(mid);
+            if (length2(b2) < 1e-18f) break;
+            p += normalize(b2) * (h * float(dir));
         }
-        if (line.size() < 2) continue;
-        for (float B : strength) bmax = std::max(bmax, B);
-        s.fieldLines.push_back(std::move(line));
-        s.fieldLineStrength.push_back(std::move(strength));
+        if (dir < 0) {
+            line.assign(half.rbegin(), half.rend());
+            strength.assign(halfB.rbegin(), halfB.rend());
+        } else if (half.size() > 1) {
+            line.insert(line.end(), half.begin() + 1, half.end());
+            strength.insert(strength.end(), halfB.begin() + 1, halfB.end());
+        }
     }
-    s.fieldLineMax = bmax;
 }
 
 void Simulation::computeStreamlines(RenderSnapshot& s) const {
@@ -262,7 +276,27 @@ void Simulation::fillParticleSolids(RenderSnapshot& s) const {
     }
 }
 
+// Everything the viewer draws and the panels show, from the solvers as they are now. The parts
+// in order: the settings (so the panels can sync), the bodies, then what the mode shows - the
+// liquid, the gas, or the rigid arena - the joints and the mouse, the scene's own readings, and
+// the probe's channels.
 void Simulation::fillSnapshot(RenderSnapshot& s) const {
+    fillSettings(s);
+    fillBodies(s);
+    switch (mode_) {
+    case SimMode::Fluid: fillLiquidView(s); break;
+    case SimMode::WindTunnel: fillGasView(s); break;
+    case SimMode::Rigid: fillRigidView(s); break;
+    }
+    fillJointsAndGrab(s);
+    if (scene_) scene_->describe(*this, s); // the scene's own readings, after the generic ones
+    s.probe = Probe::snapshot();            // every channel the engine reported this frame
+    s.info.insert(s.info.begin(), {"Время", format("%.3f с", time_)});
+    s.info.push_back({"Шаг расчёта", format("%.1f мс", lastStepMs_)});
+}
+
+// The current parameters and the frame's counters, and every list of the snapshot cleared.
+void Simulation::fillSettings(RenderSnapshot& s) const {
     s.frame = frame_;
     s.mode = mode_;
     s.time = time_;
@@ -301,219 +335,253 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
     s.arrowPos.clear();
     s.arrowVel.clear();
     s.gridNx = s.gridNy = s.gridNz = 0;
+}
 
-    for (const RigidBody& b : rigid.bodies())
-    {
+// Every rigid body with its pose, shape and colour; hulls and compounds carry their mesh.
+void Simulation::fillBodies(RenderSnapshot& s) const {
+    for (const RigidBody& b : rigid.bodies()) {
         std::shared_ptr<const TriMesh> mesh;
         if (b.type() == ShapeType::ConvexHull) mesh = static_cast<const ConvexHullShape*>(b.shape.get())->mesh();
         else if (b.type() == ShapeType::Compound) mesh = static_cast<const CompoundShape*>(b.shape.get())->visualMesh();
         s.bodies.push_back({b.type(), b.pos, b.rot, b.halfExtents(), b.radius(), b.color, mesh, b.sleeping, b.shape, b.invMass > 0});
     }
+}
 
-    auto range = [&](float lo, float hi) {
-        if (vis.autoRange) { s.colorMin = lo; s.colorMax = hi > lo ? hi : lo + 1e-3f; }
-        else { s.colorMin = vis.rangeMin; s.colorMax = vis.rangeMax > vis.rangeMin ? vis.rangeMax : vis.rangeMin + 1e-3f; }
-    };
+// The colour scale of the main scalar: the measured range, or the fixed one the user set.
+void Simulation::setColorRange(RenderSnapshot& s, float lo, float hi) const {
+    if (vis.autoRange) { s.colorMin = lo; s.colorMax = hi > lo ? hi : lo + 1e-3f; }
+    else { s.colorMin = vis.rangeMin; s.colorMax = vis.rangeMax > vis.rangeMin ? vis.rangeMax : vis.rangeMin + 1e-3f; }
+}
 
-    switch (mode_) {
-    case SimMode::Fluid: {
-        s.domain = particles.domain();
-        s.particleRadius = particles.params.particleRadius;
-        const auto& x = particles.positions();
-        const auto& v = particles.velocities();
-        const auto& rho = particles.densities();
-        const auto& phase = particles.phases();
-        s.particles.clear();
-        s.particles.reserve(x.size());
-        s.particleScalar.clear();
-        s.particleScalar.reserve(x.size());
-        float lo = kInf, hi = -kInf;
-        for (size_t i = 0; i < x.size(); ++i) {
-            if (phase[i] != uint8_t(ParticlePhase::Fluid)) continue; // cloth / soft bodies: drawn as surfaces
-            if (vis.liquidSurface) {
-                s.liquid.push_back(x[i]);
-                continue;
-            }
-            s.particles.push_back(x[i]);
-            float val = 0;
-            if (vis.particleColoring == ParticleColoring::Speed) val = length(v[i]);
-            else if (vis.particleColoring == ParticleColoring::Density)
-                val = i < rho.size() ? rho[i] / particles.params.restDensity : 1.0f;
-            s.particleScalar.push_back(val);
-            lo = std::min(lo, val);
-            hi = std::max(hi, val);
+// The liquid: every fluid particle (or the surface's particles) coloured by speed or density,
+// and the readings of the particle solver.
+void Simulation::fillLiquidView(RenderSnapshot& s) const {
+    s.domain = particles.domain();
+    s.particleRadius = particles.params.particleRadius;
+    const auto& x = particles.positions();
+    const auto& v = particles.velocities();
+    const auto& rho = particles.densities();
+    const auto& phase = particles.phases();
+    s.particles.clear();
+    s.particles.reserve(x.size());
+    s.particleScalar.clear();
+    s.particleScalar.reserve(x.size());
+    float lo = kInf, hi = -kInf;
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (phase[i] != uint8_t(ParticlePhase::Fluid)) continue; // cloth / soft bodies: drawn as surfaces
+        if (vis.liquidSurface) {
+            s.liquid.push_back(x[i]);
+            continue;
         }
-        if (lo > hi) lo = 0, hi = 1;
-        if (vis.particleColoring == ParticleColoring::Speed) { lo = 0; s.colorLabel = "|V|, м/с"; }
-        else if (vis.particleColoring == ParticleColoring::Density) s.colorLabel = "ρ/ρ0";
-        else s.colorLabel = "";
-        if (s.particles.empty()) { lo = 0; hi = 1; }
-        range(lo, hi);
-        s.info.push_back({"Частиц", format("%zu", particles.size())});
-        s.info.push_back({"Радиус частицы", format("%.1f мм", particles.params.particleRadius * 1000)});
-        s.info.push_back({"Масса частицы", format("%.3g кг", particles.particleMass())});
-        s.info.push_back({"Ошибка плотности", format("%.2f %%", particles.averageDensityError() * 100)});
-        s.info.push_back({"Макс. скорость", format("%.2f м/с", particles.maxSpeed())});
-        s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
-        if (!particles.softBodies().empty() || !particles.cloths().empty()) {
-            s.info.push_back({"Мягких тел / тканей", format("%zu / %zu", particles.softBodies().size(), particles.cloths().size())});
-            s.info.push_back({"Частиц жидкости / твёрдых", format("%zu / %zu", particles.fluidCount(), particles.size() - particles.fluidCount())});
-            s.info.push_back({"Контактов частиц", format("%zu", particles.particleContactCount())});
-        }
-        s.plots.push_back({"Ошибка плотности, %", particles.averageDensityError() * 100});
-        s.plots.push_back({"Макс. скорость, м/с", particles.maxSpeed()});
-        Probe::set("particles/density error %", particles.averageDensityError() * 100);
-        break;
+        s.particles.push_back(x[i]);
+        float val = 0;
+        if (vis.particleColoring == ParticleColoring::Speed) val = length(v[i]);
+        else if (vis.particleColoring == ParticleColoring::Density)
+            val = i < rho.size() ? rho[i] / particles.params.restDensity : 1.0f;
+        s.particleScalar.push_back(val);
+        lo = std::min(lo, val);
+        hi = std::max(hi, val);
     }
-    case SimMode::WindTunnel: {
-        s.domain = grid.domain();
-        if (vis.showSlice) extractSlice(s);
-        float lo = kInf, hi = -kInf;
-        for (size_t i = 0; i < s.slice.size(); ++i)
-            if (!s.sliceSolid[i]) { lo = std::min(lo, s.slice[i]); hi = std::max(hi, s.slice[i]); }
-        if (s.slice.empty()) { lo = 0; hi = 1; }
-        if (vis.sliceField == GridField::Speed || vis.sliceField == GridField::Vorticity) lo = 0;
-        range(lo, hi);
-        s.colorLabel = fieldLabel(vis.sliceField);
+    if (lo > hi) lo = 0, hi = 1;
+    if (vis.particleColoring == ParticleColoring::Speed) { lo = 0; s.colorLabel = "|V|, м/с"; }
+    else if (vis.particleColoring == ParticleColoring::Density) s.colorLabel = "ρ/ρ0";
+    else s.colorLabel = "";
+    if (s.particles.empty()) { lo = 0; hi = 1; }
+    setColorRange(s, lo, hi);
+    s.info.push_back({"Частиц", format("%zu", particles.size())});
+    s.info.push_back({"Радиус частицы", format("%.1f мм", particles.params.particleRadius * 1000)});
+    s.info.push_back({"Масса частицы", format("%.3g кг", particles.particleMass())});
+    s.info.push_back({"Ошибка плотности", format("%.2f %%", particles.averageDensityError() * 100)});
+    s.info.push_back({"Макс. скорость", format("%.2f м/с", particles.maxSpeed())});
+    s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
+    if (!particles.softBodies().empty() || !particles.cloths().empty()) {
+        s.info.push_back({"Мягких тел / тканей", format("%zu / %zu", particles.softBodies().size(), particles.cloths().size())});
+        s.info.push_back({"Частиц жидкости / твёрдых", format("%zu / %zu", particles.fluidCount(), particles.size() - particles.fluidCount())});
+        s.info.push_back({"Контактов частиц", format("%zu", particles.particleContactCount())});
+    }
+    s.plots.push_back({"Ошибка плотности, %", particles.averageDensityError() * 100});
+    s.plots.push_back({"Макс. скорость, м/с", particles.maxSpeed()});
+    Probe::set("particles/density error %", particles.averageDensityError() * 100);
+}
 
-        if (vis.showSmoke) {
-            const Field3& sm = grid.smoke();
-            s.volX = sm.nx; s.volY = sm.ny; s.volZ = sm.nz;
-            auto toByte = [](float v) { return uint8_t(clampv(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
-            if (grid.combustion.enabled) { // fire: smoke and temperature interleaved
-                const Field3& T = grid.temperature();
-                s.volumeChannels = 2;
-                s.ambientTemperature = grid.combustion.ambientTemperature;
-                s.volume.resize(2 * sm.d.size());
-                for (size_t i = 0; i < sm.d.size(); ++i) {
-                    s.volume[2 * i] = toByte(sm.d[i]);
-                    s.volume[2 * i + 1] = toByte(T.d[i] / s.volumeTemperatureScale);
-                }
-            } else {
-                s.volumeChannels = 1;
-                s.volume.resize(sm.d.size());
-                for (size_t i = 0; i < sm.d.size(); ++i) s.volume[i] = toByte(sm.d[i]);
-            }
-            s.volumePlasma = grid.magnetic.enabled; // the tracer is glowing plasma
-            s.hasVolume = true;
+// The gas: the slice of the chosen field with its colour scale, the smoke volume, streamlines
+// and magnetic field lines, the grid, the velocity arrows, the pressure on the obstacle, and
+// the readings.
+void Simulation::fillGasView(RenderSnapshot& s) const {
+    s.domain = grid.domain();
+    if (vis.showSlice) extractSlice(s);
+    float lo = kInf, hi = -kInf;
+    for (size_t i = 0; i < s.slice.size(); ++i)
+        if (!s.sliceSolid[i]) { lo = std::min(lo, s.slice[i]); hi = std::max(hi, s.slice[i]); }
+    if (s.slice.empty()) { lo = 0; hi = 1; }
+    if (vis.sliceField == GridField::Speed || vis.sliceField == GridField::Vorticity) lo = 0;
+    setColorRange(s, lo, hi);
+    s.colorLabel = fieldLabel(vis.sliceField);
+    if (vis.showSmoke) fillSmokeVolume(s);
+    if (vis.showStreamlines) computeStreamlines(s);
+    if (grid.magnetic.enabled && vis.showFieldLines) computeFieldLines(s);
+    if (grid.magnetic.enabled) fillMagneticInfo(s);
+    s.gridNx = grid.nx();
+    s.gridNy = grid.ny();
+    s.gridNz = grid.nz();
+    s.gridDx = grid.dx();
+    s.gridOrigin = grid.origin();
+    s.sliceLayer = sliceLayer();
+    if (vis.vectorDisplay > 0) extractVectors(s);
+    fillSurfacePressure(s);
+    fillGasInfo(s);
+    if (grid.hasObstacle()) fillAerodynamicInfo(s);
+    fillGasCounts(s);
+}
+
+// The smoke (and, in a fire, the temperature) as bytes for the volume renderer.
+void Simulation::fillSmokeVolume(RenderSnapshot& s) const {
+    const Field3& sm = grid.smoke();
+    s.volX = sm.nx; s.volY = sm.ny; s.volZ = sm.nz;
+    auto toByte = [](float v) { return uint8_t(clampv(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    if (grid.combustion.enabled) { // fire: smoke and temperature interleaved
+        const Field3& T = grid.temperature();
+        s.volumeChannels = 2;
+        s.ambientTemperature = grid.combustion.ambientTemperature;
+        s.volume.resize(2 * sm.d.size());
+        for (size_t i = 0; i < sm.d.size(); ++i) {
+            s.volume[2 * i] = toByte(sm.d[i]);
+            s.volume[2 * i + 1] = toByte(T.d[i] / s.volumeTemperatureScale);
         }
-        if (vis.showStreamlines) computeStreamlines(s);
-        if (grid.magnetic.enabled && vis.showFieldLines) computeFieldLines(s);
-        if (grid.magnetic.enabled) {
-            const MagneticField& m = grid.magnetic;
-            const float B = m.maxField(), rho = grid.params.fluidDensity;
-            const float L = grid.hasObstacle() ? std::max(obstacle.size, grid.dx()) : grid.domain().extent().x;
-            s.info.push_back({"Магнитное поле, макс.", format("%.1f мТл", B * 1000)});
-            s.info.push_back({"Скорость Альфвена v_A", format("%.2f м/с (предел Бориса %.1f)", B / std::sqrt(MagneticField::kMu0 * rho),
-                                                         m.speedLimit)});
-            s.info.push_back({"Маг. число Рейнольдса Rm", format("%.3g", grid.params.inflowSpeed * L / m.resistivity())});
-            s.info.push_back({"Энергия поля", format("%.3g Дж", m.energy())});
-            s.info.push_back({"div B (отн.)", format("%.1e", m.maxDivergence())});
-        }
-        s.gridNx = grid.nx();
-        s.gridNy = grid.ny();
-        s.gridNz = grid.nz();
-        s.gridDx = grid.dx();
-        s.gridOrigin = grid.origin();
-        s.sliceLayer = sliceLayer();
-        if (vis.vectorDisplay > 0) extractVectors(s);
-        if (vis.surfacePressure && obstacleMesh_ && !obstacleMesh_->empty() &&
-            surfaceLoads_.triangles.size() == obstacleMesh_->triangles.size()) {
-            // Cp of the triangles, area-weighted onto the vertices for smooth colouring.
-            const TriMesh& m = *obstacleMesh_;
-            std::vector<float> sum(m.positions.size(), 0.0f), wsum(m.positions.size(), 0.0f);
-            for (size_t t = 0; t < m.triangles.size(); ++t) {
-                const TriangleLoad& L = surfaceLoads_.triangles[t];
-                for (uint32_t v : m.triangles[t]) {
-                    sum[v] += L.cp * L.area;
-                    wsum[v] += L.area;
-                }
-            }
-            s.obstacleScalar.resize(m.positions.size());
-            for (size_t v = 0; v < sum.size(); ++v) s.obstacleScalar[v] = wsum[v] > 0 ? sum[v] / wsum[v] : 0.0f;
-        }
-        float L = obstacle.size;
-        float Re = grid.params.inflowSpeed * L / std::max(grid.params.kinematicViscosity, 1e-9f);
-        s.info.push_back({"Сетка", format("%d × %d × %d  (%.1f тыс. ячеек)", grid.nx(), grid.ny(), grid.nz(),
-                                       grid.nx() * grid.ny() * grid.nz() / 1000.0f)});
-        s.info.push_back({"Шаг сетки dx", format("%.1f мм", grid.dx() * 1000)});
-        s.info.push_back({"Шаг по времени", format("%.2f мс", lastGridDt_ * 1000)});
-        if (grid.combustion.enabled) {
-            float Tmax = 0;
-            for (float t : grid.temperature().d) Tmax = std::max(Tmax, t);
-            s.info.push_back({"Мощность пламени", format("%.1f кВт", grid.heatReleaseRate() / 1000)});
-            s.info.push_back({"Макс. температура", format("%.0f K (%.0f °C)", Tmax + grid.combustion.ambientTemperature, Tmax + grid.combustion.ambientTemperature - 273.15f)});
-            int burnt = 0;
-            for (const Cloth& c : particles.cloths()) burnt += c.burntThreads;
-            if (!particles.cloths().empty()) s.info.push_back({"Прогоревших нитей", format("%d", burnt)});
-        }
-        if (grid.hasObstacle()) s.info.push_back({"Число Рейнольдса", format("%.3g", Re)});
-        if (grid.hasObstacle()) {
-            Vector3 F = grid.bodyForce();
-            s.info.push_back({"Cd (сред.)", format("%.3f", grid.dragCoefficientAvg())});
-            s.info.push_back({"Cl (сред.)", format("%.3f", grid.liftCoefficientAvg())});
-            s.info.push_back({"Cd / Cl мгн.", format("%.3f / %.3f", grid.dragCoefficient(), grid.liftCoefficient())});
-            if (std::fabs(grid.dragCoefficientAvg()) > 1e-4f)
-                s.info.push_back({"L/D", format("%.2f", grid.liftCoefficientAvg() / grid.dragCoefficientAvg())});
-            s.info.push_back({"Сила F", format("(%.2f, %.2f, %.2f) Н", F.x, F.y, F.z)});
-            if (grid.params.wallFriction) {
-                float cdf = grid.frictionForce().x / (grid.dynamicPressure() * std::max(grid.referenceArea(), 1e-9f));
-                s.info.push_back({"из них трение (Cd тр.)", format("%.3f", cdf)});
-            }
-            const SurfaceLoads& SL = surfaceLoads_;
-            if (!SL.triangles.empty()) {
-                s.info.push_back({"По полигонам: Cd", format("%.3f (давл. %.3f + трение %.3f)", SL.cd, SL.cdPressure, SL.cdFriction)});
-                s.info.push_back({"По полигонам: Cl / Cm", format("%.3f / %.3f", SL.cl, SL.cm)});
-                s.info.push_back({"Треугольников, смоч. площадь", format("%zu, %.4f м²", SL.triangles.size(), SL.wettedArea)});
-            }
-            s.info.push_back({grid.params.usePlanformArea ? "Площадь (в плане)" : "Площадь (миделя)",
-                              format("%.4f м²", grid.referenceArea())});
-            s.plots.push_back({"Cd", grid.dragCoefficient()});
-            s.plots.push_back({"Cl", grid.liftCoefficient()});
-            Probe::set("gas/Cd", grid.dragCoefficient());
-            Probe::set("gas/Cl", grid.liftCoefficient());
-        }
-        s.info.push_back({"Итераций давления", format("%d (невязка %.1e)", grid.lastPressureIterations(), grid.lastResidual())});
-        s.info.push_back({"Макс. скорость", format("%.2f м/с", grid.maxVelocity())});
-        s.info.push_back({"Макс. |div u| после проекции", format("%.2e 1/с", grid.maxDivergence())});
-        s.info.push_back({"Дым в объёме", format("%.4f м³", grid.totalSmoke())});
-        if (particles.fluidCount() > 0)
-            s.info.push_back({"Вода: частиц / ячеек в воздухе", format("%zu / %d", particles.fluidCount(), grid.liquidCellCount())});
-        if (particles.hasSolids()) {
-            int torn = 0;
-            for (const Cloth& c : particles.cloths()) torn += c.tornThreads;
-            s.info.push_back({"Мягких тел / тканей", format("%zu / %zu (порвано нитей %d)", particles.softBodies().size(),
-                                                             particles.cloths().size(), torn)});
-        }
-        if (!rigid.bodies().empty()) {
-            s.info.push_back({"Тел в газе", format("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
-                                                rigid.sleepingCount())});
-            s.info.push_back({"Сила газа на тело (макс.)", format("%.3f Н", gasForceMax_)});
-            if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", format("%.1f с", std::max(0.0f, releaseTime - time_))});
-        }
-        if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", format("%zu", s.arrowPos.size())});
-        if (!grid.hasObstacle()) {
-            s.plots.push_back({"Макс. скорость, м/с", grid.maxVelocity()});
-            s.plots.push_back({"Дым, дм³", grid.totalSmoke() * 1000.0f});
-            Probe::set("gas/smoke dm3", grid.totalSmoke() * 1000.0f);
-        }
-        break;
+    } else {
+        s.volumeChannels = 1;
+        s.volume.resize(sm.d.size());
+        for (size_t i = 0; i < sm.d.size(); ++i) s.volume[i] = toByte(sm.d[i]);
     }
-    case SimMode::Rigid: {
-        s.domain = rigid.domain();
-        s.colorMin = 0;
-        s.colorMax = 1;
-        s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
-        s.info.push_back({"Контактов", format("%zu", rigid.contactCount())});
-        s.info.push_back({"Спящих тел", format("%zu", rigid.sleepingCount())});
-        s.info.push_back({"CCD: остановлено тел за шаг", format("%zu", rigid.ccdHits())});
-        s.info.push_back({"Сочленений", format("%zu", rigid.joints().size())});
-        s.info.push_back({"Кин. энергия", format("%.2f Дж", rigid.kineticEnergy())});
-        s.plots.push_back({"Кин. энергия, Дж", rigid.kineticEnergy()});
-        Probe::set("rigid/kinetic energy J", rigid.kineticEnergy());
-        break;
+    s.volumePlasma = grid.magnetic.enabled; // the tracer is glowing plasma
+    s.hasVolume = true;
+}
+
+// The plasma's numbers: the field, the Alfven speed, the magnetic Reynolds number, the energy,
+// and how well div B = 0 holds.
+void Simulation::fillMagneticInfo(RenderSnapshot& s) const {
+    const MagneticField& m = grid.magnetic;
+    const float B = m.maxField(), rho = grid.params.fluidDensity;
+    const float L = grid.hasObstacle() ? std::max(obstacle.size, grid.dx()) : grid.domain().extent().x;
+    s.info.push_back({"Магнитное поле, макс.", format("%.1f мТл", B * 1000)});
+    s.info.push_back({"Скорость Альфвена v_A", format("%.2f м/с (предел Бориса %.1f)", B / std::sqrt(MagneticField::kMu0 * rho),
+                                                 m.speedLimit)});
+    s.info.push_back({"Маг. число Рейнольдса Rm", format("%.3g", grid.params.inflowSpeed * L / m.resistivity())});
+    s.info.push_back({"Энергия поля", format("%.3g Дж", m.energy())});
+    s.info.push_back({"div B (отн.)", format("%.1e", m.maxDivergence())});
+}
+
+// Cp of the obstacle's triangles, area-weighted onto the vertices for smooth colouring.
+void Simulation::fillSurfacePressure(RenderSnapshot& s) const {
+    if (!(vis.surfacePressure && obstacleMesh_ && !obstacleMesh_->empty() &&
+          surfaceLoads_.triangles.size() == obstacleMesh_->triangles.size()))
+        return;
+    const TriMesh& m = *obstacleMesh_;
+    std::vector<float> sum(m.positions.size(), 0.0f), wsum(m.positions.size(), 0.0f);
+    for (size_t t = 0; t < m.triangles.size(); ++t) {
+        const TriangleLoad& L = surfaceLoads_.triangles[t];
+        for (uint32_t v : m.triangles[t]) {
+            sum[v] += L.cp * L.area;
+            wsum[v] += L.area;
+        }
     }
+    s.obstacleScalar.resize(m.positions.size());
+    for (size_t v = 0; v < sum.size(); ++v) s.obstacleScalar[v] = wsum[v] > 0 ? sum[v] / wsum[v] : 0.0f;
+}
+
+// The grid, the time step, the fire's power and temperature, the Reynolds number.
+void Simulation::fillGasInfo(RenderSnapshot& s) const {
+    float L = obstacle.size;
+    float Re = grid.params.inflowSpeed * L / std::max(grid.params.kinematicViscosity, 1e-9f);
+    s.info.push_back({"Сетка", format("%d × %d × %d  (%.1f тыс. ячеек)", grid.nx(), grid.ny(), grid.nz(),
+                                   grid.nx() * grid.ny() * grid.nz() / 1000.0f)});
+    s.info.push_back({"Шаг сетки dx", format("%.1f мм", grid.dx() * 1000)});
+    s.info.push_back({"Шаг по времени", format("%.2f мс", lastGridDt_ * 1000)});
+    if (grid.combustion.enabled) {
+        float Tmax = 0;
+        for (float t : grid.temperature().d) Tmax = std::max(Tmax, t);
+        s.info.push_back({"Мощность пламени", format("%.1f кВт", grid.heatReleaseRate() / 1000)});
+        s.info.push_back({"Макс. температура", format("%.0f K (%.0f °C)", Tmax + grid.combustion.ambientTemperature, Tmax + grid.combustion.ambientTemperature - 273.15f)});
+        int burnt = 0;
+        for (const Cloth& c : particles.cloths()) burnt += c.burntThreads;
+        if (!particles.cloths().empty()) s.info.push_back({"Прогоревших нитей", format("%d", burnt)});
     }
+    if (grid.hasObstacle()) s.info.push_back({"Число Рейнольдса", format("%.3g", Re)});
+}
+
+// The aerodynamic coefficients of the obstacle: drag, lift, their ratio, the force, the skin
+// friction's share, and the same from the surface loads on the polygons.
+void Simulation::fillAerodynamicInfo(RenderSnapshot& s) const {
+    Vector3 F = grid.bodyForce();
+    s.info.push_back({"Cd (сред.)", format("%.3f", grid.dragCoefficientAvg())});
+    s.info.push_back({"Cl (сред.)", format("%.3f", grid.liftCoefficientAvg())});
+    s.info.push_back({"Cd / Cl мгн.", format("%.3f / %.3f", grid.dragCoefficient(), grid.liftCoefficient())});
+    if (std::fabs(grid.dragCoefficientAvg()) > 1e-4f)
+        s.info.push_back({"L/D", format("%.2f", grid.liftCoefficientAvg() / grid.dragCoefficientAvg())});
+    s.info.push_back({"Сила F", format("(%.2f, %.2f, %.2f) Н", F.x, F.y, F.z)});
+    if (grid.params.wallFriction) {
+        float cdf = grid.frictionForce().x / (grid.dynamicPressure() * std::max(grid.referenceArea(), 1e-9f));
+        s.info.push_back({"из них трение (Cd тр.)", format("%.3f", cdf)});
+    }
+    const SurfaceLoads& SL = surfaceLoads_;
+    if (!SL.triangles.empty()) {
+        s.info.push_back({"По полигонам: Cd", format("%.3f (давл. %.3f + трение %.3f)", SL.cd, SL.cdPressure, SL.cdFriction)});
+        s.info.push_back({"По полигонам: Cl / Cm", format("%.3f / %.3f", SL.cl, SL.cm)});
+        s.info.push_back({"Треугольников, смоч. площадь", format("%zu, %.4f м²", SL.triangles.size(), SL.wettedArea)});
+    }
+    s.info.push_back({grid.params.usePlanformArea ? "Площадь (в плане)" : "Площадь (миделя)",
+                      format("%.4f м²", grid.referenceArea())});
+    s.plots.push_back({"Cd", grid.dragCoefficient()});
+    s.plots.push_back({"Cl", grid.liftCoefficient()});
+    Probe::set("gas/Cd", grid.dragCoefficient());
+    Probe::set("gas/Cl", grid.liftCoefficient());
+}
+
+// The solver's counters: pressure iterations, speeds, smoke, the water, the solids in the gas.
+void Simulation::fillGasCounts(RenderSnapshot& s) const {
+    s.info.push_back({"Итераций давления", format("%d (невязка %.1e)", grid.lastPressureIterations(), grid.lastResidual())});
+    s.info.push_back({"Макс. скорость", format("%.2f м/с", grid.maxVelocity())});
+    s.info.push_back({"Макс. |div u| после проекции", format("%.2e 1/с", grid.maxDivergence())});
+    s.info.push_back({"Дым в объёме", format("%.4f м³", grid.totalSmoke())});
+    if (particles.fluidCount() > 0)
+        s.info.push_back({"Вода: частиц / ячеек в воздухе", format("%zu / %d", particles.fluidCount(), grid.liquidCellCount())});
+    if (particles.hasSolids()) {
+        int torn = 0;
+        for (const Cloth& c : particles.cloths()) torn += c.tornThreads;
+        s.info.push_back({"Мягких тел / тканей", format("%zu / %zu (порвано нитей %d)", particles.softBodies().size(),
+                                                         particles.cloths().size(), torn)});
+    }
+    if (!rigid.bodies().empty()) {
+        s.info.push_back({"Тел в газе", format("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
+                                            rigid.sleepingCount())});
+        s.info.push_back({"Сила газа на тело (макс.)", format("%.3f Н", gasForceMax_)});
+        if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", format("%.1f с", std::max(0.0f, releaseTime - time_))});
+    }
+    if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", format("%zu", s.arrowPos.size())});
+    if (!grid.hasObstacle()) {
+        s.plots.push_back({"Макс. скорость, м/с", grid.maxVelocity()});
+        s.plots.push_back({"Дым, дм³", grid.totalSmoke() * 1000.0f});
+        Probe::set("gas/smoke dm3", grid.totalSmoke() * 1000.0f);
+    }
+}
+
+// The rigid arena: its box and the solver's counters.
+void Simulation::fillRigidView(RenderSnapshot& s) const {
+    s.domain = rigid.domain();
+    s.colorMin = 0;
+    s.colorMax = 1;
+    s.info.push_back({"Тел", format("%zu", rigid.bodies().size())});
+    s.info.push_back({"Контактов", format("%zu", rigid.contactCount())});
+    s.info.push_back({"Спящих тел", format("%zu", rigid.sleepingCount())});
+    s.info.push_back({"CCD: остановлено тел за шаг", format("%zu", rigid.ccdHits())});
+    s.info.push_back({"Сочленений", format("%zu", rigid.joints().size())});
+    s.info.push_back({"Кин. энергия", format("%.2f Дж", rigid.kineticEnergy())});
+    s.plots.push_back({"Кин. энергия, Дж", rigid.kineticEnergy()});
+    Probe::set("rigid/kinetic energy J", rigid.kineticEnergy());
+}
+
+// The joints' anchors and axes, and the mouse joint (of a body or of grabbed particles).
+void Simulation::fillJointsAndGrab(RenderSnapshot& s) const {
     s.joints.clear();
     for (const auto& j : rigid.joints())
         s.joints.push_back({j->type(), j->worldAnchorA(rigid.bodies()), j->worldAnchorB(rigid.bodies()), j->worldAxis(rigid.bodies())});
@@ -528,10 +596,6 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         s.grabAnchor = particles.grabAnchor();
         s.grabTarget = particles.grabTarget();
     }
-    if (scene_) scene_->describe(*this, s); // the scene's own readings, after the generic ones
-    s.probe = Probe::snapshot();            // every channel the engine reported this frame
-    s.info.insert(s.info.begin(), {"Время", format("%.3f с", time_)});
-    s.info.push_back({"Шаг расчёта", format("%.1f мс", lastStepMs_)});
 }
 
 } // namespace rf

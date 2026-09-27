@@ -1,3 +1,5 @@
+// The probe's store: one map of channels behind a mutex, the debug drawings of the frame, and the
+// allocation counter. What the probe is for and how to use it is explained in Probe.h.
 #include "core/Probe.h"
 
 #include <algorithm>

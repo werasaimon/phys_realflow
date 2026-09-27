@@ -49,6 +49,10 @@ public:
     static void writePpm(const Image& img, const std::string& path);
 
 private:
+    // The steps of trace(): the photon arriving through a pixel, and the colour of the disk.
+    void arrivingPhoton(double sx, double sy, GeodesicState& s) const;
+    void shadeDisk(const GeodesicState& s, double diskR, double rIn, float rgb[3]) const;
+
     const Metric& metric_;
     Geodesic geodesic_;
 };

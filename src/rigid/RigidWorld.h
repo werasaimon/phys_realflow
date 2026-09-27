@@ -16,6 +16,7 @@
 #include "rigid/NarrowPhase.h"
 #include "rigid/Shapes.h"
 
+#include <chrono>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -255,6 +256,8 @@ private:
 
     void collide();
     void collideStatic(int i, std::vector<Manifold>& out) const;
+    void collideWalls(int i, std::vector<Manifold>& out) const;      // the six domain planes
+    void collideStaticMesh(int i, std::vector<Manifold>& out) const; // the static triangle mesh
     void addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm) const;
     void prepare(float dt);
     void solve();
@@ -275,8 +278,30 @@ private:
     void solveManifold(Manifold& m);
     void applyRestitution();
     void drawDebug() const;
+    // The steps of step(), in order (RigidWorld.cpp).
+    void beginStep();
+    void integrateVelocities(float dt);
+    void solveContacts(float dt);
+    void propagateShock();
+    void rememberContactImpulses();
+    void dampRestingBodies(float dt);
+    void integratePoses(float dt);
+    void finishStep(float dt, std::chrono::steady_clock::time_point tStart);
+    void reportStep() const;
     void computeLevels();
     void blockNormalSolve(Manifold& m);
+    // The steps of prepareManifold() and solveManifold() (ContactSolver.cpp).
+    void prepareContactPoints(Manifold& m, float dt);
+    void prepareFrictionPatch(Manifold& m);
+    void prepareNormalMassMatrix(Manifold& m);
+    void prepareRotationalLock(Manifold& m, const CachedPair* old);
+    void warmStartManifold(Manifold& m, const CachedPair& old, float cell);
+    Vector3 relativeVelocity(const Manifold& m, const Vector3& point) const;
+    void applyPairImpulse(const Manifold& m, const Vector3& J, const Vector3& point);
+    void applyPairAngularImpulse(const Manifold& m, const Vector3& L);
+    float solveNormalImpulses(Manifold& m);
+    void solveSplitImpulse(Manifold& m);
+    void solveFriction(Manifold& m, float total);
     // Sleeping: frozen bodies act as static during the step.
     void freezeSleepers();
     void unfreezeAll(bool onlyAwake = false);
@@ -292,6 +317,12 @@ private:
     template <class J> J& attach(std::unique_ptr<J> j, const Vector3& anchorA, const Vector3& anchorB, const Vector3& axis);
     void solveJointPositions();
     void continuousCollision();
+    // Its steps (TimeOfImpact.cpp): is any body fast, the sweeps of this pass, the earliest impact
+    // of every fast body, and the clamping of the bodies to those times.
+    bool anyFastBody() const;
+    void sweepBodies();
+    void findTimesOfImpact(std::vector<float>& sMin);
+    bool clampToTimesOfImpact(const std::vector<float>& sMin);
     size_t ccdHits_ = 0;
     std::vector<char> ccdClamped_; // bodies stopped by CCD in the last step (their next contact is an impact)
     Matrix3x3 grabMass_ = Matrix3x3::zero();
@@ -314,6 +345,11 @@ private:
         bool active = false;
     };
     void stepXPBD(float h);
+    // Its steps (XpbdSolver.cpp).
+    void xpbdDetectContacts(float h);
+    void xpbdIntegrate(float h);
+    void xpbdVelocitiesFromPoses(float h);
+    void xpbdDamp(float h);
     void buildXContacts();
     void solveXContactPosition(XContact& c, float h);
     void solveXContactVelocity(XContact& c, float h);
@@ -324,6 +360,7 @@ private:
     std::vector<XContact> xcontacts_;
     int substepCounter_ = 0;
     void solveManifoldShock(Manifold& m);
+    void dragAlongSupport(Manifold& m, RigidBody& upper, bool upperIsA, const float* acc, int np); // its friction part
 
     std::vector<RigidBody> bodies_;
     std::vector<Manifold> manifolds_;               // current step

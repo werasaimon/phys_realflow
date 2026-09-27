@@ -1,3 +1,6 @@
+// Combustion of a fuel gas in air on the grid: an Arrhenius reaction rate with an oxygen limit,
+// the heat it releases, the soot it makes and the expansion of the burnt gas that the pressure
+// projection has to allow. The parameters and the model are described in Combustion.h.
 #include "gas/Combustion.h"
 
 #include "core/Parallel.h"

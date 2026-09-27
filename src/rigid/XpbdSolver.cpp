@@ -157,22 +157,50 @@ void RigidWorld::solveXContactVelocity(XContact& c, float h) {
     applyVelocityChange(c.a, c.b, dv, pA, pB);
 }
 
+// One XPBD substep (Macklin, Müller & Chentanez 2016; Müller et al. 2020 "Detailed rigid body
+// simulation with XPBD"): predict the poses, correct them by the contact and joint constraints,
+// derive the velocities from the corrected poses, then friction, restitution and damping at
+// velocity level.
 void RigidWorld::stepXPBD(float h) {
     lastDt_ = h;
-    // Collision detection every few substeps; the margin covers the motion until the next one.
-    if (substepCounter_++ % std::max(1, params.collisionInterval) == 0 || xcontacts_.empty()) {
-        float vmax = 0;
-        for (const RigidBody& b : bodies_)
-            if (b.invMass > 0) vmax = std::max(vmax, length(b.vel) + length(b.angVel) * b.boundingRadius());
-        float saved = params.contactMargin;
-        params.contactMargin = std::max(saved, 1.5f * vmax * h * std::max(1, params.collisionInterval));
+    xpbdDetectContacts(h);
+    xpbdIntegrate(h);
+    // 2) Positions: contacts with static friction.
+    for (int it = 0; it < params.positionIterations; ++it) {
+        for (XContact& c : xcontacts_) solveXContactPosition(c, h);
         for (RigidBody& b : bodies_) b.updateInertia();
-        collide();
-        params.contactMargin = saved;
-        buildXContacts();
     }
+    solveJointPositions();
+    xpbdVelocitiesFromPoses(h);
+    // 4) Velocity level: dynamic friction, restitution, mouse joint.
+    for (XContact& c : xcontacts_) solveXContactVelocity(c, h);
+    prepareGrab(h);
+    for (auto& j : joints_) j->prepare(bodies_, h, params.warmStarting);
+    for (int it = 0; it < 4; ++it) {
+        solveGrab(h);
+        for (auto& j : joints_) j->solveVelocity(bodies_);
+    }
+    xpbdDamp(h);
+}
 
-    // 1) Integrate (explicit, gyroscopic term included).
+// Collision detection every few substeps; the margin covers the motion until the next one, so a
+// contact found now is still valid when the bodies have moved on.
+void RigidWorld::xpbdDetectContacts(float h) {
+    if (substepCounter_++ % std::max(1, params.collisionInterval) != 0 && !xcontacts_.empty()) return;
+    float vmax = 0;
+    for (const RigidBody& b : bodies_)
+        if (b.invMass > 0) vmax = std::max(vmax, length(b.vel) + length(b.angVel) * b.boundingRadius());
+    float saved = params.contactMargin;
+    params.contactMargin = std::max(saved, 1.5f * vmax * h * std::max(1, params.collisionInterval));
+    for (RigidBody& b : bodies_) b.updateInertia();
+    collide();
+    params.contactMargin = saved;
+    buildXContacts();
+}
+
+// 1) Integrate (explicit, gyroscopic term included): the predicted poses the constraints will
+// correct; every contact remembers its normal velocity before the substep, for the restitution.
+void RigidWorld::xpbdIntegrate(float h) {
     for (RigidBody& b : bodies_) {
         b.prevPos = b.pos;
         b.prevRot = b.rot;
@@ -196,16 +224,11 @@ void RigidWorld::stepXPBD(float h) {
         Vector3 pA = anchorA(c, true), pB = anchorB(c, true);
         c.vnPrev = dot(A.velocityAt(pA) - (B ? B->velocityAt(pB) : Vector3(0.0f)), c.n);
     }
+}
 
-    // 2) Positions: contacts with static friction.
-    for (int it = 0; it < params.positionIterations; ++it) {
-        for (XContact& c : xcontacts_) solveXContactPosition(c, h);
-        for (RigidBody& b : bodies_) b.updateInertia();
-    }
-
-    solveJointPositions();
-
-    // 3) Velocities from the position change.
+// 3) Velocities from the position change: this is what makes XPBD stable - the velocity is
+// whatever the constraints allowed the body to move.
+void RigidWorld::xpbdVelocitiesFromPoses(float h) {
     for (RigidBody& b : bodies_) {
         if (b.invMass == 0) continue;
         b.vel = (b.pos - b.prevPos) / h;
@@ -214,17 +237,11 @@ void RigidWorld::stepXPBD(float h) {
         b.angVel = w * (2.0f / h) * (dq.w >= 0 ? 1.0f : -1.0f);
         b.updateInertia();
     }
+}
 
-    // 4) Velocity level: dynamic friction, restitution, mouse joint.
-    for (XContact& c : xcontacts_) solveXContactVelocity(c, h);
-    prepareGrab(h);
-    for (auto& j : joints_) j->prepare(bodies_, h, params.warmStarting);
-    for (int it = 0; it < 4; ++it) {
-        solveGrab(h);
-        for (auto& j : joints_) j->solveVelocity(bodies_);
-    }
-
-    // Damping: global, plus the capped anti-phase damping of slow bodies in contact.
+// Damping: global, plus the capped anti-phase damping of slow bodies in contact; the forces of
+// this substep are cleared.
+void RigidWorld::xpbdDamp(float h) {
     const float ld = std::max(0.0f, 1.0f - params.linearDamping * h);
     const float ad = std::max(0.0f, 1.0f - params.angularDamping * h);
     std::vector<char> touching(bodies_.size(), 0);

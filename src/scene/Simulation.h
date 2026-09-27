@@ -268,6 +268,22 @@ private:
     std::vector<MovingSolid> movingSolids() const;
     void computeStreamlines(RenderSnapshot& s) const;
     void computeFieldLines(RenderSnapshot& s) const;
+    void fieldLineSeeds(std::vector<Vector3>& seeds) const;
+    void traceFieldLine(const Vector3& seed, std::vector<Vector3>& line, std::vector<float>& strength) const;
+    // The parts of fillSnapshot() (Snapshot.cpp).
+    void fillSettings(RenderSnapshot& s) const;
+    void fillBodies(RenderSnapshot& s) const;
+    void setColorRange(RenderSnapshot& s, float lo, float hi) const;
+    void fillLiquidView(RenderSnapshot& s) const;
+    void fillGasView(RenderSnapshot& s) const;
+    void fillSmokeVolume(RenderSnapshot& s) const;
+    void fillMagneticInfo(RenderSnapshot& s) const;
+    void fillSurfacePressure(RenderSnapshot& s) const;
+    void fillGasInfo(RenderSnapshot& s) const;
+    void fillAerodynamicInfo(RenderSnapshot& s) const;
+    void fillGasCounts(RenderSnapshot& s) const;
+    void fillRigidView(RenderSnapshot& s) const;
+    void fillJointsAndGrab(RenderSnapshot& s) const;
     void extractSlice(RenderSnapshot& s) const;
     void extractVectors(RenderSnapshot& s) const;
     int sliceLayer() const;

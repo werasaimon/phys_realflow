@@ -1,3 +1,7 @@
+// Resistive magnetohydrodynamics on the gas grid: the magnetic field on the faces (constrained
+// transport keeps div B = 0 to rounding), Faraday's law with the flow and the resistivity, the
+// Lorentz force on the gas, the Boris correction that limits the Alfven speed, Joule heating, and
+// the field's energy and divergence for the tests. The equations are in MagneticField.h.
 #include "plasma/MagneticField.h"
 
 #include "core/Parallel.h"

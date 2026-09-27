@@ -37,6 +37,7 @@ add_library(rfcore STATIC
   src/rigid/NarrowPhase.h         src/rigid/NarrowPhase.cpp
   src/rigid/BroadPhase.h          src/rigid/BroadPhase.cpp
   src/rigid/TimeOfImpact.h        src/rigid/TimeOfImpact.cpp
+  src/rigid/Fracture.h            src/rigid/Fracture.cpp
   src/rigid/Joints.h              src/rigid/Joints.cpp
   src/rigid/ConvexDecomposition.h src/rigid/ConvexDecomposition.cpp
   src/rigid/RigidWorld.h          src/rigid/RigidWorld.cpp
@@ -73,6 +74,9 @@ add_library(rfcore STATIC
   src/scene/Obstacle.cpp
   src/scene/Coupling.cpp
   src/scene/Snapshot.cpp
+  src/scene/SceneGraph.h          src/scene/SceneGraph.cpp
+  src/scene/GraphScene.cpp
+  src/scene/Magnets.h             src/scene/Magnets.cpp
 )
 target_include_directories(rfcore PUBLIC src)
 
@@ -93,6 +97,7 @@ add_library(rfsamples STATIC
   samples/plasma/Tokamak.h        samples/plasma/Tokamak.cpp
   samples/plasma/TokamakScene.h   samples/plasma/TokamakScene.cpp
   samples/plasma/MagnetosphereScene.cpp
+  samples/LessonScenes.cpp
 )
 target_include_directories(rfsamples PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(rfsamples PUBLIC rfcore)
@@ -153,7 +158,9 @@ if(RF_BUILD_TESTS)
     tests/PlasmaTests.cpp
     tests/SceneTests.cpp
     tests/TerrainTests.cpp
-    tests/RelativityTests.cpp)
+    tests/FractureTests.cpp
+    tests/RelativityTests.cpp
+    tests/GraphTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()

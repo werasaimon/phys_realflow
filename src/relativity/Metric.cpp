@@ -1,3 +1,6 @@
+// The Kerr metric (Schwarzschild for a = 0) in Boyer-Lindquist and ingoing Eddington-Finkelstein
+// coordinates: the metric tensor and its inverse, the horizon, the photon sphere and the ISCO
+// (Bardeen, Press & Teukolsky 1972), the constants of motion. See Metric.h.
 #include "relativity/Metric.h"
 
 #include <algorithm>

@@ -10,13 +10,28 @@ namespace rf {
 // ---------------------------------------------------------------------------
 // Moving solids (rigid bodies)
 // ---------------------------------------------------------------------------
+// The bodies and the liquid become walls of the gas for this step: 1) which cells each of them
+// covers, 2) those cells marked solid (an old cell left and a new cell entered mean the pressure
+// matrix changes), 3) the smoke and heat of the entered cells pushed out into the gas.
 void GasSolver::voxelizeMovingSolids() {
     if (moving_.empty() && liquidPos_.empty() && !hadMoving_) return;
+    std::vector<std::vector<size_t>> cells(moving_.size() + 1);
+    collectSolidCells(cells);
+    std::vector<size_t> entered; // cells a body moved into
+    bool changed = false;
+    markSolidCells(cells, entered, changed);
+    pushScalarsOutOfSolids(entered);
+    solidCells_.swap(cells);
+    liquidCells_ = int(solidCells_.back().size());
+    if (changed) computeDiag();
+    hadMoving_ = !moving_.empty() || !liquidPos_.empty();
+}
+
+// 1) The cells of every body: those whose centre is inside it. A resting (sleeping) body keeps
+//    the cells of its last voxelisation - no inside tests at all. Then the liquid: the cells
+//    holding at least one particle, with the particles' mean velocity (the last list).
+void GasSolver::collectSolidCells(std::vector<std::vector<size_t>>& cells) {
     const size_t nb = moving_.size();
-    // 1) The cells of every body: those whose centre is inside it. A resting (sleeping) body keeps
-    //    the cells of its last voxelisation - no inside tests at all. Then the liquid: the cells
-    //    holding at least one particle, with the particles' mean velocity (list nb).
-    std::vector<std::vector<size_t>> cells(nb + 1);
     // Cell lists are matched by index: reuse them only while the set of solids is the same size.
     const bool sameSolids = solidCells_.size() == nb + 1; // (the last list is the liquid)
     for (size_t b = 0; b < nb; ++b) {
@@ -52,8 +67,11 @@ void GasSolver::voxelizeMovingSolids() {
         }
         for (size_t c : cells[nb]) liquidVel_[c] /= float(count[c]);
     }
+}
 
-    // 2) Unmark the old cells (remembering them), mark the new ones.
+// 2) Unmark the old cells (remembering them), mark the new ones; `entered` collects the cells a
+//    body moved into, `changed` whether the set of solid cells differs from last step.
+void GasSolver::markSolidCells(const std::vector<std::vector<size_t>>& cells, std::vector<size_t>& entered, bool& changed) {
     const uint32_t wasMark = ++stampId_;
     for (const auto& list : solidCells_)
         for (size_t c : list) {
@@ -61,9 +79,8 @@ void GasSolver::voxelizeMovingSolids() {
             solid_[c] &= uint8_t(~kMoving);
             owner_[c] = -1;
         }
-    bool changed = false;
+    changed = false;
     movingCells_ = 0;
-    std::vector<size_t> entered; // cells a body moved into
     for (size_t b = 0; b < cells.size(); ++b)
         for (size_t c : cells[b]) {
             if (solid_[c]) continue; // already taken by another body
@@ -78,9 +95,11 @@ void GasSolver::voxelizeMovingSolids() {
     for (const auto& list : solidCells_)
         for (size_t c : list)
             if (!(solid_[c] & kMoving)) changed = true; // a cell was left
+}
 
-    // 3) The smoke and heat of the entered cells are pushed out to their gas neighbours instead of
-    //    vanishing inside the body (conserved as long as a gas neighbour exists).
+// 3) The smoke and heat of the entered cells are pushed out to their gas neighbours instead of
+//    vanishing inside the body (conserved as long as a gas neighbour exists).
+void GasSolver::pushScalarsOutOfSolids(const std::vector<size_t>& entered) {
     for (size_t c : entered) {
         int i = int(c % nx_), j = int((c / nx_) % ny_), k = int(c / (size_t(nx_) * ny_));
         const int nbr[6][3] = {{i - 1, j, k}, {i + 1, j, k}, {i, j - 1, k}, {i, j + 1, k}, {i, j, k - 1}, {i, j, k + 1}};
@@ -100,10 +119,6 @@ void GasSolver::voxelizeMovingSolids() {
         fuel_.d[c] = 0;
         products_.d[c] = 0;
     }
-    solidCells_.swap(cells);
-    liquidCells_ = int(solidCells_.back().size());
-    if (changed) computeDiag();
-    hadMoving_ = !moving_.empty() || !liquidPos_.empty();
 }
 
 bool GasSolver::solidFaceVelocity(long ca, long cb, const Vector3& fw, int comp, float& out) const {
@@ -184,21 +199,27 @@ void GasSolver::computeMovingForces() {
         }
 }
 
+// Skin friction of the gas on every wall it touches (static obstacle and moving bodies) through
+// a wall function: the gas cells next to a wall are collected, each one is rubbed against its
+// wall faces, and the velocity changes are gathered first (faces are shared by neighbouring
+// cells), then applied. The reaction is the friction force on the body.
 void GasSolver::applyWallFriction(float dt) {
     staticFriction_ = Vector3(0.0f);
     movFricForce_.assign(moving_.size(), Vector3(0.0f));
     movFricTorque_.assign(moving_.size(), Vector3(0.0f));
     if (!params.wallFriction || params.kinematicViscosity <= 0 || (solidCount_ == 0 && movingCells_ == 0)) return;
-    const float nu = params.kinematicViscosity;
-    const float cellMass = params.fluidDensity * dx_ * dx_ * dx_;
-    Field3* comps[3] = {&u_, &v_, &w_};
-    auto fluidCell = [&](int i, int j, int k) {
-        return i >= 0 && j >= 0 && k >= 0 && i < nx_ && j < ny_ && k < nz_ && !solid(i, j, k);
-    };
-
-    // Gas cells next to a wall: the static obstacle's (precomputed) and the bodies' neighbours.
-    const uint32_t mark = ++stampId_;
     std::vector<size_t> wallCells;
+    collectWallCells(wallCells);
+    std::vector<WallFrictionChange> changes;
+    for (size_t c : wallCells) rubWallCell(c, dt, changes);
+    Field3* comps[3] = {&u_, &v_, &w_};
+    for (const WallFrictionChange& ch : changes) comps[ch.comp]->d[ch.face] += ch.dv;
+}
+
+// Gas cells next to a wall: the static obstacle's (precomputed) and the bodies' neighbours,
+// each once (the stamp marks the cells already taken).
+void GasSolver::collectWallCells(std::vector<size_t>& wallCells) {
+    const uint32_t mark = ++stampId_;
     auto addCell = [&](size_t c) {
         if (stamp_[c] == mark || solid_[c]) return;
         stamp_[c] = mark;
@@ -215,59 +236,64 @@ void GasSolver::applyWallFriction(float dt) {
             if (k > 0) addCell(c - size_t(nx_) * ny_);
             if (k < nz_ - 1) addCell(c + size_t(nx_) * ny_);
         }
+}
 
-    // Velocity changes are gathered first (faces are shared by neighbouring cells), then applied.
-    struct Change { int comp; size_t face; float dv; };
-    std::vector<Change> changes;
-    for (size_t c : wallCells) {
-        const int i = int(c % nx_), j = int((c / nx_) % ny_), k = int(c / (size_t(nx_) * ny_));
-        const int cell[3] = {i, j, k};
-        for (int f = 0; f < 6; ++f) {
-            const int axis = f / 2, sgn = (f & 1) ? 1 : -1;
-            int nb[3] = {i, j, k};
-            nb[axis] += sgn;
-            if (nb[axis] < 0 || nb[0] >= nx_ || nb[1] >= ny_ || nb[2] >= nz_ || !solid(nb[0], nb[1], nb[2])) continue;
-            const size_t sc = cidx(nb[0], nb[1], nb[2]);
-            const int owner = owner_[sc];
-            if (owner >= int(moving_.size())) continue; // liquid: coupled through the particles' drag
-            Vector3 d(0.0f);
-            d[axis] = float(sgn); // from the gas cell towards the wall
-            const Vector3 xf = origin_ + (Vector3(i + 0.5f, j + 0.5f, k + 0.5f) + d * 0.5f) * dx_;
-            const Vector3 vb = owner >= 0 ? moving_[owner].pointVelocity(xf) : Vector3(0.0f);
-            Vector3 rel = cellVelocity(i, j, k) - vb;
-            rel[axis] = 0; // tangential part only
-            const float mag = length(rel);
-            if (mag < 1e-6f) continue;
-            const float L = owner >= 0 ? moving_[owner].length : staticLength_;
-            const float cf = skinFrictionCoefficient(mag * L / nu);
-            // tau dA dt / (rho dx^3) = k u_t, taken implicitly (never reverses the flow).
-            const float kk = 0.5f * cf * mag * dt / dx_;
-            const Vector3 delta = rel * (-kk / (1.0f + kk));
-            // Momentum lives on the faces: half of the change on each of the cell's two faces of a
-            // tangential axis, unless that face is a boundary face (fixed by the boundary condition).
-            Vector3 applied(0.0f);
-            for (int a = 0; a < 3; ++a) {
-                if (a == axis || delta[a] == 0) continue;
-                for (int side = 0; side < 2; ++side) {
-                    int o[3] = {cell[0], cell[1], cell[2]};
-                    o[a] += side ? 1 : -1;
-                    if (!fluidCell(o[0], o[1], o[2])) continue;
-                    int fi[3] = {cell[0], cell[1], cell[2]};
-                    fi[a] += side; // face index along axis a
-                    changes.push_back({a, comps[a]->idx(fi[0], fi[1], fi[2]), 0.5f * delta[a]});
-                    applied[a] += 0.5f * delta[a];
-                }
-            }
-            const Vector3 F = applied * (-cellMass / dt); // reaction on the wall
-            if (owner >= 0) {
-                movFricForce_[owner] += F;
-                movFricTorque_[owner] += cross(xf - moving_[owner].position, F);
-            } else if (solid_[sc] & kStatic) {
-                staticFriction_ += F;
+// One gas cell against each of its wall faces: the tangential velocity relative to the wall, the
+// skin friction coefficient of a flat plate at that Reynolds number (skinFrictionCoefficient),
+// the implicit velocity change tau dA dt / (rho dx^3) = k u_t (never reverses the flow), spread
+// over the cell's faces, and the reaction force on the wall's owner.
+void GasSolver::rubWallCell(size_t c, float dt, std::vector<WallFrictionChange>& changes) {
+    const float nu = params.kinematicViscosity;
+    const float cellMass = params.fluidDensity * dx_ * dx_ * dx_;
+    Field3* comps[3] = {&u_, &v_, &w_};
+    auto fluidCell = [&](int i, int j, int k) {
+        return i >= 0 && j >= 0 && k >= 0 && i < nx_ && j < ny_ && k < nz_ && !solid(i, j, k);
+    };
+    const int i = int(c % nx_), j = int((c / nx_) % ny_), k = int(c / (size_t(nx_) * ny_));
+    const int cell[3] = {i, j, k};
+    for (int f = 0; f < 6; ++f) {
+        const int axis = f / 2, sgn = (f & 1) ? 1 : -1;
+        int nb[3] = {i, j, k};
+        nb[axis] += sgn;
+        if (nb[axis] < 0 || nb[0] >= nx_ || nb[1] >= ny_ || nb[2] >= nz_ || !solid(nb[0], nb[1], nb[2])) continue;
+        const size_t sc = cidx(nb[0], nb[1], nb[2]);
+        const int owner = owner_[sc];
+        if (owner >= int(moving_.size())) continue; // liquid: coupled through the particles' drag
+        Vector3 d(0.0f);
+        d[axis] = float(sgn); // from the gas cell towards the wall
+        const Vector3 xf = origin_ + (Vector3(i + 0.5f, j + 0.5f, k + 0.5f) + d * 0.5f) * dx_;
+        const Vector3 vb = owner >= 0 ? moving_[owner].pointVelocity(xf) : Vector3(0.0f);
+        Vector3 rel = cellVelocity(i, j, k) - vb;
+        rel[axis] = 0; // tangential part only
+        const float mag = length(rel);
+        if (mag < 1e-6f) continue;
+        const float L = owner >= 0 ? moving_[owner].length : staticLength_;
+        const float cf = skinFrictionCoefficient(mag * L / nu);
+        const float kk = 0.5f * cf * mag * dt / dx_;
+        const Vector3 delta = rel * (-kk / (1.0f + kk));
+        // Momentum lives on the faces: half of the change on each of the cell's two faces of a
+        // tangential axis, unless that face is a boundary face (fixed by the boundary condition).
+        Vector3 applied(0.0f);
+        for (int a = 0; a < 3; ++a) {
+            if (a == axis || delta[a] == 0) continue;
+            for (int side = 0; side < 2; ++side) {
+                int o[3] = {cell[0], cell[1], cell[2]};
+                o[a] += side ? 1 : -1;
+                if (!fluidCell(o[0], o[1], o[2])) continue;
+                int fi[3] = {cell[0], cell[1], cell[2]};
+                fi[a] += side; // face index along axis a
+                changes.push_back({a, comps[a]->idx(fi[0], fi[1], fi[2]), 0.5f * delta[a]});
+                applied[a] += 0.5f * delta[a];
             }
         }
+        const Vector3 F = applied * (-cellMass / dt); // reaction on the wall
+        if (owner >= 0) {
+            movFricForce_[owner] += F;
+            movFricTorque_[owner] += cross(xf - moving_[owner].position, F);
+        } else if (solid_[sc] & kStatic) {
+            staticFriction_ += F;
+        }
     }
-    for (const Change& ch : changes) comps[ch.comp]->d[ch.face] += ch.dv;
 }
 
 void GasSolver::computeForces() {

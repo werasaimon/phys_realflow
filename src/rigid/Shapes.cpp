@@ -1,3 +1,6 @@
+// The collision shapes of rigid bodies: sphere, box, convex hull, triangle and compound - their
+// support functions (for GJK), bounds, mass properties, ray casts and the features (faces, edges)
+// the narrow phase clips. Declared in Shapes.h.
 #include "rigid/Shapes.h"
 
 #include <algorithm>

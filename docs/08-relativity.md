@@ -22,7 +22,7 @@ $$
 
 конечные на $r = 2M$ (Finkelstein 1958).
 
-[src/relativity/Metric.cpp:20](../src/relativity/Metric.cpp#L20)
+[src/relativity/Metric.cpp:23](../src/relativity/Metric.cpp#L23)
 ```cpp
     const double Sigma = r * r + a * a * c * c;
     const double Delta = r * r - 2.0 * M * r + a * a;
@@ -45,7 +45,7 @@ $$
 
 $H = 0$ для света и $-\tfrac12$ для частицы единичной массы, $\lambda$ — собственное время частицы. Производные $g^{\mu\nu}$ берутся пятиточечной центральной разностью по $r$ и $\theta$ (по $t$ и $\varphi$ метрика не зависит — производные нули, и $E = -p_t$, $L = p_\varphi$ сохраняются **точно**, до округления). Шаг разности $10^{-4}r$, у горизонта — не больше пятой части зазора до $r_+$: шаблон не должен заступать за координатную особенность (иначе луч в координатах Бойера–Линдквиста численно «отскакивает» от горизонта).
 
-[src/relativity/Geodesic.cpp:38](../src/relativity/Geodesic.cpp#L38)
+[src/relativity/Geodesic.cpp:41](../src/relativity/Geodesic.cpp#L41)
 ```cpp
 void Geodesic::derivative(const GeodesicState& s, double dx[4], double dp[4]) const {
     double ginv[4][4], dg[4][4][4];
@@ -73,7 +73,7 @@ $$
 
 **Что видит наблюдатель.** Направление в собственной системе наблюдателя переводится в 4-импульс через ортонормированную тетраду ZAMO (Bardeen, Press & Teukolsky 1972, ур. 3.3) — наблюдателя, увлекаемого вращением пространства: $e_t = (\partial_t + \omega\,\partial_\varphi)/\alpha$, $e_i = \partial_i/\sqrt{g_{ii}}$, где $\alpha = 1/\sqrt{-g^{tt}}$, $\omega = -g_{t\varphi}/g_{\varphi\varphi}$; при $a = 0$ это статический наблюдатель.
 
-[src/relativity/Geodesic.cpp:180](../src/relativity/Geodesic.cpp#L180)
+[src/relativity/Geodesic.cpp:183](../src/relativity/Geodesic.cpp#L183)
 ```cpp
     const double alpha = 1.0 / std::sqrt(-ginv[0][0]);
     const double omega = -g[0][3] / g[3][3];
@@ -91,7 +91,7 @@ $$
 
 наблюдаемая интенсивность $g^4$ от излучённой ($I_\nu/\nu^3$ — инвариант: $g^3$ на единицу частоты и ещё $g$ за ширину полосы); излучательная способность здесь — игрушечная $(r_{in}/r)^3$, настоящая — Новиков–Торн 1973.
 
-[src/relativity/RayTracer.cpp:72](../src/relativity/RayTracer.cpp#L72)
+[src/relativity/RayTracer.cpp:52](../src/relativity/RayTracer.cpp#L52)
 ```cpp
         const double Omega = metric_.keplerianOmega(diskR, true);
         const double ut = 1.0 / std::sqrt(-(g[0][0] + 2.0 * Omega * g[0][3] + Omega * Omega * g[3][3]));

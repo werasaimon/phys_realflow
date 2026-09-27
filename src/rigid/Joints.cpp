@@ -1,3 +1,10 @@
+// Joints: constraints that tie two bodies (or a body and the world) together - a ball joint keeps
+// two points together, a hinge also keeps two axes parallel, a slider lets the bodies move along
+// one axis only, a fixed joint welds them, a distance joint keeps them at a length (a rope or a
+// spring). Each is a few rows of a Jacobian solved by sequential impulses in the velocity
+// iterations of RigidWorld::step, with Baumgarte feedback for the drift and a position pass on the
+// new poses (Catto 2005, "Iterative Dynamics with Temporal Coherence"; Box2D b2_joint). The joint
+// classes are declared in Joints.h; the world's add*Joint functions are at the end of this file.
 #include "rigid/Joints.h"
 #include "rigid/RigidWorld.h"
 

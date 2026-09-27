@@ -70,6 +70,7 @@ void testCylinderStrouhal();
 void testNoetherRigid();        // RigidTests.cpp: energy, momentum, angular momentum of the rigid solver
 void testGridConvergence();     // GasTests.cpp: order of convergence of the gas solver on refined grids
 void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Martin & Moyce 1952
+void testVoronoiFracture();     // FractureTests.cpp: Voronoi cells of a convex body fill it, convex and watertight
 void testTerrain();             // TerrainTests.cpp: 150 bodies on a 51 200-triangle static mesh (BVH)
 void testParticlesManyBodies(); // ParticleTests.cpp: 30 000 particles find 150 bodies through the world tree
 
@@ -80,3 +81,9 @@ void testPhotonSphere();
 void testPerihelionPrecession();
 void testShadow();
 void testHorizonPenetration();
+
+// scene graph of the editor (GraphTests.cpp): text file round trip, magnet forces, a graph scene runs
+void testSceneGraphRoundTrip();
+void testMagnetForce();
+void testMagnetsAttract();
+void testGraphSceneBuilds();

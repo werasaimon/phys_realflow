@@ -1,3 +1,6 @@
+// The dynamic AABB tree (Box2D's b2DynamicTree, Bullet's btDbvt): insertion by the surface area
+// heuristic, incremental updates of fat boxes, rotations that keep it balanced, and the box and
+// ray queries. The design is explained in AABBTree.h.
 #include "spatial/AABBTree.h"
 
 #include <algorithm>

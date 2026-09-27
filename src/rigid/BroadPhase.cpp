@@ -1,3 +1,6 @@
+// Broad phases of the rigid solver: the pairs of bodies whose boxes overlap, found by brute force,
+// by a BVH, by an incremental AABB tree, or by sweep and prune (the default). The interface and
+// the choice are described in BroadPhase.h.
 #include "rigid/BroadPhase.h"
 
 #include "core/Parallel.h"

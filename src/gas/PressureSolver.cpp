@@ -12,12 +12,41 @@ namespace rf {
 // ---------------------------------------------------------------------------
 // Pressure projection (PCG)
 // ---------------------------------------------------------------------------
+// Chorin's projection (Chorin 1968; Bridson 2015, ch. 5): the flow after advection, forces and
+// diffusion has divergence; a pressure p is found so that u - dt/rho grad p has none, from the
+// Poisson equation div(grad p) = rho/dt div u*. The steps: the right-hand side (the divergence),
+// its mean removed per closed region (else the equation has no solution), the matrix diagonal
+// with the face weights, the conjugate gradient solve, the velocity update, and p from q.
 void GasSolver::project(float dt) {
     const size_t n = size_t(nx_) * ny_ * nz_;
-    const int NX = nx_, NY = ny_, NZ = nz_;
-    bool anyDirichlet = false;
-    for (auto t : params.bc) anyDirichlet |= (t == BoundaryType::Outflow);
+    const float toQ = dt / (params.fluidDensity * dx_); // q = p dt / (rho dx): the solve's unknown
+    buildPressureRightHandSide(dt);
+    removeMeanDivergence();
+    // Face weights of the pressure equation: 1, or 1 / (1 + v_A^2/c^2) where the Boris correction
+    // makes the plasma "heavier" in a strong field - then the pressure, like the Lorentz force,
+    // accelerates it by force / (rho (1 + v_A^2/c^2)): a variable-density projection,
+    // div( w grad p ) = div u* (Bridson, ch. 5).
+    const bool weighted = magnetic.enabled && magnetic.speedLimit > 0;
+    if (weighted) magnetic.borisWeights(weightU_, weightV_, weightW_, params.fluidDensity);
+    buildWeightedDiagonal(weighted);
+    solvePressurePcg(weighted);
+    subtractPressureGradient(weighted);
+    const float toP = 1.0f / toQ;
+    parallelFor(int(long(n)), [&](int c_) {
+        long c = c_; p_.d[c] = float(q_[c]) * toP;
+    }, 4096);
+}
 
+// The weight of a face of the pressure equation: 1, or the Boris weight of the magnetic field.
+double GasSolver::faceWeightU(int i, int j, int k, bool weighted) const { return weighted ? double(weightU_.at(i, j, k)) : 1.0; }
+double GasSolver::faceWeightV(int i, int j, int k, bool weighted) const { return weighted ? double(weightV_.at(i, j, k)) : 1.0; }
+double GasSolver::faceWeightW(int i, int j, int k, bool weighted) const { return weighted ? double(weightW_.at(i, j, k)) : 1.0; }
+
+// The right-hand side b of every fluid cell: minus the divergence of the intermediate velocity
+// (the sum of the six face velocities), plus the expansion of burning gas; the unknown q starts
+// from last step's pressure (warm start).
+void GasSolver::buildPressureRightHandSide(float dt) {
+    const int NX = nx_, NY = ny_, NZ = nz_;
     const float toQ = dt / (params.fluidDensity * dx_);
     struct Acc {
         double sum = 0;
@@ -42,39 +71,37 @@ void GasSolver::project(float dt) {
         return a;
     }, 1);
     (void)acc;
-    (void)anyDirichlet;
-    // Compatibility: zero net divergence in every closed fluid region.
-    {
-        const size_t nr = regionOpen_.size();
-        std::vector<double> sum(nr, 0.0);
-        std::vector<long> cnt(nr, 0);
-        for (size_t c = 0; c < n; ++c) {
-            int r = region_[c];
-            if (r < 0 || regionOpen_[r]) continue;
-            sum[r] += b_[c];
-            ++cnt[r];
-        }
-        bool any = false;
-        for (size_t r = 0; r < nr; ++r)
-            if (cnt[r] > 0) { sum[r] /= double(cnt[r]); any = true; }
-        regionMeanB_ = sum;
-        if (any)
-            parallelFor(int(long(n)), [&](int c) {
-                int r = region_[c];
-                if (r >= 0 && !regionOpen_[r]) b_[c] -= sum[r];
-            }, 4096);
-    }
+}
 
-    // Face weights of the pressure equation: 1, or 1 / (1 + v_A^2/c^2) where the Boris correction
-    // makes the plasma "heavier" in a strong field - then the pressure, like the Lorentz force,
-    // accelerates it by force / (rho (1 + v_A^2/c^2)): a variable-density projection,
-    // div( w grad p ) = div u* (Bridson, ch. 5).
-    const bool weighted = magnetic.enabled && magnetic.speedLimit > 0;
-    if (weighted) magnetic.borisWeights(weightU_, weightV_, weightW_, params.fluidDensity);
-    auto wu = [&](int i, int j, int k) { return weighted ? double(weightU_.at(i, j, k)) : 1.0; };
-    auto wv = [&](int i, int j, int k) { return weighted ? double(weightV_.at(i, j, k)) : 1.0; };
-    auto ww = [&](int i, int j, int k) { return weighted ? double(weightW_.at(i, j, k)) : 1.0; };
-    // Diagonal: the weights of the cell's faces towards gas or towards an open (outflow) side.
+// Compatibility: a closed region of fluid (walls all around, no outflow) can only be solved if
+// its net divergence is zero - the mean is removed from every cell of each closed region.
+void GasSolver::removeMeanDivergence() {
+    const size_t n = size_t(nx_) * ny_ * nz_;
+    const size_t nr = regionOpen_.size();
+    std::vector<double> sum(nr, 0.0);
+    std::vector<long> cnt(nr, 0);
+    for (size_t c = 0; c < n; ++c) {
+        int r = region_[c];
+        if (r < 0 || regionOpen_[r]) continue;
+        sum[r] += b_[c];
+        ++cnt[r];
+    }
+    bool any = false;
+    for (size_t r = 0; r < nr; ++r)
+        if (cnt[r] > 0) { sum[r] /= double(cnt[r]); any = true; }
+    regionMeanB_ = sum;
+    if (any)
+        parallelFor(int(long(n)), [&](int c) {
+            int r = region_[c];
+            if (r >= 0 && !regionOpen_[r]) b_[c] -= sum[r];
+        }, 4096);
+}
+
+// Diagonal of the matrix: the weights of the cell's faces towards gas or towards an open
+// (outflow) side; unweighted, it is the count of such faces already in diag_.
+void GasSolver::buildWeightedDiagonal(bool weighted) {
+    const size_t n = size_t(nx_) * ny_ * nz_;
+    const int NX = nx_, NY = ny_, NZ = nz_;
     diagW_.assign(n, 0.0);
     parallelFor(int(NZ), [&](int k) {
         for (int j = 0; j < NY; ++j)
@@ -86,39 +113,55 @@ void GasSolver::project(float dt) {
                     return (inside ? !solid_[nb] : b == BoundaryType::Outflow) ? w : 0.0;
                 };
                 const size_t sl = size_t(NX) * NY;
-                diagW_[c] = side(i > 0, c - 1, params.bc[0], wu(i, j, k)) + side(i < NX - 1, c + 1, params.bc[1], wu(i + 1, j, k)) +
-                            side(j > 0, c - NX, params.bc[2], wv(i, j, k)) + side(j < NY - 1, c + NX, params.bc[3], wv(i, j + 1, k)) +
-                            side(k > 0, c - sl, params.bc[4], ww(i, j, k)) + side(k < NZ - 1, c + sl, params.bc[5], ww(i, j, k + 1));
+                diagW_[c] = side(i > 0, c - 1, params.bc[0], faceWeightU(i, j, k, weighted)) +
+                            side(i < NX - 1, c + 1, params.bc[1], faceWeightU(i + 1, j, k, weighted)) +
+                            side(j > 0, c - NX, params.bc[2], faceWeightV(i, j, k, weighted)) +
+                            side(j < NY - 1, c + NX, params.bc[3], faceWeightV(i, j + 1, k, weighted)) +
+                            side(k > 0, c - sl, params.bc[4], faceWeightW(i, j, k, weighted)) +
+                            side(k < NZ - 1, c + sl, params.bc[5], faceWeightW(i, j, k + 1, weighted));
             }
     }, 1);
+}
 
-    auto applyA = [&](const std::vector<double>& x, std::vector<double>& out) {
-        parallelFor(int(NZ), [&](int k_) {
-            int k = k_;
-            for (int j = 0; j < NY; ++j)
-                for (int i = 0; i < NX; ++i) {
-                    size_t c = cidx(i, j, k);
-                    if (solid_[c] || diag_[c] == 0) { out[c] = 0; continue; }
-                    double s = diagW_[c] * x[c];
-                    if (i > 0 && !solid_[c - 1]) s -= wu(i, j, k) * x[c - 1];
-                    if (i < NX - 1 && !solid_[c + 1]) s -= wu(i + 1, j, k) * x[c + 1];
-                    if (j > 0 && !solid_[c - NX]) s -= wv(i, j, k) * x[c - NX];
-                    if (j < NY - 1 && !solid_[c + NX]) s -= wv(i, j + 1, k) * x[c + NX];
-                    size_t sl = size_t(NX) * NY;
-                    if (k > 0 && !solid_[c - sl]) s -= ww(i, j, k) * x[c - sl];
-                    if (k < NZ - 1 && !solid_[c + sl]) s -= ww(i, j, k + 1) * x[c + sl];
-                    out[c] = s;
-                }
-        }, 1);
-    };
-    auto dotp = [&](const std::vector<double>& a, const std::vector<double>& b) {
-        return parallelSum<double>(int(n), [&](int c0, int c1) {
-            double s = 0;
-            for (int c = c0; c < c1; ++c) s += a[c] * b[c];
-            return s;
-        }, 4096);
-    };
+// The matrix of the pressure equation applied to a vector, face by face: the weighted 7-point
+// Laplacian, with solid neighbours and non-fluid cells left out. The matrix is never stored.
+void GasSolver::applyPressureMatrix(const std::vector<double>& x, std::vector<double>& out, bool weighted) const {
+    const int NX = nx_, NY = ny_, NZ = nz_;
+    parallelFor(int(NZ), [&](int k_) {
+        int k = k_;
+        for (int j = 0; j < NY; ++j)
+            for (int i = 0; i < NX; ++i) {
+                size_t c = cidx(i, j, k);
+                if (solid_[c] || diag_[c] == 0) { out[c] = 0; continue; }
+                double s = diagW_[c] * x[c];
+                if (i > 0 && !solid_[c - 1]) s -= faceWeightU(i, j, k, weighted) * x[c - 1];
+                if (i < NX - 1 && !solid_[c + 1]) s -= faceWeightU(i + 1, j, k, weighted) * x[c + 1];
+                if (j > 0 && !solid_[c - NX]) s -= faceWeightV(i, j, k, weighted) * x[c - NX];
+                if (j < NY - 1 && !solid_[c + NX]) s -= faceWeightV(i, j + 1, k, weighted) * x[c + NX];
+                size_t sl = size_t(NX) * NY;
+                if (k > 0 && !solid_[c - sl]) s -= faceWeightW(i, j, k, weighted) * x[c - sl];
+                if (k < NZ - 1 && !solid_[c + sl]) s -= faceWeightW(i, j, k + 1, weighted) * x[c + sl];
+                out[c] = s;
+            }
+    }, 1);
+}
 
+// The dot product of two vectors of the grid, summed in parallel blocks.
+static double dotProduct(const std::vector<double>& a, const std::vector<double>& b) {
+    return parallelSum<double>(int(a.size()), [&](int c0, int c1) {
+        double s = 0;
+        for (int c = c0; c < c1; ++c) s += a[c] * b[c];
+        return s;
+    }, 4096);
+}
+
+// Preconditioned conjugate gradient (Jacobi preconditioner) on the 7-point Laplacian, in double:
+// the matrix is never stored, applyA computes A x face by face. Stops at the relative tolerance
+// of the residual or at the iteration limit; both are reported to the panel.
+void GasSolver::solvePressurePcg(bool weighted) {
+    const size_t n = size_t(nx_) * ny_ * nz_;
+    auto applyA = [&](const std::vector<double>& x, std::vector<double>& out) { applyPressureMatrix(x, out, weighted); };
+    auto dotp = [](const std::vector<double>& a, const std::vector<double>& b) { return dotProduct(a, b); };
     applyA(q_, As_);
     double rz = parallelSum<double>(int(n), [&](int c0, int c1) {
         double acc2 = 0;
@@ -164,10 +207,17 @@ void GasSolver::project(float dt) {
     }
     lastIters_ = it;
     lastResidual_ = bnorm > 0 ? float(rnorm / bnorm) : 0.0f;
+}
 
-    // Velocity update: u -= grad q (q already includes dt/(rho dx)).
+// Velocity update: u -= w grad q on every face between two fluid cells (q already includes
+// dt/(rho dx)); on an outflow side the pressure outside is zero.
+void GasSolver::subtractPressureGradient(bool weighted) {
+    const int NX = nx_, NY = ny_, NZ = nz_;
     auto qAt = [&](int i, int j, int k) { return q_[cidx(i, j, k)]; };
     auto fluid = [&](int i, int j, int k) { return !solid(i, j, k) && diag_[cidx(i, j, k)] != 0; };
+    auto wu = [&](int i, int j, int k) { return faceWeightU(i, j, k, weighted); };
+    auto wv = [&](int i, int j, int k) { return faceWeightV(i, j, k, weighted); };
+    auto ww = [&](int i, int j, int k) { return faceWeightW(i, j, k, weighted); };
     const BoundaryType* bc = params.bc;
     parallelFor(int(NZ), [&](int k_) {
         int k = k_;
@@ -196,11 +246,6 @@ void GasSolver::project(float dt) {
             if (bc[5] == BoundaryType::Outflow && fluid(i, j, NZ - 1)) w_.at(i, j, NZ) += float(ww(i, j, NZ) * qAt(i, j, NZ - 1));
         }
     }, 1);
-
-    const float toP = 1.0f / toQ;
-    parallelFor(int(long(n)), [&](int c_) {
-        long c = c_; p_.d[c] = float(q_[c]) * toP;
-    }, 4096);
 }
 
 } // namespace rf

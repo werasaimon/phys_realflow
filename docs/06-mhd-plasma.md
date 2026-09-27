@@ -89,7 +89,7 @@ $$
 
 Evans & Hawley (1988). Магнитное поле хранится **на гранях** ячеек, как скорость газа; $\mathbf E$ и $\mathbf J$ — **на рёбрах**:
 
-[src/plasma/MagneticField.cpp:10](../src/plasma/MagneticField.cpp#L10)
+[src/plasma/MagneticField.cpp:14](../src/plasma/MagneticField.cpp#L14)
 ```cpp
 // Layout (cell (i, j, k) spans [i, i+1] x [j, j+1] x [k, k+1] in cell units):
 //   bx(i,j,k) on the x-face at (i, j+1/2, k+1/2)    size (nx+1, ny, nz)   - as the velocity u
@@ -110,7 +110,7 @@ $$
 B_x^{n+1} = B_x^n - \frac{\Delta t}{\Delta x}\Big[\big(E_z^{j+1} - E_z^{j}\big) - \big(E_y^{k+1} - E_y^{k}\big)\Big].
 $$
 
-[src/plasma/MagneticField.cpp:204](../src/plasma/MagneticField.cpp#L204)
+[src/plasma/MagneticField.cpp:208](../src/plasma/MagneticField.cpp#L208)
 ```cpp
 void MagneticField::applyFaraday(float dt) {
     // dB/dt = -curl E: the flux through a face changes by the circulation of E around it.
@@ -146,7 +146,7 @@ $\mathbf u$ и $\mathbf B$ усредняются на ребро. Центра�
 
 > **Почему без $v_A$.** Альфвеновским волнам диссипация не нужна: сила Лоренца и закон Фарадея шагаются по очереди (симплектически) и устойчивы сами — это показывает тест торсионной волны без диссипации. А слагаемое $f\,v_A\,\Delta x$ у сильного магнита (где $v_A$ велика) снижало эффективное магнитное число Рейнольдса примерно до 8: поле «расплывалось» и пропускало плазму.
 
-[src/plasma/MagneticField.cpp:164](../src/plasma/MagneticField.cpp#L164)
+[src/plasma/MagneticField.cpp:168](../src/plasma/MagneticField.cpp#L168)
 ```cpp
     const float eta0 = resistivity(), f = numericalDissipation * dx_;
     const bool mapped = !etaCell_.empty();
@@ -156,7 +156,7 @@ $\mathbf u$ и $\mathbf B$ усредняются на ребро. Центра�
     };
 ```
 
-[src/plasma/MagneticField.cpp:173](../src/plasma/MagneticField.cpp#L173)
+[src/plasma/MagneticField.cpp:177](../src/plasma/MagneticField.cpp#L177)
 ```cpp
                 if (i < nx_) { // x-edge (i+1/2, j, k)
                     const size_t e = ex_.idx(i, j, k);
@@ -199,7 +199,7 @@ $$
 v_A' = \frac{v_A}{\sqrt{1 + v_A^2/c_B^2}} \le c_B .
 $$
 
-[src/plasma/MagneticField.cpp:245](../src/plasma/MagneticField.cpp#L245)
+[src/plasma/MagneticField.cpp:249](../src/plasma/MagneticField.cpp#L249)
 ```cpp
 const float s0 = dt / std::max(density, 1e-12f);
 const float boris = speedLimit > 0 ? 1.0f / (kMu0 * std::max(density, 1e-12f) * speedLimit * speedLimit) : 0.0f;
@@ -222,7 +222,7 @@ $$
 w_f = \frac{1}{1 + k\,\lvert\mathbf B_f\rvert^2}, \qquad k = \frac{1}{\mu_0\,\rho\,c_B^2} \quad\Big(\text{то есть } k\,B^2 = v_A^2/c_B^2\Big).
 $$
 
-[src/plasma/MagneticField.cpp:293](../src/plasma/MagneticField.cpp#L293)
+[src/plasma/MagneticField.cpp:297](../src/plasma/MagneticField.cpp#L297)
 ```cpp
 void MagneticField::borisWeights(Field3& wx, Field3& wy, Field3& wz, float density) const {
     wx.init(nx_ + 1, ny_, nz_, bx.offset, 1.0f);
@@ -253,24 +253,25 @@ $$
 
 Грань «открыта», если за ней газ или открытая (outflow) граница. Твёрдая стенка в сумму не входит, потому что там задана скорость, а не давление. Диагональ $\sum w_f$ хранится в `diagW_`. Она же служит предобуславливателем Якоби в методе сопряжённых градиентов. При $w_f \equiv 1$ получается обычный лапласиан, поэтому без коррекции Бориса путь не меняется.
 
-[src/gas/PressureSolver.cpp:95](../src/gas/PressureSolver.cpp#L95)
+[src/gas/PressureSolver.cpp:128](../src/gas/PressureSolver.cpp#L128)
 ```cpp
-    auto applyA = [&](const std::vector<double>& x, std::vector<double>& out) {
-        parallelFor(int(NZ), [&](int k_) {
-            int k = k_;
-            for (int j = 0; j < NY; ++j)
-                for (int i = 0; i < NX; ++i) {
-                    size_t c = cidx(i, j, k);
-                    if (solid_[c] || diag_[c] == 0) { out[c] = 0; continue; }
-                    double s = diagW_[c] * x[c];
-                    if (i > 0 && !solid_[c - 1]) s -= wu(i, j, k) * x[c - 1];
-                    if (i < NX - 1 && !solid_[c + 1]) s -= wu(i + 1, j, k) * x[c + 1];
-                    if (j > 0 && !solid_[c - NX]) s -= wv(i, j, k) * x[c - NX];
-                    if (j < NY - 1 && !solid_[c + NX]) s -= wv(i, j + 1, k) * x[c + NX];
-                    size_t sl = size_t(NX) * NY;
-                    if (k > 0 && !solid_[c - sl]) s -= ww(i, j, k) * x[c - sl];
-                    if (k < NZ - 1 && !solid_[c + sl]) s -= ww(i, j, k + 1) * x[c + sl];
-                    out[c] = s;
+void GasSolver::applyPressureMatrix(const std::vector<double>& x, std::vector<double>& out, bool weighted) const {
+    const int NX = nx_, NY = ny_, NZ = nz_;
+    parallelFor(int(NZ), [&](int k_) {
+        int k = k_;
+        for (int j = 0; j < NY; ++j)
+            for (int i = 0; i < NX; ++i) {
+                size_t c = cidx(i, j, k);
+                if (solid_[c] || diag_[c] == 0) { out[c] = 0; continue; }
+                double s = diagW_[c] * x[c];
+                if (i > 0 && !solid_[c - 1]) s -= faceWeightU(i, j, k, weighted) * x[c - 1];
+                if (i < NX - 1 && !solid_[c + 1]) s -= faceWeightU(i + 1, j, k, weighted) * x[c + 1];
+                if (j > 0 && !solid_[c - NX]) s -= faceWeightV(i, j, k, weighted) * x[c - NX];
+                if (j < NY - 1 && !solid_[c + NX]) s -= faceWeightV(i, j + 1, k, weighted) * x[c + NX];
+                size_t sl = size_t(NX) * NY;
+                if (k > 0 && !solid_[c - sl]) s -= faceWeightW(i, j, k, weighted) * x[c - sl];
+                if (k < NZ - 1 && !solid_[c + sl]) s -= faceWeightW(i, j, k + 1, weighted) * x[c + sl];
+                out[c] = s;
 ```
 
 Равновесия (стационарные состояния, баланс давлений) при этом **не меняются** — меняется только то, как быстро на них реагируют области сильного поля. Та же ограниченная $v_A'$ используется в шаге по времени (`alfvenSpeed`).

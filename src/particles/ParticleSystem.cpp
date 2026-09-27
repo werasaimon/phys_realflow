@@ -295,10 +295,34 @@ void ParticleSystem::emitParticles(float dt) {
     }
 }
 
+// One step of position based fluids (Macklin & Müller 2013) with the soft bodies and cloth in the
+// same loop: predict where every particle goes, then a few iterations that push the particles
+// apart until the density is right and the solids keep their shape, then the velocities are
+// read off the corrected positions.
 void ParticleSystem::step(float dt) {
     emitParticles(dt);
     const int n = int(x_.size());
     if (n == 0) return;
+    beginStep(n);
+    predictPositions(dt);
+    {
+        Probe::Timer timer("particles/cloth ms");
+        stepClothsInSmallSteps(dt);
+    }
+    const bool solids = fluidCount_ < size_t(n);
+    for (Cloth& c : cloths_)
+        for (DistanceConstraint& dc : c.constraints) dc.lambda = 0;
+    {
+        Probe::Timer timer("particles/neighbors ms");
+        buildGrid(p_);
+        findNeighbors();
+    }
+    for (int it = 0; it < params.solverIterations; ++it) solveIteration(it, solids, dt);
+    finishStep(dt);
+}
+
+// Work arrays for this step's particle count, and the contact records cleared.
+void ParticleSystem::beginStep(int n) {
     p_.resize(n); dp_.resize(n); rho_.resize(n); lambda_.resize(n); omega_.resize(n); vtmp_.resize(n);
     contactBody_.assign(n, -1);
     contactNormal_.resize(n);
@@ -307,7 +331,13 @@ void ParticleSystem::step(float dt) {
     const size_t nb = rigid_ ? rigid_->bodies().size() : 0;
     bodyShift_.assign(nb, Vector3(0.0f));
     bodyTurn_.assign(nb, Vector3(0.0f));
+}
 
+// Explicit prediction: gravity into the velocity, the position one step ahead, pushed out of the
+// walls and bodies it would enter (a pinned particle stays). The bodies met on the way get their
+// contacts solved, and the grabbed particles follow the mouse.
+void ParticleSystem::predictPositions(float dt) {
+    const int n = int(x_.size());
     const Vector3 g = params.gravity;
     prepareBodyQuery(true);
     parallelFor(n, [&](int i) {
@@ -329,59 +359,56 @@ void ParticleSystem::step(float dt) {
     }
     solveBodyContacts(dt);
     for (size_t k = 0; k < grab_.particles.size(); ++k) p_[grab_.particles[k]] = grab_.target + grab_.offsets[k];
-    {
-        Probe::Timer timer("particles/cloth ms");
-        stepClothsInSmallSteps(dt);
-    }
-    const bool solids = fluidCount_ < size_t(n);
-    for (Cloth& c : cloths_)
-        for (DistanceConstraint& dc : c.constraints) dc.lambda = 0;
+}
 
+// One solver iteration: the density constraint of every fluid particle (lambda, then the
+// position correction), the walls and bodies again, and - with solids present - the particle
+// contacts, the cloth constraints and the shape matching, each followed by the bodies.
+void ParticleSystem::solveIteration(int it, bool solids, float dt) {
+    const int n = int(x_.size());
     {
-        Probe::Timer timer("particles/neighbors ms");
-        buildGrid(p_);
-        findNeighbors();
+        Probe::Timer timer("particles/density ms"); // summed over the iterations
+        computeLambda();
+        computeDeltaP();
     }
-
-    for (int it = 0; it < params.solverIterations; ++it) {
-        {
-            Probe::Timer timer("particles/density ms"); // summed over the iterations
-            computeLambda();
-            computeDeltaP();
-        }
+    prepareBodyQuery(true);
+    parallelFor(n, [&](int i) {
+        if (invMass_[i] == 0) return;
+        Vector3 p = p_[i] + dp_[i];
+        collide(i, p, x_[i], true, dt);
+        p_[i] = p;
+    });
+    Probe::add("rigid/tree queries", n);
+    solveBodyContacts(dt);
+    if (!solids) return;
+    Probe::Timer contactTimer("particles/contacts ms"); // the solid passes of this iteration
+    if (it == 0) findParticleContacts();
+    for (int pass = 0; pass < std::max(1, params.solidIterations); ++pass) {
+        solveParticleContacts();
+        // Contacts push cloth particles around (a body resting on a sheet): the cloth is
+        // re-satisfied after every contact pass so the two converge together.
+        for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt);
+        solveShapeMatching(softBodies_, p_, invMass_, params.solverIterations * std::max(1, params.solidIterations));
         prepareBodyQuery(true);
         parallelFor(n, [&](int i) {
-            if (invMass_[i] == 0) return;
-            Vector3 p = p_[i] + dp_[i];
-            collide(i, p, x_[i], true, dt);
-            p_[i] = p;
+            if (invMass_[i] == 0 || isFluid(i)) return;
+            collide(i, p_[i], x_[i], true, dt);
         });
-        Probe::add("rigid/tree queries", n);
+        Probe::add("rigid/tree queries", n - int(fluidCount_));
         solveBodyContacts(dt);
-        if (!solids) continue;
-        Probe::Timer contactTimer("particles/contacts ms"); // the solid passes of this iteration
-        if (it == 0) findParticleContacts();
-        for (int pass = 0; pass < std::max(1, params.solidIterations); ++pass) {
-            solveParticleContacts();
-            // Contacts push cloth particles around (a body resting on a sheet): the cloth is
-            // re-satisfied after every contact pass so the two converge together.
-            for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt);
-            solveShapeMatching(softBodies_, p_, invMass_, params.solverIterations * std::max(1, params.solidIterations));
-            prepareBodyQuery(true);
-            parallelFor(n, [&](int i) {
-                if (invMass_[i] == 0 || isFluid(i)) return;
-                collide(i, p_[i], x_[i], true, dt);
-            });
-            Probe::add("rigid/tree queries", n - int(fluidCount_));
-            solveBodyContacts(dt);
-        }
     }
+}
 
+// The step's end: cloth tears where it was over-stretched, the velocity is the position change
+// over the step (capped at half a kernel radius per step, the limit of the neighbour search),
+// viscosity and vorticity confinement, and the bodies get the velocity change the particles
+// gave them (the rigid solver moves them in its next step).
+void ParticleSystem::finishStep(float dt) {
+    const int n = int(x_.size());
     for (Cloth& c : cloths_) {
         tearCloth(c, p_, dt);
         updateTethers(c);
     }
-
     const float vmaxAllowed = 0.5f * h_ / dt;
     float vmaxSeen = parallelMax<float>(n, 0.0f, [&](int b, int e) {
         float m = 0;
@@ -398,12 +425,8 @@ void ParticleSystem::step(float dt) {
     Probe::set("particles/count", n);
     Probe::set("particles/fluid", double(fluidCount_));
     Probe::set("particles/max speed", maxSpeed_);
-
     applyViscosityAndVorticity(dt);
     x_.swap(p_);
-
-    // The bodies' motion from the particle contacts becomes their velocity change (the rigid
-    // solver moves them in its next step).
     for (size_t b = 0; b < bodyShift_.size(); ++b)
         if (length2(bodyShift_[b]) + length2(bodyTurn_[b]) > 0)
             rigid_->applyVelocityChange(int(b), bodyShift_[b] / dt, bodyTurn_[b] / dt);

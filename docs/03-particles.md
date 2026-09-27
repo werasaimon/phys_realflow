@@ -350,12 +350,12 @@ $$
 
 так что мягкость не зависит от числа итераций. Раньше `stiffness` применялась на каждом проходе: при 8 проходах даже 0.15 оставляло от деформации $(1-0.15)^8 = 27%$, а 0.4 — 1.7 %, и тела не гнулись.
 
-[src/particles/SoftBody.cpp:102](../src/particles/SoftBody.cpp#L102)
+[src/particles/SoftBody.cpp:105](../src/particles/SoftBody.cpp#L105)
 ```cpp
         const float kPass = k >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - k, 1.0f / float(std::max(1, passesPerStep)));
 ```
 
-[src/particles/SoftBody.cpp:108](../src/particles/SoftBody.cpp#L108)
+[src/particles/SoftBody.cpp:111](../src/particles/SoftBody.cpp#L111)
 ```cpp
 for (SoftCluster& cl : body.clusters) {
     // Current centre of mass (all particles of a body have the same mass).
@@ -422,7 +422,7 @@ $$
 \mathbf p_a \mathrel{+}= w_a\Delta\lambda\,\mathbf n, \quad \mathbf p_b \mathrel{-}= w_b\Delta\lambda\,\mathbf n .
 $$
 
-[src/particles/Cloth.cpp:156](../src/particles/Cloth.cpp#L156)
+[src/particles/Cloth.cpp:159](../src/particles/Cloth.cpp#L159)
 ```cpp
 static void solveConstraint(DistanceConstraint& c, std::vector<Vector3>& p, const std::vector<float>& invMass, float invDt2) {
     const float wa = invMass[c.a], wb = invMass[c.b];

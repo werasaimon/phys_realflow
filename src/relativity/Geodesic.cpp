@@ -1,3 +1,6 @@
+// Geodesics of the Kerr metric in Hamiltonian form: the equations of motion, the RK4 and the
+// adaptive Dormand-Prince RK45 integrators, the integration until capture or escape, and the
+// 4-momentum of a photon arriving from a direction in an observer's frame. See Geodesic.h.
 #include "relativity/Geodesic.h"
 
 #include <algorithm>

@@ -1,3 +1,6 @@
+// The thread pool of the SDK: a fixed set of spinning workers that split a loop between them
+// (parallelFor, parallelSum, parallelMax). Its own pool instead of OpenMP because MinGW's libgomp
+// costs 150-180 microseconds per region on Windows. The interface is in Parallel.h.
 #include "core/Parallel.h"
 
 #include <cstdlib>

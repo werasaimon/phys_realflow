@@ -185,7 +185,7 @@ for (auto& pq : pairs) {
 
 **LU с частичным выбором ведущего элемента.** $\mathbf P\mathbf A = \mathbf L\mathbf U$: в каждом столбце строка с наибольшим по модулю элементом становится ведущей. Множители хранятся на месте $\mathbf L$:
 
-[src/math/MatrixNxN.cpp:71](../src/math/MatrixNxN.cpp#L71)
+[src/math/MatrixNxN.cpp:74](../src/math/MatrixNxN.cpp#L74)
 ```cpp
 for (int c = 0; c < n; ++c) {
     int piv = c; // largest entry in the column below the diagonal
@@ -257,7 +257,7 @@ $$
 
 где $N$ — число примитивов, $S$ — площадь поверхности бокса. Перебирать все возможные разрезы дорого, поэтому центроиды раскладываются по **12 корзинам** вдоль каждой оси, и оцениваются 11 разрезов между корзинами за один проход вперёд и один назад:
 
-[src/spatial/BVH.cpp:65](../src/spatial/BVH.cpp#L65)
+[src/spatial/BVH.cpp:68](../src/spatial/BVH.cpp#L68)
 ```cpp
 for (int b = 0; b < kBins - 1; ++b) {
     acc.expand(binBox[b]);
@@ -288,7 +288,7 @@ for (int b = kBins - 1; b > 0; --b) {
 
 С такими нормалями знак $\operatorname{sign}\big((\mathbf p - \mathbf p_{closest})\cdot\mathbf n_{pseudo}\big)$ точен для замкнутого меша. Функция `closestPtTri` (Ericson, *Real-Time Collision Detection*, §5.1.5) возвращает, какой элемент ближайший: грань, одна из вершин или одно из рёбер.
 
-[src/spatial/BVH.cpp:269](../src/spatial/BVH.cpp#L269)
+[src/spatial/BVH.cpp:272](../src/spatial/BVH.cpp#L272)
 ```cpp
 Vector3 N;
 const auto& tri = tris_[bestTri];
@@ -323,7 +323,7 @@ flowchart LR
 - **создать родителя здесь**: стоимость $2\,S(N \cup L)$;
 - **спуститься в ребёнка $C$**: каждый предок и так вырастет на $\Delta = 2\,(S(N\cup L) - S(N))$ («унаследованная» стоимость), плюс рост самого ребёнка.
 
-[src/spatial/AABBTree.cpp:101](../src/spatial/AABBTree.cpp#L101)
+[src/spatial/AABBTree.cpp:104](../src/spatial/AABBTree.cpp#L104)
 ```cpp
 while (!nodes_[index].isLeaf()) {
     const Node& n = nodes_[index];

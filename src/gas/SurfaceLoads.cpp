@@ -1,3 +1,5 @@
+// The loads of the gas on every triangle of the obstacle: pressure and skin friction sampled from
+// the grid next to the surface, summed into drag, lift and moment coefficients (SurfaceLoads.h).
 #include "gas/SurfaceLoads.h"
 
 #include <cstdio>

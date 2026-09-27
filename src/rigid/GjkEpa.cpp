@@ -1,3 +1,7 @@
+// Distance and penetration between two convex shapes: GJK (Gilbert, Johnson & Keerthi 1988) walks
+// a simplex in the Minkowski difference towards the origin; when the shapes overlap, EPA (van
+// den Bergen 2001) expands a polytope to the boundary and reads the penetration off its closest
+// face. Declared in GjkEpa.h.
 #include "rigid/GjkEpa.h"
 
 #include "core/Parallel.h"
@@ -80,6 +84,52 @@ void compact(Simplex& s) {
     s.n = std::max(k, 1);
 }
 
+// The tetrahedron case of solveSimplex: the origin is inside when it lies on the inner side of
+// all four faces; otherwise the simplex shrinks to the face closest to the origin. Side tests in
+// double precision with a relative tolerance: thin shapes give nearly flat Minkowski tetrahedra
+// where float rounding flips the sign and fakes an "inside".
+Vector3 closestOnTetrahedron(Simplex& s, bool& inside) {
+    const int faces[4][4] = {{0, 1, 2, 3}, {0, 3, 1, 2}, {0, 2, 3, 1}, {1, 3, 2, 0}}; // i, j, k, opposite
+    bool anyOutside = false;
+    float best = kInf;
+    Simplex bestS;
+    Vector3 bestV;
+    double scale = 0;
+    for (int i = 0; i < 4; ++i) scale = std::max(scale, double(length(s.v[i].w)));
+    for (auto& f : faces) {
+        const Vector3 &a = s.v[f[0]].w, &b = s.v[f[1]].w, &c = s.v[f[2]].w, &d = s.v[f[3]].w;
+        double ab[3] = {double(b.x) - a.x, double(b.y) - a.y, double(b.z) - a.z};
+        double ac[3] = {double(c.x) - a.x, double(c.y) - a.y, double(c.z) - a.z};
+        double n[3] = {ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]};
+        double nl = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        double sO = -(n[0] * a.x + n[1] * a.y + n[2] * a.z);
+        double sD = n[0] * (double(d.x) - a.x) + n[1] * (double(d.y) - a.y) + n[2] * (double(d.z) - a.z);
+        const double eps = 1e-6 * nl * std::max(scale, 1e-9);
+        bool flat = std::fabs(sD) <= eps;
+        // "Inside" of this face only when the origin is clearly on the side of the opposite vertex.
+        bool insideFace = !flat && sO * sD > 0 && std::fabs(sO) > eps;
+        if (insideFace) continue;
+        anyOutside = true;
+        float bary[3];
+        Vector3 v = closestTriangle(a, b, c, bary);
+        float l2 = dot(v, v);
+        if (l2 < best) {
+            best = l2;
+            bestV = v;
+            bestS.n = 3;
+            bestS.v[0] = s.v[f[0]]; bestS.v[1] = s.v[f[1]]; bestS.v[2] = s.v[f[2]];
+            bestS.lam[0] = bary[0]; bestS.lam[1] = bary[1]; bestS.lam[2] = bary[2];
+        }
+    }
+    if (!anyOutside) {
+        inside = true;
+        return Vector3(0.0f);
+    }
+    s = bestS;
+    compact(s);
+    return bestV;
+}
+
 // Replaces the simplex by the smallest sub-simplex containing its point closest to the origin.
 // Returns that point; `inside` is set when the tetrahedron contains the origin.
 Vector3 solveSimplex(Simplex& s, bool& inside) {
@@ -102,49 +152,8 @@ Vector3 solveSimplex(Simplex& s, bool& inside) {
         compact(s);
         return v;
     }
-    default: {
-        const int faces[4][4] = {{0, 1, 2, 3}, {0, 3, 1, 2}, {0, 2, 3, 1}, {1, 3, 2, 0}}; // i, j, k, opposite
-        bool anyOutside = false;
-        float best = kInf;
-        Simplex bestS;
-        Vector3 bestV;
-        // Side tests in double precision with a relative tolerance: thin shapes give nearly flat
-        // Minkowski tetrahedra where float rounding flips the sign and fakes an "inside".
-        double scale = 0;
-        for (int i = 0; i < 4; ++i) scale = std::max(scale, double(length(s.v[i].w)));
-        for (auto& f : faces) {
-            const Vector3 &a = s.v[f[0]].w, &b = s.v[f[1]].w, &c = s.v[f[2]].w, &d = s.v[f[3]].w;
-            double ab[3] = {double(b.x) - a.x, double(b.y) - a.y, double(b.z) - a.z};
-            double ac[3] = {double(c.x) - a.x, double(c.y) - a.y, double(c.z) - a.z};
-            double n[3] = {ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]};
-            double nl = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-            double sO = -(n[0] * a.x + n[1] * a.y + n[2] * a.z);
-            double sD = n[0] * (double(d.x) - a.x) + n[1] * (double(d.y) - a.y) + n[2] * (double(d.z) - a.z);
-            const double eps = 1e-6 * nl * std::max(scale, 1e-9);
-            bool flat = std::fabs(sD) <= eps;
-            // "Inside" of this face only when the origin is clearly on the side of the opposite vertex.
-            bool insideFace = !flat && sO * sD > 0 && std::fabs(sO) > eps;
-            if (insideFace) continue;
-            anyOutside = true;
-            float bary[3];
-            Vector3 v = closestTriangle(a, b, c, bary);
-            float l2 = dot(v, v);
-            if (l2 < best) {
-                best = l2;
-                bestV = v;
-                bestS.n = 3;
-                bestS.v[0] = s.v[f[0]]; bestS.v[1] = s.v[f[1]]; bestS.v[2] = s.v[f[2]];
-                bestS.lam[0] = bary[0]; bestS.lam[1] = bary[1]; bestS.lam[2] = bary[2];
-            }
-        }
-        if (!anyOutside) {
-            inside = true;
-            return Vector3(0.0f);
-        }
-        s = bestS;
-        compact(s);
-        return bestV;
-    }
+    default:
+        return closestOnTetrahedron(s, inside);
     }
 }
 
@@ -226,15 +235,23 @@ EpaScratch& epaScratch() {
 }
 } // namespace
 
-PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult& g) {
-    PenetrationResult res;
-    EpaScratch& S = epaScratch();
-    std::vector<SV>& V = S.V;
-    V.clear();
-    for (int i = 0; i < g.simplexSize; ++i) V.push_back({g.w[i], g.a[i], g.b[i]});
-    const float eps = 1e-6f;
+namespace {
 
-    // Blow the simplex up to a non-degenerate tetrahedron.
+// A face of the polytope through three of its vertices, with its outward unit normal and the
+// distance of its plane from the origin (a degenerate face gets an infinite distance: never chosen).
+EpaFace makeEpaFace(const std::vector<SV>& V, int a, int b, int c) {
+    EpaFace f{a, b, c, cross(V[b].w - V[a].w, V[c].w - V[a].w), 0};
+    float l = length(f.n);
+    if (l < 1e-12f) { f.n = Vector3(0.0f); f.d = kInf; return f; } // degenerate: never chosen
+    f.n /= l;
+    f.d = dot(f.n, V[a].w);
+    return f;
+}
+
+// GJK may end with a point, a segment or a triangle containing the origin; EPA needs a tetrahedron
+// with volume, so support points in other directions are added until it has one.
+void inflateToTetrahedron(const PosedShape& A, const PosedShape& B, std::vector<SV>& V) {
+    const float eps = 1e-6f;
     if (V.size() == 1) {
         const Vector3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
         for (const Vector3& d : dirs) {
@@ -262,34 +279,35 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
             if (std::fabs(dot(w.w - V[0].w, n)) > eps) V.push_back(w);
         }
     }
-    if (V.size() < 4) return res; // touching with zero volume: no meaningful penetration
+}
 
-    using Face = EpaFace;
-    std::vector<Face>& faces = S.faces;
+// The four faces of the starting tetrahedron, oriented outwards.
+void buildInitialPolytope(EpaScratch& S) {
+    const std::vector<SV>& V = S.V;
+    std::vector<EpaFace>& faces = S.faces;
     faces.clear();
-    auto makeFace = [&](int a, int b, int c) {
-        Face f{a, b, c, cross(V[b].w - V[a].w, V[c].w - V[a].w), 0};
-        float l = length(f.n);
-        if (l < 1e-12f) { f.n = Vector3(0.0f); f.d = kInf; return f; } // degenerate: never chosen
-        f.n /= l;
-        f.d = dot(f.n, V[a].w);
-        return f;
-    };
     const int tf[4][4] = {{0, 1, 2, 3}, {0, 3, 1, 2}, {0, 2, 3, 1}, {1, 3, 2, 0}};
     for (auto& t : tf) {
         int a = t[0], b = t[1], c = t[2];
         Vector3 n = cross(V[b].w - V[a].w, V[c].w - V[a].w);
         if (dot(n, V[t[3]].w - V[a].w) > 0) std::swap(b, c); // outward orientation
-        faces.push_back(makeFace(a, b, c));
+        faces.push_back(makeEpaFace(V, a, b, c));
     }
+}
 
-    int closest = 0;
+// The expansion (van den Bergen 2001): take the face closest to the origin, ask the Minkowski
+// difference for its support point in that direction; if the point is not beyond the face the
+// polytope has reached the boundary. Otherwise remove the faces seen from the point and join its
+// horizon edges to it. Bounded by 96 rounds and 512 faces.
+void expandPolytope(const PosedShape& A, const PosedShape& B, EpaScratch& S) {
+    std::vector<SV>& V = S.V;
+    std::vector<EpaFace>& faces = S.faces;
     for (int iter = 0; iter < 96; ++iter) {
-        closest = 0;
+        int closest = 0;
         for (int i = 1; i < int(faces.size()); ++i)
             if (faces[i].d < faces[closest].d) closest = i;
-        const Face f = faces[closest];
-        if (f.d == kInf) return res;
+        const EpaFace f = faces[closest];
+        if (f.d == kInf) return;
         SV w = supportAB(A, B, f.n);
         float dist = dot(w.w, f.n);
         if (dist - f.d < 1e-5f * std::max(1.0f, std::fabs(dist))) break; // converged
@@ -297,10 +315,10 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
         V.push_back(w);
         // Remove the faces seen from w and collect the horizon (edges used by exactly one of them).
         std::vector<std::pair<int, int>>& horizon = S.horizon;
-        std::vector<Face>& kept = S.kept;
+        std::vector<EpaFace>& kept = S.kept;
         horizon.clear();
         kept.clear();
-        for (const Face& fc : faces) {
+        for (const EpaFace& fc : faces) {
             if (fc.d != kInf && dot(fc.n, w.w - V[fc.a].w) > 1e-7f) {
                 const int e[3][2] = {{fc.a, fc.b}, {fc.b, fc.c}, {fc.c, fc.a}};
                 for (auto& ed : e) {
@@ -314,17 +332,25 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
         }
         if (horizon.empty()) break;
         faces.swap(kept);
-        for (auto& ed : horizon) faces.push_back(makeFace(ed.first, ed.second, wi));
+        for (auto& ed : horizon) faces.push_back(makeEpaFace(V, ed.first, ed.second, wi));
         if (faces.size() > 512) break;
     }
+}
+
+// The penetration from the closest face of the finished polytope: its distance is the depth, its
+// normal the direction, and the witness points on A and B come from the same barycentric weights
+// (the face's vertices remember which support points of A and B made them).
+PenetrationResult penetrationFromPolytope(const EpaScratch& S) {
+    PenetrationResult res;
+    const std::vector<SV>& V = S.V;
+    const std::vector<EpaFace>& faces = S.faces;
     // The loop may end right after rebuilding the polytope (face limit, iteration limit): the
     // index found at the top of the last iteration then points into the old face list.
-    closest = 0;
+    int closest = 0;
     for (int i = 1; i < int(faces.size()); ++i)
         if (faces[i].d < faces[closest].d) closest = i;
     if (faces[closest].d == kInf) return res;
-
-    const Face& f = faces[closest];
+    const EpaFace& f = faces[closest];
     // Barycentric coordinates of the origin's projection onto the closest face.
     Vector3 p = f.n * f.d;
     Vector3 a = V[f.a].w, b = V[f.b].w, c = V[f.c].w;
@@ -344,6 +370,23 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
     res.depth = std::max(f.d, 0.0f);
     res.valid = true;
     return res;
+}
+
+} // namespace
+
+// EPA, the expanding polytope algorithm: from the simplex GJK left inside the Minkowski
+// difference, a polytope grows outwards until it touches the difference's boundary; the face it
+// touches with gives the penetration depth, the normal and the witness points.
+PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult& g) {
+    EpaScratch& S = epaScratch();
+    std::vector<SV>& V = S.V;
+    V.clear();
+    for (int i = 0; i < g.simplexSize; ++i) V.push_back({g.w[i], g.a[i], g.b[i]});
+    inflateToTetrahedron(A, B, V);
+    if (V.size() < 4) return PenetrationResult(); // touching with zero volume: no meaningful penetration
+    buildInitialPolytope(S);
+    expandPolytope(A, B, S);
+    return penetrationFromPolytope(S);
 }
 
 bool penetration(const PosedShape& A, const PosedShape& B, PenetrationResult& out) {

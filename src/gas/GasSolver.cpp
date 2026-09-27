@@ -13,8 +13,33 @@ namespace rf {
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
+// A new grid for the current parameters: its size, its fields, the static obstacle voxelised into
+// it, the obstacle's reference areas, the wall cells for the skin friction, then the pressure
+// matrix, the magnetic field and the solver's work vectors.
 void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     origin_ = origin;
+    chooseGrid();
+    allocateFields();
+    voxelizeStaticObstacle(obstacle);
+    measureObstacle();
+    findStaticWallCells();
+    computeDiag();
+    magnetic.reset(nx_, ny_, nz_, dx_, origin_);
+    if (solidCount_ > 0) magnetic.setConductors(solid_); // the obstacle (a vessel wall) conducts
+    const size_t n = size_t(nx_) * ny_ * nz_;
+    q_.assign(n, 0); r_.assign(n, 0); z_.assign(n, 0); s_.assign(n, 0); As_.assign(n, 0); b_.assign(n, 0);
+    force_ = Vector3(0.0f);
+    cd_ = cl_ = cs_ = cdAvg_ = clAvg_ = 0;
+    refArea_ = params.usePlanformArea ? planformArea_ : frontalArea_;
+    lastIters_ = 0;
+    lastResidual_ = 0;
+    time_ = 0;
+    applyVelocityBC();
+}
+
+// The number of cells: resolutionX cells along x fix the spacing dx, the other sides follow the
+// domain size; a cap keeps a thin, tall domain from asking for 10^8 cells.
+void GasSolver::chooseGrid() {
     nx_ = std::max(8, params.resolutionX);
     dx_ = params.domainSize.x / float(nx_);
     ny_ = std::max(4, int(std::lround(params.domainSize.y / dx_)));
@@ -28,7 +53,14 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
         ny_ = std::max(4, int(std::lround(params.domainSize.y / dx_)));
         nz_ = std::max(4, int(std::lround(params.domainSize.z / dx_)));
     }
+}
 
+// The MAC grid: velocities on the faces (u on x-faces, v on y-faces, w on z-faces), pressure,
+// smoke, temperature, fuel and products in the cell centres; an inflow starts the u faces at the
+// inflow speed. Everything handed in for the old scene goes: the bodies, the liquid, pending
+// impulses and emissions (a later scene without bodies would otherwise keep the old water as
+// solid cells).
+void GasSolver::allocateFields() {
     float u0 = (params.bc[0] == BoundaryType::Inflow) ? params.inflowSpeed : 0.0f;
     u_.init(nx_ + 1, ny_, nz_, {0, 0.5f, 0.5f}, u0);
     v_.init(nx_, ny_ + 1, nz_, {0.5f, 0, 0.5f});
@@ -43,8 +75,6 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     const size_t n = size_t(nx_) * ny_ * nz_;
     expansion_.assign(n, 0.0f);
     heatReleaseRate_ = 0;
-    // Everything handed in for the old scene goes: the bodies, the liquid, pending impulses and
-    // emissions (a later scene without bodies would otherwise keep the old water as solid cells).
     pendingEmissions_.clear();
     pendingImpulses_.clear();
     radiators_.clear();
@@ -53,6 +83,12 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     liquidVelIn_.clear();
     liquidVel_.clear();
     liquidCells_ = 0;
+}
+
+// The static obstacle: every cell whose centre is inside the mesh is a wall (kStatic); with a
+// vessel, every cell outside it. The moving-solid bookkeeping starts empty.
+void GasSolver::voxelizeStaticObstacle(const MeshBVH* obstacle) {
+    const size_t n = size_t(nx_) * ny_ * nz_;
     solid_.assign(n, 0);
     if (obstacle && !obstacle->empty()) {
         AABB mb = obstacle->bounds();
@@ -81,8 +117,11 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
     movTorque_.clear();
     movingCells_ = 0;
     hadMoving_ = false;
+}
 
-    // Reference areas: projections of the voxelised body.
+// Reference areas of the voxelised body, the projections it presents to the flow (frontal) and
+// from above (planform, for a wing), and the length of its boundary layer along the flow.
+void GasSolver::measureObstacle() {
     int front = 0, plan = 0;
     for (int k = 0; k < nz_; ++k)
         for (int j = 0; j < ny_; ++j)
@@ -104,13 +143,18 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
         // extent (that is the span of a cylinder or a wing).
         staticLength_ = sb.valid() ? sb.extent().x + dx_ : 1.0f;
     }
+}
+
+// Gas cells touching the static obstacle: the only places where it can exert wall friction. The
+// friction bookkeeping of the moving bodies starts empty too.
+void GasSolver::findStaticWallCells() {
+    const size_t n = size_t(nx_) * ny_ * nz_;
     staticFriction_ = Vector3(0.0f);
     movFricForce_.clear();
     movFricTorque_.clear();
     solidCells_.clear();
     stamp_.assign(n, 0);
     stampId_ = 0;
-    // Gas cells touching the static obstacle (the only places where it can exert wall friction).
     staticWallCells_.clear();
     for (int k = 0; k < nz_; ++k)
         for (int j = 0; j < ny_; ++j)
@@ -120,20 +164,6 @@ void GasSolver::reset(const Vector3& origin, const MeshBVH* obstacle) {
                             (j < ny_ - 1 && solid(i, j + 1, k)) || (k > 0 && solid(i, j, k - 1)) || (k < nz_ - 1 && solid(i, j, k + 1));
                 if (wall) staticWallCells_.push_back(cidx(i, j, k));
             }
-
-    computeDiag();
-
-    magnetic.reset(nx_, ny_, nz_, dx_, origin_);
-    if (solidCount_ > 0) magnetic.setConductors(solid_); // the obstacle (a vessel wall) conducts
-
-    q_.assign(n, 0); r_.assign(n, 0); z_.assign(n, 0); s_.assign(n, 0); As_.assign(n, 0); b_.assign(n, 0);
-    force_ = Vector3(0.0f);
-    cd_ = cl_ = cs_ = cdAvg_ = clAvg_ = 0;
-    refArea_ = params.usePlanformArea ? planformArea_ : frontalArea_;
-    lastIters_ = 0;
-    lastResidual_ = 0;
-    time_ = 0;
-    applyVelocityBC();
 }
 
 // Pressure matrix diagonal: fluid neighbours + Dirichlet (outflow) sides.
@@ -388,20 +418,13 @@ void GasSolver::injectSources() {
 // ---------------------------------------------------------------------------
 // Time step
 // ---------------------------------------------------------------------------
+// One time step of the gas, the operator splitting of Stam 1999 / Bridson 2015 in order: the
+// bodies become walls, sources add gas, everything is carried by the flow (advection), the fire
+// burns, the forces push, viscosity diffuses, the walls rub, the pressure makes the flow
+// divergence-free, the magnetic field follows the flow. Every stage is a named step below; the
+// probe measures each.
 float GasSolver::step(float maxDt) {
-    auto absMax = [](const std::vector<float>& d) {
-        return parallelMax<float>(int(d.size()), 0.0f, [&](int b, int e) {
-            float m = 0;
-            for (int i = b; i < e; ++i) m = std::max(m, std::fabs(d[i]));
-            return m;
-        }, 4096);
-    };
-    float umax = std::max({absMax(u_.d), absMax(v_.d), absMax(w_.d)});
-    maxVel_ = umax;
-    float vref = std::max({umax, params.inflowSpeed, 0.05f});
-    float dt = std::min(maxDt, params.cfl * dx_ / vref);
-    if (magnetic.enabled) dt = std::min(dt, magnetic.maxTimeStep(umax, params.fluidDensity)); // Alfven waves
-
+    const float dt = chooseTimeStep(maxDt);
     using Clock = std::chrono::steady_clock;
     auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<float, std::milli>(b - a).count(); };
     auto t0 = Clock::now();
@@ -412,42 +435,15 @@ float GasSolver::step(float maxDt) {
     solidMs_ = ms(t0, Clock::now());
     applyVelocityBC();
     injectSources();
-
     {
         Probe::Timer timer("gas/advect ms");
-        u0_ = u_; v0_ = v_; w0_ = w_;
-        advectField(u_, t1_, t2_, dt);
-        advectField(v_, t1_, t2_, dt);
-        advectField(w_, t1_, t2_, dt);
-        std::vector<Field3*> scalars = {&smoke_};
-        if (source.enabled || params.heatBuoyancy != 0 || combustion.enabled || magnetic.enabled) scalars.push_back(&temp_);
-        if (combustion.enabled) {
-            scalars.push_back(&fuel_);
-            scalars.push_back(&products_); // fresh air (0) comes in through the open sides
-        }
-        advectScalars(scalars, dt);
+        advectAll(dt);
     }
-    if (combustion.enabled) {
-        Probe::Timer timer("gas/heat ms"); // the reaction, conduction and the radiators
-        const double burnt = combustion.react(fuel_.d, products_.d, temp_.d, smoke_.d, expansion_, solid_, dt);
-        // Power of the flame: every unit of burnt fuel heated its cell by heatRelease.
-        const float cellHeatCapacity = params.fluidDensity * combustion.specificHeat * dx_ * dx_ * dx_;
-        heatReleaseRate_ = float(burnt * combustion.heatRelease * cellHeatCapacity / dt);
-        conductHeat(dt);
-        collectRadiators();
-    } else if (heatReleaseRate_ != 0 || !radiators_.empty()) {
-        // The fire was switched off: its last expansion must not stay a source of the projection.
-        std::fill(expansion_.begin(), expansion_.end(), 0.0f);
-        heatReleaseRate_ = 0;
-        radiators_.clear();
-    }
+    burn(dt);
     applyVelocityBC();
-
     {
         Probe::Timer timer("gas/forces ms"); // buoyancy, confinement, Lorentz, the bodies' impulses
-        addForces(dt);
-        if (magnetic.enabled) magnetic.applyLorentzForce(u_, v_, w_, solid_, params.fluidDensity, dt);
-        applyPendingImpulses();
+        applyForces(dt);
     }
     {
         Probe::Timer timer("gas/diffuse ms");
@@ -463,13 +459,7 @@ float GasSolver::step(float maxDt) {
     }
     if (magnetic.enabled) {
         Probe::Timer timer("gas/mhd ms");
-        // Faraday with the new, divergence-free flow; the current's Joule heat warms the gas.
-        magnetic.induce(u_, v_, w_, params.fluidDensity, dt);
-        std::vector<float> joule;
-        magnetic.jouleHeating(joule, dt);
-        const float rhoCp = params.fluidDensity * combustion.specificHeat;
-        for (size_t c = 0; c < joule.size(); ++c)
-            if (!solid_[c]) temp_.d[c] += joule[c] / rhoCp;
+        induceMagneticField(dt);
     }
     auto t3 = Clock::now();
     computeForces();
@@ -477,7 +467,88 @@ float GasSolver::step(float maxDt) {
     solidMs_ += ms(t1, t2) + ms(t3, Clock::now());
     pressureMs_ = ms(t2, t3);
     computeDiagnostics();
-    // The step's numbers for the probe.
+    reportStep(dt);
+    dissipateScalars(dt);
+    lastDt_ = dt;
+    averageCoefficients(dt);
+    time_ += dt;
+    return dt;
+}
+
+// The CFL condition: no fluid may cross more than `cfl` cells in one step, measured by the fastest
+// velocity on the grid (or the inflow); with a magnetic field the Alfven waves set a limit too.
+float GasSolver::chooseTimeStep(float maxDt) {
+    auto absMax = [](const std::vector<float>& d) {
+        return parallelMax<float>(int(d.size()), 0.0f, [&](int b, int e) {
+            float m = 0;
+            for (int i = b; i < e; ++i) m = std::max(m, std::fabs(d[i]));
+            return m;
+        }, 4096);
+    };
+    float umax = std::max({absMax(u_.d), absMax(v_.d), absMax(w_.d)});
+    maxVel_ = umax;
+    float vref = std::max({umax, params.inflowSpeed, 0.05f});
+    float dt = std::min(maxDt, params.cfl * dx_ / vref);
+    if (magnetic.enabled) dt = std::min(dt, magnetic.maxTimeStep(umax, params.fluidDensity)); // Alfven waves
+    return dt;
+}
+
+// Semi-Lagrangian advection (MacCormack) of the velocity itself and of every scalar the scene
+// carries: smoke always; temperature when something heats the gas; fuel and products in a fire.
+void GasSolver::advectAll(float dt) {
+    u0_ = u_; v0_ = v_; w0_ = w_;
+    advectField(u_, t1_, t2_, dt);
+    advectField(v_, t1_, t2_, dt);
+    advectField(w_, t1_, t2_, dt);
+    std::vector<Field3*> scalars = {&smoke_};
+    if (source.enabled || params.heatBuoyancy != 0 || combustion.enabled || magnetic.enabled) scalars.push_back(&temp_);
+    if (combustion.enabled) {
+        scalars.push_back(&fuel_);
+        scalars.push_back(&products_); // fresh air (0) comes in through the open sides
+    }
+    advectScalars(scalars, dt);
+}
+
+// The fire: the reaction of fuel with air (Combustion), the power of the flame, heat conduction
+// and the radiating cells. A fire that was switched off must not leave its last expansion as a
+// source of the pressure projection.
+void GasSolver::burn(float dt) {
+    if (combustion.enabled) {
+        Probe::Timer timer("gas/heat ms"); // the reaction, conduction and the radiators
+        const double burnt = combustion.react(fuel_.d, products_.d, temp_.d, smoke_.d, expansion_, solid_, dt);
+        // Power of the flame: every unit of burnt fuel heated its cell by heatRelease.
+        const float cellHeatCapacity = params.fluidDensity * combustion.specificHeat * dx_ * dx_ * dx_;
+        heatReleaseRate_ = float(burnt * combustion.heatRelease * cellHeatCapacity / dt);
+        conductHeat(dt);
+        collectRadiators();
+    } else if (heatReleaseRate_ != 0 || !radiators_.empty()) {
+        std::fill(expansion_.begin(), expansion_.end(), 0.0f);
+        heatReleaseRate_ = 0;
+        radiators_.clear();
+    }
+}
+
+// Body forces on the gas: buoyancy and vorticity confinement (addForces), the Lorentz force of
+// the magnetic field, and the impulses the bodies, cloth and liquid put into it this frame.
+void GasSolver::applyForces(float dt) {
+    addForces(dt);
+    if (magnetic.enabled) magnetic.applyLorentzForce(u_, v_, w_, solid_, params.fluidDensity, dt);
+    applyPendingImpulses();
+}
+
+// Faraday's law with the new, divergence-free flow (constrained transport in MagneticField); the
+// current's Joule heat warms the gas.
+void GasSolver::induceMagneticField(float dt) {
+    magnetic.induce(u_, v_, w_, params.fluidDensity, dt);
+    std::vector<float> joule;
+    magnetic.jouleHeating(joule, dt);
+    const float rhoCp = params.fluidDensity * combustion.specificHeat;
+    for (size_t c = 0; c < joule.size(); ++c)
+        if (!solid_[c]) temp_.d[c] += joule[c] / rhoCp;
+}
+
+// The step's numbers for the probe.
+void GasSolver::reportStep(float dt) const {
     Probe::set("gas/dt", dt);
     Probe::set("gas/pressure iterations", lastIters_);
     Probe::set("gas/pressure residual", lastResidual_);
@@ -488,7 +559,10 @@ float GasSolver::step(float maxDt) {
         Probe::set("mhd/energy", magnetic.energy());
         Probe::set("mhd/div B", magnetic.maxDivergence());
     }
+}
 
+// Smoke and heat fade with the rates the scene asked for (exponential decay per step).
+void GasSolver::dissipateScalars(float dt) {
     if (params.smokeDissipation > 0) {
         float f = std::exp(-params.smokeDissipation * dt);
         for (float& s : smoke_.d) s *= f;
@@ -497,15 +571,14 @@ float GasSolver::step(float maxDt) {
         float f = std::exp(-params.temperatureDissipation * dt);
         for (float& t : temp_.d) t *= f;
     }
-    lastDt_ = dt;
+}
 
-    // Exponential moving average of the coefficients over ~1 flow-through time.
+// Exponential moving average of the drag and lift coefficients over ~1 flow-through time.
+void GasSolver::averageCoefficients(float dt) {
     float tau = std::max(params.domainSize.x / std::max(params.inflowSpeed, 0.1f), 0.05f);
     float a = std::min(1.0f, dt / tau);
     if (time_ == 0) { cdAvg_ = cd_; clAvg_ = cl_; }
     else { cdAvg_ += a * (cd_ - cdAvg_); clAvg_ += a * (cl_ - clAvg_); }
-    time_ += dt;
-    return dt;
 }
 
 void GasSolver::setTracer(const std::function<float(const Vector3&)>& density) {
