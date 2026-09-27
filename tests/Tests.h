@@ -2,6 +2,10 @@
 // Every test, by module. Each is a numerical experiment with an exact answer or a hard physical
 // criterion; see the files for what they check.
 
+// core utilities: the probe and the allocation census (CoreTests.cpp)
+void testProbe();
+void testAllocationsPerFrame();
+
 // math, meshes, spatial structures (MathTests.cpp)
 void testMath();
 void testPrimitives();

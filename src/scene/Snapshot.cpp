@@ -362,6 +362,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         }
         s.plots.push_back({"Ошибка плотности, %", particles.averageDensityError() * 100});
         s.plots.push_back({"Макс. скорость, м/с", particles.maxSpeed()});
+        Probe::set("particles/density error %", particles.averageDensityError() * 100);
         break;
     }
     case SimMode::WindTunnel: {
@@ -469,6 +470,8 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
                               format("%.4f м²", grid.referenceArea())});
             s.plots.push_back({"Cd", grid.dragCoefficient()});
             s.plots.push_back({"Cl", grid.liftCoefficient()});
+            Probe::set("gas/Cd", grid.dragCoefficient());
+            Probe::set("gas/Cl", grid.liftCoefficient());
         }
         s.info.push_back({"Итераций давления", format("%d (невязка %.1e)", grid.lastPressureIterations(), grid.lastResidual())});
         s.info.push_back({"Макс. скорость", format("%.2f м/с", grid.maxVelocity())});
@@ -492,6 +495,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         if (!grid.hasObstacle()) {
             s.plots.push_back({"Макс. скорость, м/с", grid.maxVelocity()});
             s.plots.push_back({"Дым, дм³", grid.totalSmoke() * 1000.0f});
+            Probe::set("gas/smoke dm3", grid.totalSmoke() * 1000.0f);
         }
         break;
     }
@@ -506,6 +510,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         s.info.push_back({"Сочленений", format("%zu", rigid.joints().size())});
         s.info.push_back({"Кин. энергия", format("%.2f Дж", rigid.kineticEnergy())});
         s.plots.push_back({"Кин. энергия, Дж", rigid.kineticEnergy()});
+        Probe::set("rigid/kinetic energy J", rigid.kineticEnergy());
         break;
     }
     }
@@ -524,6 +529,7 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
         s.grabTarget = particles.grabTarget();
     }
     if (scene_) scene_->describe(*this, s); // the scene's own readings, after the generic ones
+    s.probe = Probe::snapshot();            // every channel the engine reported this frame
     s.info.insert(s.info.begin(), {"Время", format("%.3f с", time_)});
     s.info.push_back({"Шаг расчёта", format("%.1f мс", lastStepMs_)});
 }

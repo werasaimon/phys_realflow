@@ -6,6 +6,7 @@
 
 #include "spatial/BVH.h"
 #include "core/Mesh.h"
+#include "core/Probe.h"
 #include "gas/GasSolver.h"
 #include "gas/SurfaceLoads.h"
 #include "rigid/RigidWorld.h"
@@ -173,6 +174,9 @@ struct RenderSnapshot {
     float stepMs = 0;
     std::vector<std::pair<std::string, std::string>> info;
     std::vector<std::pair<std::string, float>> plots;
+    // Everything the engine reported to the Probe this frame: every channel by name (values,
+    // counters, timers) and the debug drawing. The plots take any channel from here.
+    Probe::Snapshot probe;
 
     // Current settings, for synchronising the UI
     uint64_t paramsVersion = 0;

@@ -99,6 +99,7 @@ private:
     void drawVectors(const QMatrix4x4& vp, const QVector3D& eye);
     void drawHeatSource(const QMatrix4x4& vp);
     void drawProbe(const QMatrix4x4& vp);
+    void drawDebugProbe(const QMatrix4x4& vp); // the engine's Probe drawing (lines, points, boxes)
     void drawGrab(const QMatrix4x4& vp);
     void drawJoints(const QMatrix4x4& vp);
     ViewportTool& toolFor(Qt::MouseButton button, const QPointF& pos);

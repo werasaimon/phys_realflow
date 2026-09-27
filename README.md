@@ -39,6 +39,7 @@ src/      SDK (rfcore) — только стандартная библиоте�
             gas/                   GasSolver + Advection, PressureSolver, MovingSolids, Heat; Combustion
             plasma/                MagneticField
             scene/                 Simulation (фасад) + Obstacle, Coupling, Snapshot; интерфейс Scene
+            core/Probe             отладчик: любой канал по имени (значения, счётчики, таймеры), отладочная отрисовка
 samples/  готовые сцены (rfsamples) — решения на движке, как samples/ у Box2D:
             Liquid, WindTunnel, Smoke, Rigid (+ рельеф), SoftBody, Fire, Hydro; plasma/ Tokamak, Magnetosphere
 app/      демо realflow (Qt 6, OpenGL 3.0)

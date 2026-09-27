@@ -100,6 +100,11 @@ void TokamakScene::describe(const Simulation& sim, RenderSnapshot& s) const {
     s.info.push_back({"Сдвиг кольца наружу", format("%.1f мм (без B_v по Шафранову %.1f мм)", t.measuredShift(m, dx) * 1000,
                                                      t.equilibriumShift() * 1000)});
     s.plots.push_back({"Амплитуда кинка, мм", t.kinkAmplitude(m, dx) * 1000});
+    // The same readings by name for the probe (any of them can be plotted or written to CSV).
+    Probe::set("tokamak/kink mm", t.kinkAmplitude(m, dx) * 1000);
+    Probe::set("tokamak/current A", t.measuredCurrent(m, dx));
+    Probe::set("tokamak/shift mm", t.measuredShift(m, dx) * 1000);
+    Probe::set("tokamak/Bv mT", bv_ * 1000);
 }
 
 void TokamakScene::fieldLineSeeds(const Simulation&, std::vector<Vector3>& seeds) const {
@@ -115,10 +120,10 @@ void TokamakScene::fieldLineSeeds(const Simulation&, std::vector<Vector3>& seeds
 
 std::vector<SceneParam> TokamakScene::params() const {
     std::vector<SceneParam> p(4);
-    p[0] = {"Запас устойчивости q(a)", tokamak.safetyFactorEdge, 0.2f, 8.0f, 0.1f, 2, false};
-    p[1] = {"Тороидальное поле B0, мТл", tokamak.toroidalField * 1000.0f, 0.5f, 20.0f, 0.5f, 1, false};
-    p[2] = {"Вертикальное поле Шафранова", tokamak.verticalField ? 1.0f : 0.0f, 0.0f, 1.0f, 1.0f, 0, true};
-    p[3] = {"Затравка кинка", tokamak.seedDisplacement, 0.0f, 0.2f, 0.01f, 2, false};
+    p[0] = {"Запас устойчивости q(a)", tokamak.safetyFactorEdge, 0.2f, 8.0f, 0.1f, 2, false, ""};
+    p[1] = {"Тороидальное поле B0, мТл", tokamak.toroidalField * 1000.0f, 0.5f, 20.0f, 0.5f, 1, false, ""};
+    p[2] = {"Вертикальное поле Шафранова", tokamak.verticalField ? 1.0f : 0.0f, 0.0f, 1.0f, 1.0f, 0, true, ""};
+    p[3] = {"Затравка кинка", tokamak.seedDisplacement, 0.0f, 0.2f, 0.01f, 2, false, ""};
     p[0].tip = "Ток плазмы I_p = 2π a² B0 / (μ0 R0 q(a)). Между 2a²/(a²+b²) = 0.4 и 1 шнур скручивается в винт — "
                "кинк-неустойчивость (Крускал–Шафранов); выше 1 держит натяжение линий, ниже 0.4 — стенка";
     p[1].tip = "Поле катушек на магнитной оси; B_φ = B0 R0 / R. Скорость Альфвена растёт с ним, шаг по времени падает";

@@ -245,6 +245,7 @@ private:
     void prepareManifold(Manifold& m, float dt);
     void solveManifold(Manifold& m);
     void applyRestitution();
+    void drawDebug() const;
     void computeLevels();
     void blockNormalSolve(Manifold& m);
     // Sleeping: frozen bodies act as static during the step.

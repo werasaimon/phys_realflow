@@ -509,6 +509,34 @@ void Viewport::drawBackground() {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Viewport::drawDebugProbe(const QMatrix4x4& vp) {
+    // Whatever the solvers drew through rf::Probe this frame (contact points and normals, body
+    // bounds ...). The line shader takes one colour per call, so the segments are batched by
+    // colour; a point is a small cross of three segments of its size.
+    const auto& P = snap_->probe;
+    if (P.lines.empty() && P.points.empty()) return;
+    std::map<std::array<int, 3>, std::vector<float>> batches; // colour (0..255) -> segments
+    auto key = [](const Vector3& c) {
+        return std::array<int, 3>{int(std::clamp(c.x, 0.0f, 1.0f) * 255), int(std::clamp(c.y, 0.0f, 1.0f) * 255),
+                                  int(std::clamp(c.z, 0.0f, 1.0f) * 255)};
+    };
+    for (const rf::Probe::Line& l : P.lines) {
+        auto& d = batches[key(l.color)];
+        d.insert(d.end(), {l.a.x, l.a.y, l.a.z, 0, l.b.x, l.b.y, l.b.z, 0});
+    }
+    for (const rf::Probe::Point& p : P.points) {
+        auto& d = batches[key(p.color)];
+        for (int a = 0; a < 3; ++a) {
+            Vector3 e(0.0f);
+            e[a] = 0.5f * p.size;
+            const Vector3 p0 = p.p - e, p1 = p.p + e;
+            d.insert(d.end(), {p0.x, p0.y, p0.z, 0, p1.x, p1.y, p1.z, 0});
+        }
+    }
+    for (const auto& [c, d] : batches)
+        drawLines(d, GL_LINES, vp, QVector4D(c[0] / 255.0f, c[1] / 255.0f, c[2] / 255.0f, 1.0f), 1);
+}
+
 void Viewport::drawLines(const std::vector<float>& data, GLenum mode, const QMatrix4x4& vp, const QVector4D& color, float) {
     if (data.empty()) return;
     lineProg_.bind();
@@ -1121,6 +1149,7 @@ void Viewport::paintGL() {
     drawVectors(vp, eyePosition());
     drawProbe(vp);
     drawJoints(vp);
+    drawDebugProbe(vp);
     drawGrab(vp);
 
     // Emitter / heat source markers.

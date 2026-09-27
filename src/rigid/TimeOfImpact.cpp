@@ -2,6 +2,7 @@
 #include "rigid/RigidWorld.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <algorithm>
 
@@ -68,6 +69,7 @@ ToiResult timeOfImpactPlane(const SweptPose& A, const Vector3& n, float d, float
 // Continuous collision in RigidWorld: conservative advancement of the fast bodies
 // ---------------------------------------------------------------------------
 void RigidWorld::continuousCollision() {
+    Probe::Timer timer("rigid/ccd ms");
     ccdHits_ = 0;
     ccdClamped_.assign(bodies_.size(), 0);
     if (!params.ccd) return;

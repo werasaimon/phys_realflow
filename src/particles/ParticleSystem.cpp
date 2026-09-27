@@ -4,6 +4,7 @@
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 namespace rf {
 
@@ -318,19 +319,33 @@ void ParticleSystem::step(float dt) {
         collide(i, p, x_[i], true, dt);
         p_[i] = p;
     });
+    {
+        int touching = 0; // particles that met a movable body in the prediction (for the probe)
+        for (int b : contactBody_) touching += b >= 0;
+        Probe::set("particles/body contacts", touching);
+    }
     solveBodyContacts(dt);
     for (size_t k = 0; k < grab_.particles.size(); ++k) p_[grab_.particles[k]] = grab_.target + grab_.offsets[k];
-    stepClothsInSmallSteps(dt);
+    {
+        Probe::Timer timer("particles/cloth ms");
+        stepClothsInSmallSteps(dt);
+    }
     const bool solids = fluidCount_ < size_t(n);
     for (Cloth& c : cloths_)
         for (DistanceConstraint& dc : c.constraints) dc.lambda = 0;
 
-    buildGrid(p_);
-    findNeighbors();
+    {
+        Probe::Timer timer("particles/neighbors ms");
+        buildGrid(p_);
+        findNeighbors();
+    }
 
     for (int it = 0; it < params.solverIterations; ++it) {
-        computeLambda();
-        computeDeltaP();
+        {
+            Probe::Timer timer("particles/density ms"); // summed over the iterations
+            computeLambda();
+            computeDeltaP();
+        }
         parallelFor(n, [&](int i) {
             if (invMass_[i] == 0) return;
             Vector3 p = p_[i] + dp_[i];
@@ -339,6 +354,7 @@ void ParticleSystem::step(float dt) {
         });
         solveBodyContacts(dt);
         if (!solids) continue;
+        Probe::Timer contactTimer("particles/contacts ms"); // the solid passes of this iteration
         if (it == 0) findParticleContacts();
         for (int pass = 0; pass < std::max(1, params.solidIterations); ++pass) {
             solveParticleContacts();
@@ -372,6 +388,9 @@ void ParticleSystem::step(float dt) {
         return m;
     });
     maxSpeed_ = vmaxSeen;
+    Probe::set("particles/count", n);
+    Probe::set("particles/fluid", double(fluidCount_));
+    Probe::set("particles/max speed", maxSpeed_);
 
     applyViscosityAndVorticity(dt);
     x_.swap(p_);

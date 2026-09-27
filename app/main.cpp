@@ -1,10 +1,36 @@
 #include "MainWindow.h"
 
+#include "core/Probe.h"
+
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QPalette>
 #include <QStyleFactory>
 #include <QSurfaceFormat>
+
+#include <cstdlib>
+#include <new>
+
+// Counting allocations for the probe's "memory/allocations per frame": the SDK never touches the
+// allocator, so the program replaces the global operator new (every variant the standard pairs
+// together) and forwards to malloc. Aligned variants keep the library's own, self-consistent pair.
+void* operator new(std::size_t n) {
+    rf::Probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    if (void* p = std::malloc(n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+void* operator new[](std::size_t n) { return operator new(n); }
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept {
+    rf::Probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    return std::malloc(n ? n : 1);
+}
+void* operator new[](std::size_t n, const std::nothrow_t& t) noexcept { return operator new(n, t); }
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete[](void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
 
 static void applyDarkTheme(QApplication& app) {
     app.setStyle(QStyleFactory::create("Fusion"));

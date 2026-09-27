@@ -4,6 +4,7 @@
 #include "gas/GasSolverInternal.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <chrono>
 
@@ -404,23 +405,30 @@ float GasSolver::step(float maxDt) {
     using Clock = std::chrono::steady_clock;
     auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<float, std::milli>(b - a).count(); };
     auto t0 = Clock::now();
-    voxelizeMovingSolids();
+    {
+        Probe::Timer timer("gas/solids ms");
+        voxelizeMovingSolids();
+    }
     solidMs_ = ms(t0, Clock::now());
     applyVelocityBC();
     injectSources();
 
-    u0_ = u_; v0_ = v_; w0_ = w_;
-    advectField(u_, t1_, t2_, dt);
-    advectField(v_, t1_, t2_, dt);
-    advectField(w_, t1_, t2_, dt);
-    std::vector<Field3*> scalars = {&smoke_};
-    if (source.enabled || params.heatBuoyancy != 0 || combustion.enabled || magnetic.enabled) scalars.push_back(&temp_);
-    if (combustion.enabled) {
-        scalars.push_back(&fuel_);
-        scalars.push_back(&products_); // fresh air (0) comes in through the open sides
+    {
+        Probe::Timer timer("gas/advect ms");
+        u0_ = u_; v0_ = v_; w0_ = w_;
+        advectField(u_, t1_, t2_, dt);
+        advectField(v_, t1_, t2_, dt);
+        advectField(w_, t1_, t2_, dt);
+        std::vector<Field3*> scalars = {&smoke_};
+        if (source.enabled || params.heatBuoyancy != 0 || combustion.enabled || magnetic.enabled) scalars.push_back(&temp_);
+        if (combustion.enabled) {
+            scalars.push_back(&fuel_);
+            scalars.push_back(&products_); // fresh air (0) comes in through the open sides
+        }
+        advectScalars(scalars, dt);
     }
-    advectScalars(scalars, dt);
     if (combustion.enabled) {
+        Probe::Timer timer("gas/heat ms"); // the reaction, conduction and the radiators
         const double burnt = combustion.react(fuel_.d, products_.d, temp_.d, smoke_.d, expansion_, solid_, dt);
         // Power of the flame: every unit of burnt fuel heated its cell by heatRelease.
         const float cellHeatCapacity = params.fluidDensity * combustion.specificHeat * dx_ * dx_ * dx_;
@@ -435,16 +443,26 @@ float GasSolver::step(float maxDt) {
     }
     applyVelocityBC();
 
-    addForces(dt);
-    if (magnetic.enabled) magnetic.applyLorentzForce(u_, v_, w_, solid_, params.fluidDensity, dt);
-    applyPendingImpulses();
-    diffuse(dt);
+    {
+        Probe::Timer timer("gas/forces ms"); // buoyancy, confinement, Lorentz, the bodies' impulses
+        addForces(dt);
+        if (magnetic.enabled) magnetic.applyLorentzForce(u_, v_, w_, solid_, params.fluidDensity, dt);
+        applyPendingImpulses();
+    }
+    {
+        Probe::Timer timer("gas/diffuse ms");
+        diffuse(dt);
+    }
     applyVelocityBC();
     auto t1 = Clock::now();
     applyWallFriction(dt);
     auto t2 = Clock::now();
-    project(dt);
+    {
+        Probe::Timer timer("gas/pressure ms");
+        project(dt);
+    }
     if (magnetic.enabled) {
+        Probe::Timer timer("gas/mhd ms");
         // Faraday with the new, divergence-free flow; the current's Joule heat warms the gas.
         magnetic.induce(u_, v_, w_, params.fluidDensity, dt);
         std::vector<float> joule;
@@ -459,6 +477,17 @@ float GasSolver::step(float maxDt) {
     solidMs_ += ms(t1, t2) + ms(t3, Clock::now());
     pressureMs_ = ms(t2, t3);
     computeDiagnostics();
+    // The step's numbers for the probe.
+    Probe::set("gas/dt", dt);
+    Probe::set("gas/pressure iterations", lastIters_);
+    Probe::set("gas/pressure residual", lastResidual_);
+    Probe::set("gas/max speed", maxVel_);
+    Probe::set("gas/cells", double(nx_) * ny_ * nz_);
+    if (magnetic.enabled) {
+        Probe::set("mhd/max B", magnetic.maxField());
+        Probe::set("mhd/energy", magnetic.energy());
+        Probe::set("mhd/div B", magnetic.maxDivergence());
+    }
 
     if (params.smokeDissipation > 0) {
         float f = std::exp(-params.smokeDissipation * dt);

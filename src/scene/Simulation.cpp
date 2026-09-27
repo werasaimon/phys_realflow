@@ -107,6 +107,8 @@ void Simulation::useRigidArena(const AABB& box) {
 // ---------------------------------------------------------------------------
 void Simulation::stepFrame() {
     auto t0 = std::chrono::steady_clock::now();
+    Probe::beginFrame();
+    const long long allocations0 = Probe::allocations.load();
     switch (mode_) {
     case SimMode::Fluid:
     case SimMode::Rigid: // (bodies, and whatever particles were added: the same stepping)
@@ -131,6 +133,9 @@ void Simulation::stepFrame() {
     if (scene_) scene_->afterStep(*this);
     ++frame_;
     lastStepMs_ = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    Probe::set("frame/step ms", lastStepMs_);
+    Probe::set("frame/time s", time_);
+    Probe::set("memory/allocations per frame", double(Probe::allocations.load() - allocations0));
 }
 
 int Simulation::sliceLayer() const {

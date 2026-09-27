@@ -4,6 +4,7 @@
 #include "PlotPanel.h"
 #include "Viewport.h"
 
+#include "core/Probe.h"
 #include "samples/Models.h"
 #include "samples/Samples.h"
 
@@ -753,6 +754,12 @@ void MainWindow::buildVisualDock() {
         floor->setChecked(true);
         connect(floor, &QCheckBox::toggled, view_, &Viewport::setShowFloor);
         f->addRow(floor);
+        // The engine's debug drawing (Probe::line / point / box from any solver): contact points
+        // and normals, body bounds ... Off, it costs the solvers one flag test.
+        auto* dbg = new QCheckBox("Отладочная отрисовка (Probe)");
+        dbg->setToolTip("Точки и нормали контактов, границы тел и всё, что решатели рисуют через rf::Probe");
+        connect(dbg, &QCheckBox::toggled, this, [](bool on) { Probe::enableDraw(on); });
+        f->addRow(dbg);
         addGroup(col, "Отображение", f);
     }
     col->addStretch(1);
@@ -792,12 +799,30 @@ void MainWindow::buildResultsDock() {
     connect(clr, &QPushButton::clicked, plots_, &PlotPanel::clear);
     auto* csv = new QPushButton("Экспорт CSV…");
     connect(csv, &QPushButton::clicked, this, &MainWindow::exportCsv);
+    bar->addWidget(plots_->channelButton());
     bar->addWidget(clr);
     bar->addWidget(csv);
     pl->addLayout(bar);
 
+    // The probe's channels: every quantity the engine reported this frame, by name.
+    sensors_ = new QTableWidget(0, 2);
+    sensors_->setHorizontalHeaderLabels({"Датчик (Probe)", "Значение"});
+    sensors_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    sensors_->horizontalHeader()->setStretchLastSection(true);
+    sensors_->verticalHeader()->setVisible(false);
+    sensors_->verticalHeader()->setDefaultSectionSize(20);
+    sensors_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    sensors_->setSelectionMode(QAbstractItemView::NoSelection);
+    sensors_->setShowGrid(false);
+    sensors_->setAlternatingRowColors(true);
+    sensors_->setToolTip("Всё, что решатели сообщили отладчику rf::Probe: значения, счётчики за кадр, таймеры (мс)");
+    auto* left = new QSplitter(Qt::Vertical);
+    left->addWidget(info_);
+    left->addWidget(sensors_);
+    left->setSizes({260, 200});
+
     auto* split = new QSplitter(Qt::Horizontal);
-    split->addWidget(info_);
+    split->addWidget(left);
     split->addWidget(plotHost);
     split->setStretchFactor(0, 0);
     split->setStretchFactor(1, 1);
@@ -853,6 +878,23 @@ void MainWindow::updateInfo(const Snap& s) {
                          .arg(s.frame)
                          .arg(s.time, 0, 'f', 3)
                          .arg(ctrl_->isRunning() ? "идёт расчёт" : "пауза"));
+    updateSensors(s);
+}
+
+void MainWindow::updateSensors(const Snap& s) {
+    const auto& ch = s.probe.channels;
+    sensors_->setRowCount(int(ch.size()));
+    for (int r = 0; r < int(ch.size()); ++r) {
+        const Probe::Channel& c = ch[r];
+        QString value = QString::number(c.value, 'g', 4);
+        if (c.kind == Probe::Kind::TimerMs) value += " мс";
+        else if (c.kind == Probe::Kind::Counter && c.value == std::floor(c.value)) value = QString::number(qint64(c.value));
+        for (int col = 0; col < 2; ++col) {
+            QTableWidgetItem* it = sensors_->item(r, col);
+            if (!it) sensors_->setItem(r, col, it = new QTableWidgetItem);
+            it->setText(col == 0 ? QString::fromStdString(c.name) : value);
+        }
+    }
 }
 
 void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
@@ -867,11 +909,13 @@ void MainWindow::onSnapshot(const std::shared_ptr<const Snap>& s) {
         int idx = presetCombo_->findText(QString::fromStdString(s->sceneName));
         if (idx >= 0) presetCombo_->setCurrentIndex(idx);
     }
-    if (sceneChanged || s->frame < lastFrame_) {
-        plots_->clear();
+    if (sceneChanged) {
+        plots_->setScene(s->sceneName); // drops the series, restores the scene's channel selection
         lastSceneName_ = s->sceneName;
+    } else if (s->frame < lastFrame_) {
+        plots_->clear();
     }
-    if (s->frame != lastFrame_ && s->frame > 0) plots_->append(s->time, s->plots);
+    if (s->frame != lastFrame_ && s->frame > 0) plots_->append(s->time, s->plots, s->probe);
     lastFrame_ = s->frame;
 
     qint64 now = QDateTime::currentMSecsSinceEpoch();

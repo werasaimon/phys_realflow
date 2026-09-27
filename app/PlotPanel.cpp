@@ -1,10 +1,13 @@
 #include "PlotPanel.h"
 
+#include <QAction>
 #include <QCursor>
 #include <QFile>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QTextStream>
+#include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
 #include <QtCharts/QChart>
@@ -12,16 +15,19 @@
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
 // Categorical slots (dark-surface steps), assigned in fixed order, never cycled by rank.
-const QColor kSeries[] = {QColor("#3987e5"), QColor("#d95926"), QColor("#199e70"), QColor("#c98500")};
+const QColor kSeries[] = {QColor("#3987e5"), QColor("#d95926"), QColor("#199e70"), QColor("#c98500"),
+                          QColor("#8e6ad6"), QColor("#2aa7b8")};
 const QColor kSurface(28, 30, 35);
 const QColor kGrid(52, 56, 64);
 const QColor kAxisText(150, 157, 170);
 const QColor kInk(225, 228, 235);
 constexpr int kMaxPoints = 6000;
+const char* kDefaultChannel = "frame/step ms";
 
 QString formatValue(double v) {
     double a = std::fabs(v);
@@ -125,30 +131,117 @@ PlotPanel::PlotPanel(QWidget* parent) : QWidget(parent) {
     row_ = new QHBoxLayout(this);
     row_->setContentsMargins(0, 0, 0, 0);
     row_->setSpacing(6);
-    placeholder_ = new QLabel("Графики появятся после запуска расчёта (Пробел).");
+    placeholder_ = new QLabel("Графики появятся после запуска расчёта (Пробел). Величины — в меню «Каналы».");
     placeholder_->setAlignment(Qt::AlignCenter);
     placeholder_->setStyleSheet("color: #8a93a3;");
     row_->addWidget(placeholder_);
+
+    // The chooser lives in the results dock's button bar (channelButton()); its menu lists every
+    // quantity the engine has reported, checked ones are drawn.
+    channelBtn_ = new QToolButton;
+    channelBtn_->setText("Каналы…");
+    channelBtn_->setToolTip("Какие величины рисовать: всё, что решатели сообщили отладчику (Probe), по имени");
+    channelBtn_->setPopupMode(QToolButton::InstantPopup);
+    channelMenu_ = new QMenu(channelBtn_);
+    channelBtn_->setMenu(channelMenu_);
 }
 
-void PlotPanel::append(double t, const std::vector<std::pair<std::string, float>>& values) {
-    if (values.empty()) return;
-    placeholder_->hide();
+QWidget* PlotPanel::channelButton() const { return channelBtn_; }
+
+void PlotPanel::setScene(const std::string& name) {
+    if (!scene_.empty()) selectionByScene_[scene_] = selected_;
+    scene_ = name;
+    clear();
+    auto it = selectionByScene_.find(name);
+    selected_ = it != selectionByScene_.end() ? it->second : std::set<std::string>();
+    menuNames_.clear(); // the menu is rebuilt from the first frame of the new scene
+}
+
+void PlotPanel::append(double t, const std::vector<std::pair<std::string, float>>& plots, const rf::Probe::Snapshot& probe) {
     times_.push_back(t);
-    for (const auto& [name, v] : values) {
-        auto it = std::find_if(charts_.begin(), charts_.end(), [&](auto& c) { return c.first == name; });
-        if (it == charts_.end()) {
-            QColor color = kSeries[charts_.size() % (sizeof(kSeries) / sizeof(kSeries[0]))];
-            auto* c = new TimeSeriesChart(QString::fromStdString(name), color);
-            row_->addWidget(c, 1);
-            charts_.emplace_back(name, c);
-            it = charts_.end() - 1;
-        }
-        it->second->append(t, v);
+    // Record everything: the scene's plots and every probe channel.
+    plotNames_.clear();
+    auto record = [&](const std::string& name, double v) {
         auto& h = history_[name];
         h.resize(times_.size() - 1, std::nan(""));
         h.push_back(v);
+    };
+    for (const auto& [name, v] : plots) {
+        plotNames_.push_back(name);
+        record(name, v);
     }
+    for (const rf::Probe::Channel& c : probe.channels) record(c.name, c.value);
+
+    // The menu: rebuilt when a new quantity appears. A first frame with nothing selected picks
+    // the scene's own plots, else the frame time.
+    std::vector<std::string> names;
+    names.reserve(history_.size());
+    for (const auto& [name, h] : history_) names.push_back(name);
+    if (names != menuNames_) {
+        if (selected_.empty()) {
+            for (const std::string& n : plotNames_) selected_.insert(n);
+            if (selected_.empty() && history_.count(kDefaultChannel)) selected_.insert(kDefaultChannel);
+        }
+        rebuildMenu(names);
+        applySelection();
+    }
+    if (history_.empty()) return;
+    placeholder_->hide();
+    for (auto& [name, chart] : charts_) {
+        const auto& h = history_[name];
+        if (!h.empty() && h.size() == times_.size()) chart->append(t, h.back());
+    }
+}
+
+void PlotPanel::rebuildMenu(const std::vector<std::string>& names) {
+    menuNames_ = names;
+    channelMenu_->clear();
+    std::string group;
+    for (const std::string& name : names) {
+        // Names are "part/quantity": a separator between the parts keeps the long list readable.
+        const std::string part = name.substr(0, name.find('/'));
+        if (part != group && !group.empty()) channelMenu_->addSeparator();
+        group = part;
+        auto* act = channelMenu_->addAction(QString::fromStdString(name));
+        act->setCheckable(true);
+        act->setChecked(selected_.count(name) > 0);
+        connect(act, &QAction::toggled, this, [this, name](bool on) {
+            if (on) selected_.insert(name);
+            else selected_.erase(name);
+            applySelection();
+        });
+    }
+    channelBtn_->setText(QString("Каналы (%1 из %2)").arg(selected_.size()).arg(names.size()));
+}
+
+QColor PlotPanel::nextColor() {
+    return kSeries[colorsUsed_++ % (sizeof(kSeries) / sizeof(kSeries[0]))];
+}
+
+void PlotPanel::fillFromHistory(TimeSeriesChart* chart, const std::string& name) {
+    const auto& h = history_[name];
+    for (size_t i = 0; i < h.size() && i < times_.size(); ++i)
+        if (std::isfinite(h[i])) chart->append(times_[i], h[i]);
+}
+
+void PlotPanel::applySelection() {
+    // Drop the charts that are no longer selected, add the newly selected ones (filled from the
+    // recorded history so the curve starts at the beginning, not at the click).
+    for (auto it = charts_.begin(); it != charts_.end();) {
+        if (selected_.count(it->first)) { ++it; continue; }
+        row_->removeWidget(it->second);
+        it->second->deleteLater();
+        it = charts_.erase(it);
+    }
+    for (const std::string& name : selected_) {
+        if (std::any_of(charts_.begin(), charts_.end(), [&](auto& c) { return c.first == name; })) continue;
+        auto* c = new TimeSeriesChart(QString::fromStdString(name), nextColor());
+        row_->addWidget(c, 1);
+        charts_.emplace_back(name, c);
+        fillFromHistory(c, name);
+    }
+    placeholder_->setVisible(charts_.empty());
+    channelBtn_->setText(QString("Каналы (%1 из %2)").arg(selected_.size()).arg(menuNames_.size()));
 }
 
 void PlotPanel::clear() {
@@ -159,19 +252,25 @@ void PlotPanel::clear() {
     charts_.clear();
     times_.clear();
     history_.clear();
+    plotNames_.clear();
+    colorsUsed_ = 0;
     placeholder_->show();
 }
 
 bool PlotPanel::writeCsv(const QString& path) const {
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
+    // Columns: the scene's plots first, then every probe channel by name.
+    std::vector<std::string> columns = plotNames_;
+    for (const auto& [name, h] : history_)
+        if (std::find(columns.begin(), columns.end(), name) == columns.end()) columns.push_back(name);
     QTextStream out(&f);
     out << "t";
-    for (auto& [name, c] : charts_) out << ",\"" << QString::fromStdString(name) << "\"";
+    for (const std::string& name : columns) out << ",\"" << QString::fromStdString(name) << "\"";
     out << "\n";
     for (size_t i = 0; i < times_.size(); ++i) {
         out << QString::number(times_[i], 'g', 8);
-        for (auto& [name, c] : charts_) {
+        for (const std::string& name : columns) {
             const auto& h = history_.at(name);
             out << ",";
             if (i < h.size() && std::isfinite(h[i])) out << QString::number(h[i], 'g', 8);

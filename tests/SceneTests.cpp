@@ -191,4 +191,8 @@ void testDeterminism() {
                     a == b ? "equal" : "DIFFER");
         CHECK(a == b, "%s is not reproducible run to run", c.name);
     }
+    // The probe is wired into stepFrame: the last run left the frame's channels behind.
+    const std::vector<std::string> names = Probe::channels();
+    CHECK(std::find(names.begin(), names.end(), "frame/step ms") != names.end(), "stepFrame reports frame/step ms to the Probe");
+    CHECK(Probe::snapshot().value("frame/step ms") > 0, "frame/step ms is %g", Probe::snapshot().value("frame/step ms"));
 }

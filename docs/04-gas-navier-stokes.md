@@ -56,7 +56,7 @@ flowchart TB
 
 Каждая компонента — отдельный `Field3` ([Field3.h](../src/gas/Field3.h)) со своим смещением `offset` (в ячейках) и размерами:
 
-[src/gas/GasSolver.cpp:32](../src/gas/GasSolver.cpp#L32)
+[src/gas/GasSolver.cpp:33](../src/gas/GasSolver.cpp#L33)
 ```cpp
 u_.init(nx_ + 1, ny_, nz_, {0, 0.5f, 0.5f}, u0);
 v_.init(nx_, ny_ + 1, nz_, {0.5f, 0, 0.5f});

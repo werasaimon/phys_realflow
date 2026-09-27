@@ -4,6 +4,7 @@
 #include "rigid/RigidWorld.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <algorithm>
 #include <chrono>
@@ -228,8 +229,11 @@ void RigidWorld::step(float dt) {
         b.angVel += b.applyInvInertiaWorld(b.torque) * dt;
         b.angVel = gyroscopicStep(b, dt);
     }
-    collide();
-    if (params.sleeping && updateIslands(false, dt)) collide(); // woken island: contacts among its bodies
+    {
+        Probe::Timer t("rigid/collide ms");
+        collide();
+        if (params.sleeping && updateIslands(false, dt)) collide(); // woken island: contacts among its bodies
+    }
     auto ts = std::chrono::steady_clock::now();
     prepare(dt);
     prepareGrab(dt);
@@ -259,6 +263,8 @@ void RigidWorld::step(float dt) {
         }
     }
     timings_.solve = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - ts).count();
+    Probe::add("rigid/solve ms", timings_.solve); // prepare, the iterations, the bounces and the shock pass
+    if (Probe::drawEnabled()) drawDebug();
 
     // Pairs of sleeping bodies produce no manifolds; keep their last impulses so a woken stack
     // carries its weight immediately instead of sagging and being thrown apart.
@@ -304,6 +310,7 @@ void RigidWorld::step(float dt) {
             if (w < params.restAngularThreshold) b.angVel *= w > wcap ? 1.0f - wcap / w : 0.0f;
         }
     }
+    Probe::Timer integrateTimer("rigid/integrate ms"); // to the end of the step: poses, CCD, joints, islands
     const float ld = std::max(0.0f, 1.0f - params.linearDamping * dt);
     const float ad = std::max(0.0f, 1.0f - params.angularDamping * dt);
     for (RigidBody& b : bodies_) {
@@ -333,6 +340,24 @@ void RigidWorld::step(float dt) {
     auto tEnd = std::chrono::steady_clock::now();
     timings_.islands = std::chrono::duration<float, std::milli>(tEnd - ti).count();
     timings_.total = std::chrono::duration<float, std::milli>(tEnd - tStart).count();
+    // What this step was made of, for the probe (the counts of the last substep, the hits summed).
+    Probe::set("rigid/bodies", double(bodies_.size()));
+    Probe::set("rigid/bodies awake", double(bodies_.size() - sleepingCount()));
+    Probe::set("rigid/contacts", double(contactCount_));
+    Probe::set("rigid/manifolds", double(manifolds_.size()));
+    Probe::add("rigid/ccd hits", double(ccdHits_));
+}
+
+// Debug drawing, only while Probe::drawEnabled(): every contact point with its normal, and the
+// world bounds of every awake body (what the broad phase sees).
+void RigidWorld::drawDebug() const {
+    for (const Manifold& m : manifolds_)
+        for (const SolverPoint& p : m.points) {
+            Probe::point(p.position, Vector3(1.0f, 0.3f, 0.2f), 0.01f);
+            Probe::arrow(p.position, p.normal * 0.1f, Vector3(1.0f, 0.6f, 0.2f));
+        }
+    for (const RigidBody& b : bodies_)
+        if (!b.sleeping && b.invMass > 0) Probe::box(b.worldBounds(), Vector3(0.3f, 0.8f, 1.0f));
 }
 
 } // namespace rf

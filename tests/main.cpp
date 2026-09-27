@@ -2,7 +2,34 @@
 #include "TestRunner.h"
 #include "Tests.h"
 
+#include "core/Probe.h"
+
+#include <new>
+
+// The allocation census: the test program replaces the global operator new so that every heap
+// allocation counts into Probe::allocations, and Simulation::stepFrame reports the difference as
+// "memory/allocations per frame". The SDK itself never touches the allocator (an embedding
+// engine brings its own); only the program that wants the number counts.
+void* operator new(std::size_t n) {
+    rf::Probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    if (void* p = std::malloc(n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+void* operator new[](std::size_t n) { return operator new(n); }
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept {
+    rf::Probe::allocations.fetch_add(1, std::memory_order_relaxed);
+    return std::malloc(n ? n : 1);
+}
+void* operator new[](std::size_t n, const std::nothrow_t& t) noexcept { return operator new(n, t); }
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete[](void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
+
 int main() {
+    run("probe: channels, counters, timers, debug drawing", testProbe);
     run("math: vectors, matrices, quaternions, N x N solvers", testMath);
     run("primitives", testPrimitives);
     run("bvh", testBVH);
@@ -57,6 +84,7 @@ int main() {
     run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
+    run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);
     return g_failures;

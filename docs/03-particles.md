@@ -406,7 +406,7 @@ $$
 
 где $\sigma$ = `areaDensity` [кг/м²]. Через ту же $A_p$ = `Cloth::particleArea` считаются тепло и топливо при горении и сопротивление ткани в газе ([Cloth.cpp:262](../src/particles/Cloth.cpp#L262)). Масса, горение и сопротивление поэтому согласованы, а сумма масс частиц в точности равна массе листа. Раньше масса считалась по $A_p$, а тепло и топливо — по $s^2$ с шагом сетки $s = |\mathbf u|/(W-1)$. Для квадратного листа из 11×11 частиц это $1/100$ против $1/121$ площади листа, то есть расхождение 21 %.
 
-[src/particles/ParticleSystem.cpp:139](../src/particles/ParticleSystem.cpp#L139)
+[src/particles/ParticleSystem.cpp:140](../src/particles/ParticleSystem.cpp#L140)
 ```cpp
     c.particleArea = length(cross(u, v)) / float(c.width * c.height);
     const float invMass = 1.0f / (material.areaDensity * c.particleArea);

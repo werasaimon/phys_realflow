@@ -28,6 +28,7 @@ add_library(rfcore STATIC
   src/core/Parallel.h        src/core/Parallel.cpp
   src/core/Mesh.h            src/core/Mesh.cpp
   src/core/Format.h
+  src/core/Probe.h           src/core/Probe.cpp
   src/spatial/BVH.h          src/spatial/BVH.cpp
   src/spatial/AABBTree.h     src/spatial/AABBTree.cpp
   # rigid bodies
@@ -168,6 +169,7 @@ if(RF_BUILD_TESTS)
   add_executable(rf_tests
     tests/main.cpp
     tests/TestRunner.h tests/Tests.h
+    tests/CoreTests.cpp
     tests/MathTests.cpp
     tests/RigidTests.cpp tests/HardContactTests.h
     tests/ParticleTests.cpp

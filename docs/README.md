@@ -88,6 +88,20 @@ flowchart TB
 | `afterStep(sim)` | раз в кадр после решателей | регуляторы, события по времени (регулятор положения кольца токамака) |
 | `describe(sim, snapshot)`, `fieldLineSeeds`, `params()` / `setParam` | при снимке и из панели | свои показания и графики, затравки силовых линий, ручки сцены — панель приложения строит их одинаково для любой сцены |
 
+### Отладчик: `Probe`
+
+Один глобальный приёмник, в который любая часть движка сообщает что угодно одной строкой, а панель показаний, графики, тесты и `--csv` берут из него **любой канал по имени** — как `btIDebugDraw` и профилировщик в Bullet, `b2Profile`/`b2Counters` в Box2D, Visual Debugger в PhysX ([src/core/Probe.h](../src/core/Probe.h)):
+
+| Вызов | Что это | Пример канала |
+|---|---|---|
+| `Probe::set("rigid/contacts", n)` | значение: последнее число канала | `rigid/contacts`, `gas/pressure iterations`, `tokamak/kink mm` |
+| `Probe::add("rigid/ccd hits", 1)` | счётчик: сумма за кадр, ноль в `beginFrame()` | `rigid/ccd hits` |
+| `Probe::Timer t("gas/pressure ms")` | таймер: миллисекунды за кадр по стадиям всех решателей | `rigid/solve ms`, `gas/pressure ms`, `particles/neighbors ms` |
+| `Probe::line / arrow / point / box` | отладочная отрисовка из любого места; при выключенном флаге — одна проверка | контактные точки и нормали, боксы тел |
+| `Probe::allocations` | счётчик выделений памяти, который ведёт подменённый `operator new` приложения или тестов; движок аллокатор не трогает | `memory/allocations per frame` |
+
+`Simulation::stepFrame` вызывает `beginFrame()` и кладёт `Probe::snapshot()` в `RenderSnapshot::probe`; панель графиков приложения строит любой набор каналов по выбору, группа «Датчики» показывает все, `--csv` пишет все столбцы. Правило: сообщать раз в шаг, а не на каждую частицу (за картой каналов стоит мьютекс); имена — `часть/величина` латиницей, чтобы каналы группировались.
+
 Своя сцена в любом приложении — тот же класс без реестра: `sim.load(std::make_unique<MyScene>())`. Реестр `samples()` ([samples/Samples.h](../samples/Samples.h)) нужен только меню и командной строке: категория, имя, фабрика; номер сцены равен значению `enum class Preset` и не меняется, чтобы номера в этой документации оставались верны.
 
 Как решатели связаны внутри кадра (`Simulation::stepFrame`, [src/scene/Simulation.cpp:37](../src/scene/Simulation.cpp#L37)):

@@ -47,6 +47,7 @@ private:
     void onSnapshot(const std::shared_ptr<const rf::RenderSnapshot>& s);
     void updateModeVisibility(rf::SimMode m);
     void updateInfo(const rf::RenderSnapshot& s);
+    void updateSensors(const rf::RenderSnapshot& s); // the probe's channels
     void togglePlay();
     void onDisturbance(rf::Vector3 pos, rf::Vector3 vel);
 
@@ -72,6 +73,7 @@ private:
               *rigidBox_ = nullptr, *fieldBox_ = nullptr, *particleBox_ = nullptr, *sceneBox_ = nullptr;
     ParamForm* sceneForm_ = nullptr; // the loaded scene's knobs, inside sceneBox_
     QTableWidget* info_ = nullptr;
+    QTableWidget* sensors_ = nullptr; // every probe channel, by name
     PlotPanel* plots_ = nullptr;
     QLabel* status_ = nullptr;
 

@@ -399,7 +399,7 @@ $$
 
 сохраняют $|\mathbf L| = |\mathbf I\boldsymbol\omega|$ и энергию $\tfrac12\boldsymbol\omega\cdot\mathbf I\boldsymbol\omega$, а вращение вокруг средней оси неустойчиво (эффект Джанибекова, инкремент $\sigma = \omega_2\sqrt{(I_2-I_1)(I_3-I_2)/(I_1 I_3)}$). Без этого члена интегратор хранит $\boldsymbol\omega$, а не $\mathbf L$, и переворотов нет — так и было до теста Нётер. Явная схема при быстром вращении расходится; неявный Эйлер (Catto 2015) устойчив, но гасит $|\mathbf L|$ (5.6 % за 10 с). Взята **неявная средняя точка**: $\mathbf I(\boldsymbol\omega_1-\boldsymbol\omega_0) + h\,\boldsymbol\omega_m\times\mathbf I\boldsymbol\omega_m = 0$, $\boldsymbol\omega_m = \tfrac12(\boldsymbol\omega_0+\boldsymbol\omega_1)$ — симплектична и сохраняет оба квадратичных инварианта; три шага Ньютона с якобианом $\mathbf I + \tfrac h2\big([\boldsymbol\omega_m]_\times\mathbf I - [\mathbf I\boldsymbol\omega_m]_\times\big)$ сходятся до невязки $10^{-4}$ даже при $h|\boldsymbol\omega| = 0.33$ (пластина 200 рад/с при 600 Гц). Тест `CCD for a fast-spinning plate` теперь судит удар по $|\mathbf L|$, а не по одной компоненте $\boldsymbol\omega$: тонкая пластина, задетая за край, кувыркается ($I$ вдоль длинной оси в 300 раз меньше), и гироскопика перекачивает $\boldsymbol\omega$ между осями при постоянном $|\mathbf L|$ (37.5 % → 37.4 % за 0.1 с — только демпфирование); без члена $\boldsymbol\omega$ в мировой системе застывала — нефизично.
 
-[src/rigid/RigidWorld.cpp:165](../src/rigid/RigidWorld.cpp#L165)
+[src/rigid/RigidWorld.cpp:166](../src/rigid/RigidWorld.cpp#L166)
 ```cpp
 Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
     const Matrix3x3 R = b.rotation();
@@ -603,7 +603,7 @@ $$
 
 где $r$ — радиус описанной сферы. Значит, если GJK даёт текущее расстояние $d$, можно безопасно продвинуться на $\Delta s = d/\text{bound}$:
 
-[src/rigid/TimeOfImpact.cpp:15](../src/rigid/TimeOfImpact.cpp#L15)
+[src/rigid/TimeOfImpact.cpp:16](../src/rigid/TimeOfImpact.cpp#L16)
 ```cpp
 for (int it = 0; it < maxIt; ++it) {
     r.iterations = it + 1;
