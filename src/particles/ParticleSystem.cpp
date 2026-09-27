@@ -110,8 +110,13 @@ int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiff
                 addParticle(p, velocity, ParticlePhase::Soft, body.object, invMass);
             }
     if (body.particles.empty()) return -1;
-    // Clusters every 3 particle spacings, overlapping (radius 4 spacings): the body can bend.
-    body.clusters = buildClusters(body.particles, rest, 3.0f * s, 4.0f * s);
+    // Clusters every 1.5 particle spacings, each 2 spacings in radius (as FleX): a cluster spans
+    // ~4 particles, so a body a few particles thick bends and squashes between its clusters. Bigger
+    // clusters (3 / 4 spacings) covered a small body whole and made it rigid.
+    // A body must be at least 3 particles across: a cluster of a flat sheet of particles has no
+    // definite rotation, and its skin flies apart.
+    body.clusterRadius = 2.0f * s;
+    body.clusters = buildClusters(body.particles, rest, 1.5f * s, body.clusterRadius);
     bindSurface(body, primitives::subdivided(shape, 1.5f * s), rest);
     softBodies_.push_back(std::move(body));
     return int(softBodies_.size()) - 1;
@@ -177,6 +182,16 @@ bool ParticleSystem::grab(const Vector3& point) {
     }
     grab_.target = x_[picked];
     return true;
+}
+
+int ParticleSystem::pinParticles(const std::function<bool(const Vector3&)>& region) {
+    int pinned = 0;
+    for (size_t i = 0; i < x_.size(); ++i) {
+        if (isFluid(int(i)) || invMass_[i] == 0 || !region(x_[i])) continue;
+        invMass_[i] = 0;
+        ++pinned;
+    }
+    return pinned;
 }
 
 void ParticleSystem::releaseGrab() {
@@ -330,7 +345,7 @@ void ParticleSystem::step(float dt) {
             // Contacts push cloth particles around (a body resting on a sheet): the cloth is
             // re-satisfied after every contact pass so the two converge together.
             for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt);
-            solveShapeMatching(softBodies_, p_, invMass_);
+            solveShapeMatching(softBodies_, p_, invMass_, params.solverIterations * std::max(1, params.solidIterations));
             parallelFor(n, [&](int i) {
                 if (invMass_[i] == 0 || isFluid(i)) return;
                 collide(i, p_[i], x_[i], true, dt);

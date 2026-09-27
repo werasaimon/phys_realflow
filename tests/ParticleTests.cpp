@@ -36,11 +36,17 @@ void testSoftBodyAndCloth() {
             s.step(dt);
             peak = std::max(peak, softShapeError(s, s.softBodies()[sb], rest));
         }
-        float after = softShapeError(s, s.softBodies()[sb], rest);
-        std::printf("  soft cube (%zu particles, %zu clusters): deformation at impact %.1f%%, after 3 s %.2f%%\n",
-                    s.softBodies()[sb].particles.size(), s.softBodies()[sb].clusters.size(), 100 * peak, 100 * after);
+        // Resting on the floor it stays squashed by its own weight (a jelly this soft sags by a few
+        // per cent); elastic means it springs back once the load is gone: gravity off for a second.
+        const float sag = softShapeError(s, s.softBodies()[sb], rest);
+        s.params.gravity = Vector3(0.0f);
+        for (int k = 0; k < 180; ++k) s.step(dt);
+        const float unloaded = softShapeError(s, s.softBodies()[sb], rest);
+        std::printf("  soft cube (%zu particles, %zu clusters): deformation at impact %.1f%%, sag under its weight %.2f%%, unloaded %.2f%%\n",
+                    s.softBodies()[sb].particles.size(), s.softBodies()[sb].clusters.size(), 100 * peak, 100 * sag, 100 * unloaded);
         CHECK(peak > 0.03f, "a soft cube must squash on impact (%.1f%%)", 100 * peak);
-        CHECK(after < 0.02f, "a soft cube must spring back (%.1f%% left)", 100 * after);
+        CHECK(sag < 0.15f, "a soft cube must carry its own weight (%.1f%% sag)", 100 * sag);
+        CHECK(unloaded < 0.02f, "a soft cube must spring back once unloaded (%.1f%% left)", 100 * unloaded);
     }
     // 3) Canvas trampoline pinned at its corners holds a foam cube.
     {

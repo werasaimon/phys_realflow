@@ -28,11 +28,17 @@ struct SoftBody {
     int object = -1;                   // particle object id (for self-collision filtering)
     std::vector<int> particles;
     std::vector<SoftCluster> clusters;
-    float stiffness = 0.5f;            // 0 = no shape at all, 1 = rigid (fraction of the goal per iteration)
+    // Fraction of the way back to the rest shape per substep (0.05 jelly, 0.3 rubber, 1 rigid).
+    // Spread over the solver's passes as k' = 1 - (1 - k)^(1/n) (Mueller et al. 2007, PBD), so the
+    // softness does not depend on how many passes a substep makes.
+    float stiffness = 0.3f;
     Vector3 color{0.9f, 0.4f, 0.4f};
-    // Surface for drawing: rest mesh and, per vertex, the clusters it follows.
+    float clusterRadius = 0;           // radius the clusters were built with [m] (the skinning blends within it)
+    // Surface for drawing: rest mesh and, per vertex, the clusters it follows with their weights
+    // (smooth linear blend skinning: every cluster within clusterRadius, weighted by closeness).
     TriMesh surface;
     std::vector<std::vector<int>> vertexClusters;
+    std::vector<std::vector<float>> vertexWeights;
 };
 
 // Clusters for particles at rest positions `rest` (global indices `ids`): cluster centres on a
@@ -49,6 +55,7 @@ void skinSurface(const SoftBody& body, std::vector<Vector3>& out);
 
 // One shape-matching pass over all soft bodies: moves the predicted positions p towards the goals
 // (average over the clusters of each particle). Particles with invMass 0 stay where they are.
-void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass);
+// passesPerStep: how many such passes the substep makes (the stiffness is spread over them).
+void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass, int passesPerStep);
 
 } // namespace rf

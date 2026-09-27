@@ -44,21 +44,39 @@ std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::v
 }
 
 void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& particleRest) {
+    // Every vertex follows the clusters whose rest centre lies within 1.5 cluster radii, with the
+    // weight (1 - d / R)^2 - a smooth blend, so neighbouring vertices bound to different clusters
+    // do not tear the skin apart where the clusters rotate differently. A vertex with no cluster
+    // in reach (a thin spike of the mesh) takes the nearest particle's clusters.
     body.surface = restSurface;
     body.vertexClusters.assign(restSurface.positions.size(), {});
-    // Clusters of every particle (local particle index -> cluster indices).
+    body.vertexWeights.assign(restSurface.positions.size(), {});
     const int first = body.particles.front();
     std::vector<std::vector<int>> clustersOf(body.particles.size());
     for (int k = 0; k < int(body.clusters.size()); ++k)
         for (int i : body.clusters[k].particles) clustersOf[i - first].push_back(k);
+    const float R = 1.5f * std::max(body.clusterRadius, 1e-6f);
     for (size_t v = 0; v < restSurface.positions.size(); ++v) {
-        size_t nearest = 0;
-        float best = kInf;
-        for (size_t m = 0; m < particleRest.size(); ++m) {
-            float d = length2(particleRest[m] - restSurface.positions[v]);
-            if (d < best) { best = d; nearest = m; }
+        const Vector3& x = restSurface.positions[v];
+        for (int k = 0; k < int(body.clusters.size()); ++k) {
+            const float d = length(body.clusters[k].restCentre - x);
+            if (d >= R) continue;
+            body.vertexClusters[v].push_back(k);
+            body.vertexWeights[v].push_back(sqr(1.0f - d / R));
         }
-        body.vertexClusters[v] = clustersOf[nearest];
+        if (body.vertexClusters[v].empty()) {
+            size_t nearest = 0;
+            float best = kInf;
+            for (size_t m = 0; m < particleRest.size(); ++m) {
+                const float d = length2(particleRest[m] - x);
+                if (d < best) { best = d; nearest = m; }
+            }
+            body.vertexClusters[v] = clustersOf[nearest];
+            body.vertexWeights[v].assign(body.vertexClusters[v].size(), 1.0f);
+        }
+        float total = 0;
+        for (float w : body.vertexWeights[v]) total += w;
+        for (float& w : body.vertexWeights[v]) w /= std::max(total, 1e-12f);
     }
 }
 
@@ -67,18 +85,21 @@ void skinSurface(const SoftBody& body, std::vector<Vector3>& out) {
     for (size_t v = 0; v < out.size(); ++v) {
         const Vector3& rest = body.surface.positions[v];
         Vector3 sum(0.0f);
-        for (int k : body.vertexClusters[v]) {
-            const SoftCluster& cl = body.clusters[k];
-            sum += cl.centre + cl.rotation.rotate(rest - cl.restCentre);
+        for (size_t n = 0; n < body.vertexClusters[v].size(); ++n) {
+            const SoftCluster& cl = body.clusters[body.vertexClusters[v][n]];
+            sum += (cl.centre + cl.rotation.rotate(rest - cl.restCentre)) * body.vertexWeights[v][n];
         }
-        out[v] = body.vertexClusters[v].empty() ? rest : sum / float(body.vertexClusters[v].size());
+        out[v] = body.vertexClusters[v].empty() ? rest : sum;
     }
 }
 
-void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass) {
+void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass, int passesPerStep) {
     std::vector<Vector3> goalSum;
     std::vector<int> goalCount;
     for (SoftBody& body : bodies) {
+        // The pass's share of the substep's stiffness: n passes of k' leave (1 - k') ^ n = 1 - k.
+        const float k = std::clamp(body.stiffness, 0.0f, 1.0f);
+        const float kPass = k >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - k, 1.0f / float(std::max(1, passesPerStep)));
         // Goals of every particle, summed over the clusters it belongs to.
         goalSum.assign(body.particles.size(), Vector3(0.0f));
         goalCount.assign(body.particles.size(), 0);
@@ -111,7 +132,7 @@ void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, 
         for (size_t s = 0; s < body.particles.size(); ++s) {
             int i = body.particles[s];
             if (goalCount[s] == 0 || invMass[i] == 0) continue;
-            delta[s] = (goalSum[s] / float(goalCount[s]) - p[i]) * body.stiffness;
+            delta[s] = (goalSum[s] / float(goalCount[s]) - p[i]) * kPass;
             mean += delta[s];
             ++movable;
         }

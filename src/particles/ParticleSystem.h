@@ -114,6 +114,10 @@ public:
     bool grabbing() const { return !grab_.particles.empty(); }
     Vector3 grabAnchor() const { return grabbing() ? x_[grab_.particles[0]] : Vector3(0.0f); }
     Vector3 grabTarget() const { return grab_.target; }
+    // Pins every solid particle (soft body, cloth) inside `region` (world point -> true): its inverse
+    // mass becomes 0 and it stays put - a beam clamped in a wall, a sheet nailed to a board. Shape
+    // matching treats pinned particles as an outside support. Returns how many were pinned.
+    int pinParticles(const std::function<bool(const Vector3&)>& region);
     size_t fluidCount() const { return fluidCount_; }
     bool hasSolids() const { return fluidCount_ < x_.size(); } // soft bodies or cloth
     void addVelocity(int i, const Vector3& dv) { v_[i] += dv; } // external forces (e.g. gas drag)

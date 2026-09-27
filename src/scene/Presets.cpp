@@ -409,15 +409,20 @@ void Simulation::setupFluidScene() {
         cotton.areaDensity = 0.3f;
         cotton.seamColumns = {20}; // 41 columns: the middle
         particles.addCloth({0.4f, 1.1f, -0.3f}, {0, 0, 0.6f}, {0, -0.55f, 0}, cotton, 16 /* on a rod */, {0.75f, 0.3f, 0.35f});
+        // Soft bodies: a jelly cube and a softer ball dropped on the trampoline, a firmer block that
+        // floats, and a jelly beam laid across two static blocks - it sags between them.
         TriMesh cube = primitives::box(Vector3(0.09f));
         cube.translate({-0.65f, 0.95f, 0.0f});
-        particles.addSoftBody(cube, 150.0f, 0.4f, {0.3f, 0.75f, 0.95f});
+        particles.addSoftBody(cube, 150.0f, 0.2f, {0.3f, 0.75f, 0.95f});
         TriMesh ball = primitives::sphere(0.08f, 16, 8);
         ball.translate({-0.45f, 1.1f, 0.1f});
-        particles.addSoftBody(ball, 150.0f, 0.15f, {0.55f, 0.9f, 0.35f});
+        particles.addSoftBody(ball, 150.0f, 0.08f, {0.55f, 0.9f, 0.35f});
         TriMesh floater = primitives::box(Vector3(0.07f));
         floater.translate({0.75f, 0.6f, 0.0f});
-        particles.addSoftBody(floater, 500.0f, 0.6f, {0.95f, 0.6f, 0.2f});
+        particles.addSoftBody(floater, 500.0f, 0.4f, {0.95f, 0.6f, 0.2f});
+        // No slender beams here: shape matching on clusters has no bending stiffness across the
+        // clusters, so a long thin jelly bar droops like a rope whatever its stiffness (the FEM
+        // soft body with a Young's modulus is the next step; a clamped beam is its test).
         break;
     }
     case Preset::FloatingBodies: {
