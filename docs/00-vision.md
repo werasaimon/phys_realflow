@@ -53,7 +53,7 @@ $$
 | Ограничитель MacCormack | второй порядок падает до первого у экстремумов | новые максимумы дыма из ниоткуда | [Advection.cpp:107](../src/gas/Advection.cpp#L107) |
 | Диссипация ЭДС $\max(f\lvert u\rvert\Delta x,\ \lvert u\rvert^2 h)$ | поле диффундирует быстрее физической $\eta$ | неустойчивость центрального переноса $\mathbf B$ | [MagneticField.cpp:164](../src/plasma/MagneticField.cpp#L164) |
 | Коррекция Бориса | скорость Альфвена ограничена сверху | шаги по времени в микросекунды у полюсов магнита | [MagneticField.cpp:293](../src/plasma/MagneticField.cpp#L293) |
-| Фильтр узкого диапазона для поверхности воды | глубина сглажена в пределах частицы | «шарики» на поверхности | [FluidSurfaceRenderer.cpp:65](../app/FluidSurfaceRenderer.cpp#L65) |
+| Фильтр узкого диапазона для поверхности воды | глубина сглажена в пределах частицы | «шарики» на поверхности | [FluidSurfaceRenderer.cpp:65](https://github.com/werasaimon/phys_realflow_editor/blob/main/src/FluidSurfaceRenderer.cpp#L65) |
 | Split impulse — псевдоимпульс, правящий проникновение отдельной «скоростью позиции» | тела выталкиваются из перекрытия, не получая настоящей скорости | подскок стопки после каждого проникновения | [RigidWorld.h:124](../src/rigid/RigidWorld.h#L124) |
 | Якобиево обновление PBF: все поправки $\Delta\mathbf p$ считаются по старым положениям и применяются разом | за итерацию плотность сходится медленнее, чем при Гаусса–Зейделе | зависимость результата от порядка частиц и потоков | [DensitySolver.cpp:125](../src/particles/DensitySolver.cpp#L125) |
 
