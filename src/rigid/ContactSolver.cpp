@@ -218,6 +218,17 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
         p.massN = effMass(A, B, ra, rb, n);
         Vector3 dv = A.velocityAt(p.position) - (B ? B->velocityAt(p.position) : Vector3(0.0f));
         float vn = dot(dv, n);
+        // The approach speed at the impact: the step integrated gravity into the velocities before
+        // the solve, so vn carries one g dt more than the body had when it touched. Bouncing with
+        // -e vn would gain 2 g dt / |vn| of energy per bounce (the Noether energy test: +0.74 % at
+        // 600 Hz). Only a dynamic body falls; a static support does not.
+        const Vector3 gRel = params.gravity * ((A.invMass > 0 ? 1.0f : 0.0f) - (B && B->invMass > 0 ? 1.0f : 0.0f));
+        const float vnImpact = vn - dot(gRel, n) * dt;
+        // An impact, not a resting touch: faster than the threshold, and the gap (if any) closes
+        // within this step. The bounce is applied by applyRestitution() after the solve, never as
+        // a target inside the iterations (see there for why).
+        const bool impact = vn < -params.restitutionThreshold && (p.depth >= 0 || vn * dt < p.depth);
+        p.bounce = impact ? -m.restitution * vnImpact : 0.0f;
         if (p.depth < 0) {
             // Speculative contact: allow closing the gap in this step, but not more. Gaps smaller
             // than the slop count as touching (dead zone): otherwise sub-millimetre differences
@@ -227,14 +238,8 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
             const float slop = params.slop, beta = params.baumgarte;
             p.velocityBias = p.depth > -slop ? beta * p.depth / dt : (p.depth + slop * (1.0f - beta)) / dt;
             p.positionBias = 0;
-            // The gap closes within this step at this approach speed: it is an impact, not a resting
-            // touch - apply restitution to the approach velocity (after CCD clamping every fast hit
-            // arrives here as a speculative contact).
-            bool clamped = (m.a < int(ccdClamped_.size()) && ccdClamped_[m.a]) ||
-                           (m.b >= 0 && m.b < int(ccdClamped_.size()) && ccdClamped_[m.b]);
-            if (clamped && vn < -1.0f && vn * dt < p.depth) p.velocityBias = std::max(p.velocityBias, -m.restitution * vn);
         } else {
-            p.velocityBias = vn < -1.0f ? -m.restitution * vn : 0.0f;
+            p.velocityBias = 0;
             p.positionBias = params.baumgarte / dt * std::max(p.depth - params.slop, 0.0f);
             if (!params.splitImpulse) {
                 p.velocityBias = std::max(p.velocityBias, p.positionBias);
@@ -434,6 +439,55 @@ void RigidWorld::blockNormalSolve(Manifold& m) {
         if (d == 0) continue;
         applyImpulse(m.a, p.normal * d, p.position);
         if (B) applyImpulse(m.b, -p.normal * d, p.position);
+    }
+}
+
+// Restitution as one pass after the solve (as Box2D v3 does), from the approach speed remembered
+// before it. Inside the iterations a bounce would be an inequality held for the whole step: in a
+// stack the lower contact keeps re-pushing the upper box to its bounce speed while the box above
+// lands on it, so every level bounces faster than the one below and the stack explodes (100 boxes
+// dropped from 1 cm reached 40 m/s). The bounce impulse is not added to jn either: jn is warm
+// started, and an impact is a one-off - re-applying it next step as if it were the contact's
+// steady load pumped the stack's energy by 15 % per substep.
+void RigidWorld::applyRestitution() {
+    for (Manifold& m : manifolds_) {
+        bool impact = false, loaded = false;
+        for (const SolverPoint& p : m.points) {
+            impact |= p.bounce > 0;
+            loaded |= p.jn > 0;
+        }
+        if (!impact || !loaded) continue; // a resting touch, or a contact that carried no load
+        // The bounce is the normal solve of this manifold once more with the bounce as its target:
+        // the block form couples the points, where one sweep point by point gives the first corner
+        // the whole impulse and spins a plate hit flat (head-on plates re-hit each other at 30 m/s).
+        // The accumulated impulses are put back afterwards: what warm starts the next step is the
+        // contact's load, not the bounce.
+        float saved[16], bias[16];
+        const int np = std::min<int>(int(m.points.size()), 16);
+        for (int k = 0; k < np; ++k) {
+            SolverPoint& p = m.points[k];
+            saved[k] = p.jn;
+            bias[k] = p.velocityBias;
+            p.velocityBias = std::max(p.velocityBias, p.bounce);
+        }
+        if (params.blockSolver && np >= 2 && np <= 4) {
+            blockNormalSolve(m);
+        } else {
+            RigidBody& A = bodies_[m.a];
+            RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+            for (int k = 0; k < np; ++k) {
+                SolverPoint& p = m.points[k];
+                const float vn = dot(A.velocityAt(p.position) - (B ? B->velocityAt(p.position) : Vector3(0.0f)), p.normal);
+                const float old = p.jn;
+                p.jn = std::max(old + p.massN * (p.velocityBias - vn), 0.0f);
+                applyImpulse(m.a, p.normal * (p.jn - old), p.position);
+                if (B) applyImpulse(m.b, p.normal * (old - p.jn), p.position);
+            }
+        }
+        for (int k = 0; k < np; ++k) {
+            m.points[k].jn = saved[k];
+            m.points[k].velocityBias = bias[k];
+        }
     }
 }
 

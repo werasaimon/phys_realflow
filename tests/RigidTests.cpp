@@ -489,7 +489,10 @@ void testCcdBodies() {
 void testCcdSpinningPlate() {
     // A 1 m plate spinning at 200 rad/s around its centre, 0.3 m from a 2 cm static post: per
     // substep its edge sweeps 10 cm at the post (plate + post are 6 cm thick together).
-    auto spin = [](bool ccd, float& wFinal, float& worstOverlap, int& hits) {
+    // The hit is measured by the angular momentum |L| the plate keeps, not by one component of w:
+    // a thin plate struck off-centre tumbles (I about its long axis is 300 times smaller), and
+    // the gyroscopic term then trades w between axes at constant |L|.
+    auto spin = [](bool ccd, float& wFinal, float& lRatio, float& worstOverlap, int& hits) {
         RigidWorld w;
         w.setDomain(AABB({-5, -5, -5}, {5, 5, 5}));
         w.params.gravity = Vector3(0.0f);
@@ -498,6 +501,12 @@ void testCcdSpinningPlate() {
         w.addBox({0, 0, 0}, {0.01f, 1.0f, 0.01f}, Quaternion(), 0, Vector3(1));              // post
         int plate = w.addBox({0, 0, 0.3f}, {0.5f, 0.02f, 0.02f}, Quaternion(), 800, Vector3(1)); // along x
         w.bodies()[plate].angVel = {0, 200, 0};
+        auto momentum = [&] { // |L| = |I_world w|
+            const RigidBody& b = w.bodies()[plate];
+            const Vector3 wl = b.rotation().transposed() * b.angVel;
+            return length(Vector3(wl.x / b.invInertiaLocal.x, wl.y / b.invInertiaLocal.y, wl.z / b.invInertiaLocal.z));
+        };
+        const float L0 = momentum();
         worstOverlap = 0;
         hits = 0;
         for (int k = 0; k < 60; ++k) { // 0.1 s: ~20 revolutions without an obstacle
@@ -506,14 +515,17 @@ void testCcdSpinningPlate() {
             worstOverlap = std::max(worstOverlap, maxOverlap(w));
         }
         wFinal = w.bodies()[plate].angVel.y;
+        lRatio = momentum() / L0;
     };
-    float wOff, ovOff, wOn, ovOn;
+    float wOff, lOff, ovOff, wOn, lOn, ovOn;
     int hOff, hOn;
-    spin(false, wOff, ovOff, hOff);
-    spin(true, wOn, ovOn, hOn);
-    std::printf("  spinning plate 200 rad/s vs 2 cm post: without CCD w=%.1f overlap %.4f m; with CCD w=%.1f overlap %.4f m, %d CCD stops\n",
-                wOff, ovOff, wOn, ovOn, hOn);
-    CHECK(wOn < 100.0f, "with CCD the plate must hit the post (w=%f)", wOn);
+    spin(false, wOff, lOff, ovOff, hOff);
+    spin(true, wOn, lOn, ovOn, hOn);
+    std::printf("  spinning plate 200 rad/s vs 2 cm post: without CCD w_y=%.1f |L| %.0f%% overlap %.4f m; with CCD w_y=%.1f |L| %.0f%% overlap %.4f m, %d CCD stops\n",
+                wOff, 100 * lOff, ovOff, wOn, 100 * lOn, ovOn, hOn);
+    // One hit at r = 0.3 m from the centre of a free plate: the impulse that stops the point of
+    // contact takes 1 - (I/m) / (I/m + r^2) ~ 52 % of the spin, more with the bounce.
+    CHECK(lOn < 0.6f, "with CCD the plate must hit the post (kept %.0f%% of |L|)", 100 * lOn);
     CHECK(ovOn < 0.01f, "plate and post interpenetrated: %f m", ovOn);
 }
 
@@ -704,3 +716,137 @@ void testConvexRest() {
 }
 
 #include "HardContactTests.h" // industry-hard contact cases (uses CHECK and maxOverlap of TestRunner.h)
+
+// Noether's theorem, one number each: energy is conserved because the laws do not change with
+// time, momentum because they do not change with position, angular momentum because they do not
+// change with orientation. A rigid solver that leaks any of them has a bias its impulses do not
+// justify (Baumgarte and split impulses move positions, not energy; damping is off here).
+static Vector3 angularMomentumAboutOrigin(const RigidWorld& w) {
+    Vector3 L(0.0f);
+    for (const RigidBody& b : w.bodies()) {
+        if (b.invMass == 0) continue;
+        const Matrix3x3 R = b.rotation();
+        const Matrix3x3 I = R * Matrix3x3::diag({1 / b.invInertiaLocal.x, 1 / b.invInertiaLocal.y, 1 / b.invInertiaLocal.z}) * R.transposed();
+        L += cross(b.pos, b.vel) * b.mass + I * b.angVel;
+    }
+    return L;
+}
+
+static Vector3 momentum(const RigidWorld& w) {
+    Vector3 P(0.0f);
+    for (const RigidBody& b : w.bodies()) if (b.invMass > 0) P += b.vel * b.mass;
+    return P;
+}
+
+void testNoetherRigid() {
+    const float dt = 1.0f / 600;
+    // 1) Time translation -> energy. An elastic ball (e = 1) dropped from 1 m: E = m g h + m v^2 / 2
+    //    should stay what it was; a constant restitution below 1 would lose a fixed share per
+    //    bounce, the position corrections must not add or take any.
+    {
+        RigidWorld w;
+        w.setDomain(AABB({-2, 0, -2}, {2, 5, 2}));
+        w.params.sleeping = false;
+        w.params.linearDamping = w.params.angularDamping = 0;
+        w.params.rollingResistance = 0;
+        const float r = 0.1f;
+        const int s = w.addSphere({0, 1.0f + r, 0}, r, 1000, Vector3(1));
+        RigidBody& b = w.bodies()[s];
+        b.restitution = 1.0f;
+        b.friction = b.staticFriction = 0;
+        const float m = b.mass, g = -w.params.gravity.y;
+        auto energy = [&] { return m * g * (b.pos.y - r) + 0.5f * m * length2(b.vel); };
+        const float E0 = energy();
+        int bounces = 0;
+        float prevVy = 0, worst = 0;
+        std::printf("  elastic ball: E0 = %.4f J;", E0);
+        for (int k = 0; k < 600 * 20 && bounces < 20; ++k) { // 20 bounces of a 1 m drop take ~18 s
+            w.step(dt);
+            if (prevVy < 0 && b.vel.y > 0) { // a bounce: energy right after it
+                ++bounces;
+                worst = std::max(worst, std::fabs(energy() / E0 - 1));
+                if (bounces % 5 == 0) std::printf(" after %d bounces %.4f J (%+.2f%%)", bounces, energy(), 100 * (energy() / E0 - 1));
+            }
+            prevVy = b.vel.y;
+        }
+        std::printf("; worst drift %.2f%% over %d bounces\n", 100 * worst, bounces);
+        // Found by this test: the ball dropped dead. An impact arrives as a speculative contact (the
+        // gap is smaller than contactMargin one step before touching), and that branch applied the
+        // restitution only to CCD-clamped bodies; a ball at a few m/s is never clamped, so every
+        // ordinary bounce was inelastic. The bounce now lives in RigidWorld::applyRestitution().
+        CHECK(bounces >= 20, "the ball stopped bouncing after %d bounces", bounces);
+        CHECK(worst < 0.02f, "energy of an elastic ball drifts by %.2f%%", 100 * worst);
+    }
+    // 2) Space translation -> momentum; rotation -> angular momentum about a fixed point. Two boxes
+    //    in zero gravity, a glancing hit that spins them both: the internal impulses (normal and
+    //    friction) cancel pairwise, so P and L about the origin stay what they were.
+    {
+        RigidWorld w;
+        w.setDomain(AABB({-10, -10, -10}, {10, 10, 10}));
+        w.params.gravity = Vector3(0.0f);
+        w.params.sleeping = false;
+        w.params.linearDamping = w.params.angularDamping = 0;
+        w.params.rollingResistance = 0;
+        w.params.collideWithDomain = false;
+        const int a = w.addBox({-1, 0, 0}, {0.15f, 0.1f, 0.2f}, Quaternion(), 800, Vector3(1));
+        const int c = w.addBox({1, 0.12f, 0.05f}, {0.2f, 0.15f, 0.1f}, Quaternion::fromAxisAngle({0, 1, 0}, 0.4f), 500, Vector3(1));
+        w.bodies()[a].vel = {3, 0, 0};
+        w.bodies()[a].angVel = {0, 0, 2};
+        w.bodies()[c].vel = {-1, 0, 0};
+        (void)c;
+        const Vector3 P0 = momentum(w), L0 = angularMomentumAboutOrigin(w);
+        float worstP = 0, worstL = 0;
+        for (int k = 0; k < 600; ++k) {
+            w.step(dt);
+            worstP = std::max(worstP, length(momentum(w) - P0) / length(P0));
+            worstL = std::max(worstL, length(angularMomentumAboutOrigin(w) - L0) / length(L0));
+        }
+        std::printf("  glancing collision: |P| %.4f -> %.4f kg m/s (worst %.1e rel), |L| %.4f -> %.4f kg m^2/s (worst %.1e rel), spins %.2f / %.2f rad/s\n",
+                    length(P0), length(momentum(w)), worstP, length(L0), length(angularMomentumAboutOrigin(w)), worstL, length(w.bodies()[a].angVel),
+                    length(w.bodies()[c].angVel));
+        CHECK(worstP < 1e-4f, "momentum drifts %e", worstP);
+        // The contact impulses cancel exactly (same point, opposite sign); what remains is the
+        // free-rotation integration of the spun boxes - the same 1e-3 seen in part 3 below.
+        CHECK(worstL < 2e-3f, "angular momentum drifts %e", worstL);
+        CHECK(length(w.bodies()[c].angVel) > 0.3f, "the glancing hit must spin the second box (%f rad/s)", length(w.bodies()[c].angVel));
+    }
+    // 3) Rotation symmetry of a free body: a box spun about its middle axis of inertia flips over
+    //    and over (Dzhanibekov / tennis racket) while |L| and the rotational energy stay constant.
+    //    The perturbation grows at sigma = w2 sqrt((I2 - I1)(I3 - I2) / (I1 I3)) (linearised Euler
+    //    equations); the flips repeat with a period of the order of a few 1/sigma.
+    {
+        RigidWorld w;
+        w.setDomain(AABB({-10, -10, -10}, {10, 10, 10}));
+        w.params.gravity = Vector3(0.0f);
+        w.params.sleeping = false;
+        w.params.linearDamping = w.params.angularDamping = 0;
+        w.params.collideWithDomain = false;
+        const int i = w.addBox({0, 0, 0}, {0.05f, 0.2f, 0.1f}, Quaternion(), 1000, Vector3(1)); // I_x < I_z < I_y: middle axis z
+        RigidBody& b = w.bodies()[i];
+        const Vector3 I(1 / b.invInertiaLocal.x, 1 / b.invInertiaLocal.y, 1 / b.invInertiaLocal.z);
+        const float w2 = 10.0f;
+        b.angVel = {0.02f * w2, 0, w2}; // about the middle axis (z), nudged
+        const float sigma = w2 * std::sqrt((I.z - I.x) * (I.y - I.z) / (I.x * I.y));
+        const float L0 = length(angularMomentumAboutOrigin(w)), E0 = w.kineticEnergy();
+        float worstL = 0, worstE = 0, prevWz = b.angVel.z, firstFlip = -1, lastFlip = -1;
+        int flips = 0;
+        for (int k = 0; k < 6000; ++k) {
+            w.step(dt);
+            worstL = std::max(worstL, std::fabs(length(angularMomentumAboutOrigin(w)) / L0 - 1));
+            worstE = std::max(worstE, std::fabs(w.kineticEnergy() / E0 - 1));
+            const float wz = dot(b.rotation() * Vector3(0, 0, 1), b.angVel); // spin about the body's middle axis
+            if (prevWz * wz < 0) { ++flips; (firstFlip < 0 ? firstFlip : lastFlip) = k * dt; lastFlip = k * dt; }
+            prevWz = wz;
+        }
+        const float period = flips > 1 ? 2 * (lastFlip - firstFlip) / float(flips - 1) : 0;
+        std::printf("  Dzhanibekov: I = (%.4f %.4f %.4f) kg m^2, sigma %.2f 1/s, %d flips in 10 s, period %.2f s (%.1f / sigma); |L| drift %.1e, "
+                    "energy drift %.1e\n", I.x, I.y, I.z, sigma, flips, period, period * sigma, worstL, worstE);
+        // Found by this test: no flip. The sequential-impulse integrator (RigidWorld::step) advances
+        // the angular velocity without the gyroscopic term w x (I w) of Euler's equations - only
+        // the experimental XPBD path has it (XpbdSolver.cpp) - so a free body keeps w instead of L.
+        // The same omission is what lets L drift in the tumbling boxes of part 2.
+        CHECK(flips >= 2, "no tennis-racket flip: %d sign changes", flips);
+        CHECK(worstL < 1e-3f, "|L| of a free body drifts %e", worstL);
+        CHECK(worstE < 1e-2f, "rotational energy of a free body drifts %e", worstE);
+    }
+}

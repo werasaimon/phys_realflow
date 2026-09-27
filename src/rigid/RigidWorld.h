@@ -38,6 +38,7 @@ struct RigidParams {
     int positionIterations = 4; // XPBD: contact position passes per substep
     int manifoldIterations = 4; // local relaxation of each manifold's normal impulses (block solve)
     float baumgarte = 0.2f;
+    float restitutionThreshold = 1.0f; // approach speed (m/s) below which a touch does not bounce (Box2D: 1 m/s)
     float slop = 0.004f;
     float contactMargin = 0.01f; // speculative contact distance [m]
     float linearDamping = 0.02f;
@@ -179,8 +180,9 @@ private:
         uint64_t id = 0;               // hash of the quantised localA
         float depth = 0;
         float massN = 0;
-        float velocityBias = 0; // restitution / speculative gap (velocity level)
+        float velocityBias = 0; // speculative gap (velocity level)
         float positionBias = 0; // penetration recovery (split impulse, position level)
+        float bounce = 0;       // target separation speed of an impact (-e * approach speed), 0 for a resting touch
         float jn = 0, jp = 0;   // normal and split (pseudo) impulses; friction lives on the manifold
     };
     struct Manifold {
@@ -227,6 +229,7 @@ private:
     void prepare(float dt);
     void solve();
     void buildColors();
+    static Vector3 gyroscopicStep(const RigidBody& b, float h); // w after the gyroscopic torque over h
     // Every manifold, colour by colour: a colour's manifolds share no dynamic body, so a big
     // colour is solved in parallel.
     template <class F> void forEachManifold(F&& f) {
@@ -240,6 +243,7 @@ private:
     }
     void prepareManifold(Manifold& m, float dt);
     void solveManifold(Manifold& m);
+    void applyRestitution();
     void computeLevels();
     void blockNormalSolve(Manifold& m);
     // Sleeping: frozen bodies act as static during the step.

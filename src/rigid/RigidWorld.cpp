@@ -155,6 +155,27 @@ float RigidWorld::kineticEnergy() const {
     return float(e);
 }
 
+// Euler's equations: d(I w)/dt = -w x (I w). A body spinning about a non-principal axis tumbles
+// (the Dzhanibekov effect), and without this term the integrator keeps w instead of the angular
+// momentum L = I w. Implicit midpoint rule in the body frame (as Catto 2015, "Numerical
+// Methods", GDC, but with the torque at the midpoint): f(w1) = I (w1 - w0) + h wm x (I wm) = 0,
+// wm = (w0 + w1) / 2, solved by Newton's method. The midpoint rule is symplectic and conserves
+// the quadratic invariants |I w|^2 and w . I w - angular momentum and energy - where implicit
+// Euler damps them and the explicit term blows up at fast spins.
+Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
+    const Matrix3x3 R = b.rotation();
+    const Vector3 I(1.0f / b.invInertiaLocal.x, 1.0f / b.invInertiaLocal.y, 1.0f / b.invInertiaLocal.z);
+    const Vector3 w0 = R.transposed() * b.angVel; // in the body frame, where I is diagonal
+    Vector3 w1 = w0;
+    for (int it = 0; it < 3; ++it) {
+        const Vector3 wm = (w0 + w1) * 0.5f, Iwm = I * wm;
+        const Vector3 f = I * (w1 - w0) + cross(wm, Iwm) * h;
+        const Matrix3x3 J = Matrix3x3::diag(I) + (Matrix3x3::skew(wm) * Matrix3x3::diag(I) - Matrix3x3::skew(Iwm)) * (0.5f * h);
+        w1 = w1 - J.inverse() * f;
+    }
+    return R * w1;
+}
+
 void RigidWorld::prepare(float dt) {
     contactCount_ = 0;
     // Gauss-Seidel order: bottom-up (along gravity), so support propagates through stacks within
@@ -205,6 +226,7 @@ void RigidWorld::step(float dt) {
         if (b.invMass == 0) continue;
         b.vel += (params.gravity + b.force * b.invMass) * dt;
         b.angVel += b.applyInvInertiaWorld(b.torque) * dt;
+        b.angVel = gyroscopicStep(b, dt);
     }
     collide();
     if (params.sleeping && updateIslands(false, dt)) collide(); // woken island: contacts among its bodies
@@ -217,6 +239,9 @@ void RigidWorld::step(float dt) {
         for (auto& j : joints_) j->solveVelocity(bodies_);
         solveGrab(dt);
     }
+    // Bounces before the shock pass: it is one-sided with its own accumulators, so it cannot take a
+    // separation back, but it does absorb the downward half of a bounce inside a stack.
+    applyRestitution();
     if (params.shockPropagation && !manifolds_.empty()) {
         computeLevels();
         // Ground-up order: sort by the lower level of each manifold.

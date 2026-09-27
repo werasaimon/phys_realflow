@@ -125,7 +125,11 @@ void ParticleSystem::computeLambda() {
 void ParticleSystem::computeDeltaP() {
     const int n = int(p_.size());
     const float k = mass_ / params.restDensity;
-    const float tk = params.tensileK;
+    // Artificial pressure s_corr = -k (W(r) / W(dq))^4 (Macklin & Muller 2013, eq. 13) is added to
+    // lambda_i + lambda_j. Their lambda is dimensionless (h = 1); ours has the units of h^2 (the
+    // gradients of C go as 1/h), so k is scaled by h^2 - otherwise the same k puffs small
+    // particles up far more than large ones (a resting column of 5 mm particles grew 80 %).
+    const float tk = params.tensileK * h2_;
     const float invDq = deltaQW_ > 0 ? 1.0f / deltaQW_ : 0.0f;
     parallelFor(n, [&](int i) {
         const Vector3 pi = p_[i];

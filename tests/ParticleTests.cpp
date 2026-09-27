@@ -291,3 +291,108 @@ void testLightBodyInWater() {
     CHECK(vMax < 5.0f && wMax < 50.0f, "the light ball was kicked (v %f, w %f)", vMax, wMax);
     CHECK(yEnd > level - 0.3f * ball.radius(), "the beach ball must float (centre %f)", yEnd);
 }
+
+// Validation against the classic experiment: Martin & Moyce 1952, a water column a wide and 2a
+// tall (n^2 = 2) collapsing on a dry floor. The front position Z = x / a against the
+// dimensionless time T = t sqrt(2 g / a); the reference table is the digitised curve for
+// a = 2.25 in that VOF, SPH and MPS papers reproduce (scratchpad/benchmarks.md, item 1), the late
+// slope dZ/dT ~ 1.7 (Ritter's frictionless shallow-water theory gives 2). Grid and particle
+// codes sit within 3-8 % of the front; SPH/PBF run slightly ahead (no gate, no floor friction).
+// The front is the bulk of the floor layer (the last 1 cm bin holding at least 5 particles), not
+// the few leading splash particles. The column is 20 particles wide and the substeps keep the
+// PBF velocity clamp (0.5 h / dt = 6 m/s) far above the front speed of ~3 m/s.
+//
+// What this test found (2026-09-27): the front ran 35 % ahead of the experiment and a column left
+// at rest grew 80 % in height - the artificial pressure s_corr was scaled in absolute units while
+// lambda has the units of h^2, so 5 mm particles were puffed up 9 times harder than the 15 mm ones
+// of the demo scenes. With s_corr = -k h^2 (W / W_dq)^4 the resting column keeps its height and
+// the front is within 12 % (literature 3-8 %; the rest is particle resolution and the PBF density
+// solver at 4 iterations, 7 % over-dense under its own weight). The threshold is set at what the
+// code does now with the 8 % of the literature as the target.
+void testDamBreakMartinMoyce() {
+    const float a = 0.2f, g = 9.81f, depth = 0.1f;
+    auto makeColumn = [&](ParticleSystem& s) {
+        s.params.particleRadius = 0.005f; // spacing 1 cm: 20 particles across the column
+        s.params.substeps = 10;           // dt = 1/600 s: the velocity clamp is 6 m/s
+        s.params.gravity = {0, -g, 0};
+        s.reset(AABB({0, 0, 0}, {6 * a, 3 * a, depth}));
+        s.addBlock(AABB({0, 0, 0}, {a, 2 * a, depth}));
+    };
+    // 1) The same column held by a wall at rest (a domain as wide as the column): how much it grows.
+    float restGrowth = 0;
+    {
+        ParticleSystem s;
+        s.params.particleRadius = 0.005f;
+        s.params.substeps = 10;
+        s.params.gravity = {0, -g, 0};
+        s.reset(AABB({0, 0, 0}, {a, 3 * a, depth}));
+        s.addBlock(AABB({0, 0, 0}, {a, 2 * a, depth}));
+        for (int k = 0; k < 300; ++k) s.step(1.0f / 600); // 0.5 s
+        float top = 0;
+        for (const Vector3& p : s.positions()) top = std::max(top, p.y + s.params.particleRadius);
+        restGrowth = top / (2 * a) - 1.0f;
+    }
+    // 2) The dam break.
+    ParticleSystem s;
+    makeColumn(s);
+    const float r = s.params.particleRadius, dt = 1.0f / 60 / s.params.substeps, scale = std::sqrt(2 * g / a);
+    std::printf("  dam break: %zu particles, column %.0f x %.0f particles; the column at rest grows by %.1f%% in height\n", s.size(), a / (2 * r),
+                2 * a / (2 * r), 100 * restGrowth);
+    // Reference (T, Z), n^2 = 2, digitised.
+    const float refT[] = {0.41f, 0.84f, 1.19f, 1.43f, 1.63f, 1.83f, 2.02f, 2.20f, 2.37f, 2.53f, 2.69f, 2.85f, 3.00f};
+    const float refZ[] = {1.11f, 1.22f, 1.44f, 1.67f, 1.89f, 2.11f, 2.33f, 2.56f, 2.78f, 3.00f, 3.22f, 3.44f, 3.67f};
+    const int nRef = int(sizeof(refT) / sizeof(refT[0]));
+    auto reference = [&](float T) { // linear interpolation, Z = 1 at T = 0
+        if (T <= refT[0]) return 1.0f + (refZ[0] - 1.0f) * T / refT[0];
+        for (int i = 1; i < nRef; ++i)
+            if (T <= refT[i]) return refZ[i - 1] + (refZ[i] - refZ[i - 1]) * (T - refT[i - 1]) / (refT[i] - refT[i - 1]);
+        return refZ[nRef - 1];
+    };
+    // The bulk front along the floor: the last 1 cm bin along x with at least 5 particles of the
+    // floor layer (leading splash particles do not count); the column height at the back wall.
+    auto measure = [&](float& Zfront, float& Hback) {
+        std::vector<int> bins(int(6 * a / 0.01f) + 1, 0);
+        float back = 0;
+        for (const Vector3& p : s.positions()) {
+            if (p.y < 2.5f * r) ++bins[std::min(int((p.x + r) / 0.01f), int(bins.size()) - 1)];
+            if (p.x < 3 * r) back = std::max(back, p.y + r);
+        }
+        Zfront = 0;
+        for (size_t b = 0; b < bins.size(); ++b)
+            if (bins[b] >= 5) Zfront = 0.01f * float(b + 1) / a;
+        Hback = back / (2 * a);
+    };
+    std::vector<std::pair<float, float>> series; // (T, Z)
+    double devSum = 0;
+    int devCount = 0;
+    float hMax = 0;
+    std::printf("      T    Z(sim)  Z(ref)  H(back wall)\n");
+    for (int step = 0, next = 0; ; ++step) {
+        const float t = step * dt, T = t * scale;
+        if (T > 3.05f) break;
+        if (step == next) { // every ~0.1 in T
+            float Z, H;
+            measure(Z, H);
+            hMax = std::max(hMax, H);
+            const float Zr = reference(T);
+            series.push_back({T, Z});
+            if (T >= 0.5f && T <= 3.0f) { devSum += std::fabs(Z - Zr) / Zr; ++devCount; }
+            if (series.size() % 3 == 1) std::printf("    %5.2f  %6.2f  %6.2f  %6.2f\n", T, Z, Zr, H);
+            next += 6;
+        }
+        s.step(dt);
+    }
+    // Late slope dZ/dT over T in [1.5, 3]: a least-squares line.
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    int n = 0;
+    for (auto [T, Z] : series)
+        if (T >= 1.5f && T <= 3.0f) { sx += T; sy += Z; sxx += T * T; sxy += T * Z; ++n; }
+    const float slope = n >= 2 ? float((n * sxy - sx * sy) / (n * sxx - sx * sx)) : 0.0f;
+    const float deviation = devCount ? float(devSum / devCount) : 1.0f;
+    std::printf("  dam break front: mean |Z - Z_ref| / Z_ref = %.1f%% over T in [0.5, 3] (literature 3-8%%), late slope dZ/dT = %.2f "
+                "(experiment ~1.7, Ritter 2), back wall rises to %.2f of the height (experiment: falls), max speed %.2f m/s\n",
+                100 * deviation, slope, hMax, s.maxSpeed());
+    CHECK(deviation < 0.15f, "dam break front off the Martin & Moyce curve by %.1f%% (today 12%%; target 8%%)", 100 * deviation);
+    CHECK(slope > 0.75f * 1.7f && slope < 1.25f * 1.7f, "late front slope %f vs ~1.7", slope);
+    CHECK(s.maxSpeed() < 0.9f * 0.5f * 4 * r / dt, "the velocity clamp limits the front: %f m/s", s.maxSpeed());
+}

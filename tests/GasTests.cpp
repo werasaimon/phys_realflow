@@ -500,3 +500,122 @@ void testCylinderStrouhal() {
     CHECK(St > 0.145f && St < 0.195f, "Strouhal number %f vs 0.164 (0.17 confined)", St);
     CHECK(0.5f * (clMax - clMin) > 0.05f, "lift oscillation too weak: %f", 0.5f * (clMax - clMin));
 }
+
+// Solution verification by grid refinement (Roache 1998; ASME V&V 20): the same problem on three
+// grids h, h/2, h/4 against an exact solution, the observed order p = log2(e_h / e_h/2) and the
+// grid convergence index GCI = 1.25 |f_fine - f_medium| / (|f_fine| (2^p - 1)) of a scalar of the
+// solution (Richardson). Two problems with exact answers:
+//  1. heat conduction of a smooth spot in still gas - T(r, t) from the radial heat kernel;
+//  2. a smooth smoke blob carried by a uniform flow - the blob shifted by U t.
+void testGridConvergence() {
+    auto rms = [](double sum2, size_t n) { return std::sqrt(sum2 / double(std::max<size_t>(n, 1))); };
+    auto order = [](double eCoarse, double eFine) { return std::log(eCoarse / eFine) / std::log(2.0); };
+
+    // 1) Heat: T0(r) = 0.1 K (1 - r^2/R^2)^2 inside R (the disturbance's shape), alpha = 1e-3 m^2/s,
+    //    1 s: the exact solution of a radial profile is the integral against the 3D radial kernel
+    //    G(r, r') = r' / (r sqrt(4 pi a t)) [exp(-(r-r')^2/4at) - exp(-(r+r')^2/4at)]. The time step
+    //    is the same small one on every grid (4 ms, 250 steps), so the spatial order is what is
+    //    measured; 0.1 K keeps the T^1.75 diffusivity constant to 0.06 %.
+    {
+        const float R = 0.15f, alpha = 1e-3f, tEnd = 1.0f, heat = 0.1f;
+        auto exact = [&](double r) {
+            const double s = 4.0 * alpha * tEnd, n = 400;
+            double sum = 0;
+            for (int m = 0; m <= n; ++m) { // Simpson over r' in [0, R]
+                const double rp = R * m / n, w = (m == 0 || m == n) ? 1 : (m % 2 ? 4 : 2);
+                const double T0 = heat * std::pow(1.0 - rp * rp / (double(R) * R), 2.0);
+                sum += w * T0 * rp * (std::exp(-(r - rp) * (r - rp) / s) - std::exp(-(r + rp) * (r + rp) / s));
+            }
+            return sum * (R / n / 3.0) / (r * std::sqrt(kPi * s));
+        };
+        double err[3], peak[3], dt[3];
+        int res[3] = {16, 32, 64};
+        for (int lvl = 0; lvl < 3; ++lvl) {
+            GasSolver g;
+            g.params.domainSize = {1, 1, 1};
+            g.params.resolutionX = res[lvl];
+            g.params.inflowSpeed = 0;
+            g.params.smokeRake = false;
+            for (auto& b : g.params.bc) b = BoundaryType::Wall;
+            g.combustion.enabled = true;
+            g.combustion.gravity = 0;
+            g.combustion.radiativeCooling = 0;
+            g.combustion.thermalDiffusivity = alpha;
+            g.reset({-0.5f, -0.5f, -0.5f}, nullptr);
+            Disturbance spot;
+            spot.radius = R;
+            spot.velocityBlend = 0;
+            spot.heat = heat;
+            g.applyDisturbance(spot);
+            float t = 0;
+            dt[lvl] = 0;
+            while (t < tEnd - 1e-5f) { const float h = g.step(std::min(0.004f, tEnd - t)); t += h; dt[lvl] = std::max(dt[lvl], double(h)); }
+            const Field3& T = g.temperature();
+            double sum2 = 0, pk = 0;
+            for (int k = 0; k < g.nz(); ++k)
+                for (int j = 0; j < g.ny(); ++j)
+                    for (int i = 0; i < g.nx(); ++i) {
+                        const Vector3 x = g.origin() + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * g.dx();
+                        const double e = T.at(i, j, k) - exact(length(x));
+                        sum2 += e * e;
+                        pk = std::max(pk, double(T.at(i, j, k)));
+                    }
+            err[lvl] = rms(sum2, T.d.size());
+            peak[lvl] = pk;
+        }
+        const double p1 = order(err[0], err[1]), p2 = order(err[1], err[2]);
+        const double pPeak = std::log(std::fabs((peak[0] - peak[1]) / (peak[1] - peak[2]))) / std::log(2.0);
+        const double gci = 1.25 * std::fabs(peak[2] - peak[1]) / (std::fabs(peak[2]) * (std::pow(2.0, pPeak) - 1.0));
+        std::printf("  heat spot, exact peak %.4f K: grids 16/32/64, RMS error %.2e / %.2e / %.2e, order %.2f then %.2f; peak %.4f / %.4f / %.4f "
+                    "(order %.2f, GCI fine %.2f%%), max dt %.3f s\n",
+                    exact(1e-6), err[0], err[1], err[2], p1, p2, peak[0], peak[1], peak[2], pPeak, 100 * gci, dt[2]);
+        CHECK(p2 > 1.5, "heat conduction converges at order %.2f, expected ~2", p2);
+        CHECK(gci < 0.05, "heat peak GCI %.1f%%", 100 * gci);
+    }
+
+    // 2) Advection: smoke = exp(-|x - c|^2 / 2 s^2), s = 0.12 m, in a uniform flow U = 1 m/s for 0.5 s
+    //    (no obstacle, so the projection leaves the flow uniform): exact = the blob 0.5 m downstream.
+    //    The Courant number is the same on every grid, 0.7, and not an integer: with U dt = 2 dx the
+    //    back-traces land on cell centres, the interpolation is exact and the error vanishes - a
+    //    property of the semi-Lagrangian step, not of the grid.
+    {
+        const float U = 1.0f, tEnd = 0.5f, sigma = 0.12f;
+        const Vector3 c0(0.5f, 0.5f, 0.5f);
+        double err[3], peak[3], dt[3];
+        int res[3] = {32, 64, 128};
+        for (int lvl = 0; lvl < 3; ++lvl) {
+            GasSolver g;
+            g.params.domainSize = {2, 1, 1};
+            g.params.resolutionX = res[lvl];
+            g.params.inflowSpeed = U;
+            g.params.smokeRake = false;
+            g.reset({0, 0, 0}, nullptr);
+            g.setTracer([&](const Vector3& x) { return std::exp(-length2(x - c0) / (2 * sigma * sigma)); });
+            float t = 0;
+            dt[lvl] = 0;
+            const float courant = 0.7f * g.dx() / U;
+            while (t < tEnd - 1e-5f) { const float h = g.step(std::min(courant, tEnd - t)); t += h; dt[lvl] = std::max(dt[lvl], double(h)); }
+            const Vector3 c1 = c0 + Vector3(U * tEnd, 0, 0);
+            const Field3& S = g.smoke();
+            double sum2 = 0, pk = 0;
+            for (int k = 0; k < g.nz(); ++k)
+                for (int j = 0; j < g.ny(); ++j)
+                    for (int i = 0; i < g.nx(); ++i) {
+                        const Vector3 x = g.origin() + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * g.dx();
+                        const double e = S.at(i, j, k) - std::exp(-length2(x - c1) / (2 * sigma * sigma));
+                        sum2 += e * e;
+                        pk = std::max(pk, double(S.at(i, j, k)));
+                    }
+            err[lvl] = rms(sum2, S.d.size());
+            peak[lvl] = pk;
+        }
+        const double p1 = order(err[0], err[1]), p2 = order(err[1], err[2]);
+        const double pPeak = std::log(std::fabs((peak[0] - peak[1]) / (peak[1] - peak[2]))) / std::log(2.0);
+        const double gci = 1.25 * std::fabs(peak[2] - peak[1]) / (std::fabs(peak[2]) * (std::pow(2.0, pPeak) - 1.0));
+        std::printf("  smoke blob advected 0.5 m: grids 32/64/128, RMS error %.2e / %.2e / %.2e, order %.2f then %.2f; peak %.4f / %.4f / %.4f "
+                    "(exact 1, order %.2f, GCI fine %.2f%%), max dt %.4f / %.4f / %.4f s\n",
+                    err[0], err[1], err[2], p1, p2, peak[0], peak[1], peak[2], pPeak, 100 * gci, dt[0], dt[1], dt[2]);
+        CHECK(p2 > 0.8, "advection converges at order %.2f", p2);
+        CHECK(peak[2] > 0.9, "the blob's peak after 0.5 m is %.3f of 1 on the fine grid", peak[2]);
+    }
+}

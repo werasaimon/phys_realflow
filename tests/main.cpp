@@ -54,6 +54,9 @@ int main() {
     run("coherence: scene switches, one gravity, Coulomb friction, burnt cloth", testCoherence);
     run("determinism: two runs agree to the bit (rigid, particles, gas)", testDeterminism);
     run("benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)", testCylinderStrouhal);
+    run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
+    run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
+    run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);
     return g_failures;

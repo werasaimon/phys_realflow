@@ -42,7 +42,14 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
     // Level of each side: static environment counts as -1 (always "below").
     const int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
     const int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
-    if (la == lb) { solveManifold(m); return; } // same level: ordinary two-sided solve
+    if (la == lb) { // same level: ordinary two-sided solve - except for an impact, whose separation
+        // (applied by applyRestitution just before) a two-sided re-solve would take back; shock
+        // propagation is for resting support, not for a bullet meeting a box in the air.
+        bool impact = false;
+        for (const SolverPoint& p : m.points) impact |= p.bounce > 0;
+        if (!impact) solveManifold(m);
+        return;
+    }
     const bool upperIsA = la > lb;
     const int ui = upperIsA ? m.a : m.b;
     RigidBody& U = bodies_[ui];

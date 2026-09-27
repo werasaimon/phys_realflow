@@ -50,7 +50,7 @@ struct ParticleParams {
     float viscosity = 0.02f;        // XSPH coefficient, 0..1
     float vorticity = 0.0f;         // confinement strength [m/s^2 scale]
     float relaxation = 0.1f;        // constraint-force-mixing term (scaled by 1/h^2)
-    float tensileK = 0.0001f;       // artificial pressure (surface tension-like)
+    float tensileK = 0.03f;         // artificial pressure k (Macklin & Muller 2013: 0.1), dimensionless, x h^2 inside
     float wallFriction = 0.1f;      // 0 = free slip, 1 = no slip on obstacles
     Vector3 gravity{0, -9.81f, 0};
     int maxParticles = 250000;
