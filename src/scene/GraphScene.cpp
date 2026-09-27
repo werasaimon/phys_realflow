@@ -95,19 +95,14 @@ void GraphScene::build(Simulation& sim) {
     else sim.useRigidArena(box);
     magnetBody_.clear();
     magnetMoment_.clear();
-    entityOfBody_.clear();
+    magnetEntity_.clear();
+    entityIdOfBody_.clear();
     emitters_.clear();
+    meta_.clear();
     notes_.clear();
     maxMagnetForce_ = 0;
     sim.particles.emitter.enabled = false; // a liquid emitter switches it on in releaseFromEmitter()
-    for (int i = 0; i < int(graph_.entities.size()); ++i) {
-        if (!graph_.entities[i].visible) continue; // hidden: no body, no particles, no emission
-        const int bodiesBefore = int(sim.rigid.bodies().size());
-        addEntity(sim, i);
-        // Whatever bodies this entity made belong to it: the editor picks an entity by its body.
-        entityOfBody_.resize(sim.rigid.bodies().size(), -1);
-        for (int b = bodiesBefore; b < int(sim.rigid.bodies().size()); ++b) entityOfBody_[b] = i;
-    }
+    for (int i = 0; i < int(graph_.entities.size()); ++i) buildEntity(sim, i);
     if (sim.grid.magnetic.enabled) addMagnetFieldToGas(sim);
 }
 
@@ -127,26 +122,34 @@ bool GraphScene::shapeUsable(const Entity& e) {
     return true;
 }
 
-// One entity into the solvers: first what it is made of, then what it also does. An entity with no
-// role at all is geometry only: it has no body and does not collide - the editor just draws it.
-// Each role has its own add* function that builds its part fresh from the entity's source (the
-// shape or model, EntityShapes.cpp) and returns what it created, so one role can later be rebuilt
-// alone without reloading the scene.
-void GraphScene::addEntity(Simulation& sim, int index) {
+// One entity into the solvers: first what it is made of, then what it also does; everything made
+// is recorded as the entity's meta-objects, so it can be removed and built again alone. An entity
+// with no role at all is geometry only: no body, no collision - the editor just draws it; a hidden
+// one takes no part at all. Each role has its own add* function that builds its part fresh from the
+// entity's source (the shape or model, EntityShapes.cpp).
+void GraphScene::buildEntity(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
-    if (entityIsGeometryOnly(e) || !shapeUsable(e)) return;
+    std::vector<MetaObject>& meta = meta_[e.id];
+    meta.clear();
+    if (!e.visible || entityIsGeometryOnly(e) || !shapeUsable(e)) return;
     const Matter matter = madeOf(e);
     const std::string leftOut = leftOutMatter(e, matter);
     if (!leftOut.empty()) notes_.push_back(e.name + ": сделано из одного — не использовано: " + leftOut);
     int body = -1;
     switch (matter) {
     case Matter::Rigid: body = addRigid(sim, index); break;
-    case Matter::Soft: addSoft(sim, index); break;
-    case Matter::Liquid: addLiquid(sim, index); break;
-    case Matter::Cloth: addCloth(sim, index); break;
+    case Matter::Soft: meta.push_back({MetaObject::Kind::SoftBody, addSoft(sim, index), Quaternion()}); break;
+    case Matter::Liquid: meta.push_back({MetaObject::Kind::Liquid, addLiquid(sim, index), Quaternion()}); break;
+    case Matter::Cloth: meta.push_back({MetaObject::Kind::Cloth, addCloth(sim, index), Quaternion()}); break;
     case Matter::None:
         if (e.magnet.enabled) body = addRigid(sim, index); // a magnet with nothing else stays put
         break;
+    }
+    if (body >= 0) { // the body and which entity it belongs to (the editor picks entities by body)
+        const Quaternion bodyToEntity = sim.rigid.bodies()[size_t(body)].rot.conjugate() * entityRotation(e);
+        meta.push_back({MetaObject::Kind::RigidBody, body, bodyToEntity});
+        if (int(entityIdOfBody_.size()) <= body) entityIdOfBody_.resize(size_t(body) + 1, 0);
+        entityIdOfBody_[size_t(body)] = e.id;
     }
     if (e.flammable.enabled && matter != Matter::Cloth) notes_.push_back(e.name + ": горит только ткань (пока)");
     if (e.magnet.enabled) addMagnet(sim, index, body);
@@ -183,34 +186,34 @@ int GraphScene::addRigid(Simulation& sim, int index) {
 }
 
 // Soft: the shape's surface mesh in the world, filled with particles held by shape matching.
-// Returns the soft body's index in the particle system.
+// Returns its particle group.
 int GraphScene::addSoft(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
-    return sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
+    const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
+    return sim.particles.softBodyGroup(body);
 }
 
 // Liquid: the shape's box (turned and moved as the entity) filled with water particles. Returns
-// how many particles it added.
+// its particle group.
 int GraphScene::addLiquid(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
-    const size_t before = sim.particles.fluidCount();
-    sim.particles.addBlock(entityMesh(e, graph_.baseDirectory).bounds());
-    return int(sim.particles.fluidCount() - before);
+    return sim.particles.addBlock(entityMesh(e, graph_.baseDirectory).bounds());
 }
 
 // Magnet: a dipole riding on the entity's body (-1: none - a magnet has to be a rigid body). The
 // moment is given in the entity's frame; the body's own frame may differ (a hull body lives in its
-// principal frame), so it is turned into the body frame once here. Returns the magnet's slot.
-int GraphScene::addMagnet(Simulation& sim, int index, int body) {
+// principal frame), so it is turned into the body frame once here.
+void GraphScene::addMagnet(Simulation& sim, int index, int body) {
     const Entity& e = graph_.entities[size_t(index)];
     if (body < 0) {
         notes_.push_back(e.name + ": магнит бывает только твёрдым телом");
-        return -1;
+        return;
     }
     const Vector3 world = entityRotation(e).toMatrix3x3() * e.magnet.moment;
     magnetBody_.push_back(body);
-    magnetMoment_.push_back(sim.rigid.bodies()[body].rotation().transposed() * world);
-    return int(magnetBody_.size()) - 1;
+    magnetMoment_.push_back(sim.rigid.bodies()[size_t(body)].rotation().transposed() * world);
+    magnetEntity_.push_back(e.id);
+    meta_[e.id].push_back({MetaObject::Kind::Magnet, body, Quaternion()});
 }
 
 // A sheet of cloth in place of the shape. A Plane becomes the sheet itself (size.x by size.z in its
@@ -219,7 +222,7 @@ int GraphScene::addMagnet(Simulation& sim, int index, int body) {
 // ParticleSystem::addCloth's pin bits: -z edge = first row (16), +z edge = last row (32),
 // -x edge = first column (64), +x edge = last column (128). "The top row" (role bit 16) is the edge
 // that is highest in the world after the turn - the rod of a curtain; for a level sheet, the -z edge.
-// Returns the cloth's index in the particle system.
+// Returns its particle group.
 int GraphScene::addCloth(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
     const Matrix3x3 R = entityRotation(e).toMatrix3x3();
@@ -245,19 +248,19 @@ int GraphScene::addCloth(Simulation& sim, int index) {
     m.bendCompliance = e.cloth.bendCompliance;
     if (!e.cloth.tearable) m.strengthWarp = m.strengthWeft = 0.0f; // 0: the threads never break
     m.flammable = e.flammable.enabled;
-    return sim.particles.addCloth(corner, u, v, m, pinMask, e.color);
+    return sim.particles.clothGroup(sim.particles.addCloth(corner, u, v, m, pinMask, e.color));
 }
 
 // Emitter: remembered with the body it rides on; releaseFromEmitter() runs it every frame.
-// Returns the slot of the emitter.
-int GraphScene::addEmitter(Simulation& sim, int index, int body) {
+void GraphScene::addEmitter(Simulation& sim, int index, int body) {
+    const Entity& e = graph_.entities[size_t(index)];
     EmitterRef ref;
-    ref.entity = index;
+    ref.entity = e.id;
     ref.body = body;
     if (body >= 0) // entity frame = body frame * (body frame at the start)^T * entity frame at the start
-        ref.bodyToEntity = sim.rigid.bodies()[body].rotation().transposed() * entityRotation(graph_.entities[size_t(index)]).toMatrix3x3();
+        ref.bodyToEntity = sim.rigid.bodies()[size_t(body)].rotation().transposed() * entityRotation(e).toMatrix3x3();
     emitters_.push_back(ref);
-    return int(emitters_.size()) - 1;
+    meta_[e.id].push_back({MetaObject::Kind::Emitter, body, Quaternion()});
 }
 
 // What an emitter releases in one frame, at its entity's pose of now. The release point is just
@@ -267,7 +270,9 @@ int GraphScene::addEmitter(Simulation& sim, int index, int body) {
 // least 10 litres a second) with the emitter's temperature above ambient. Liquid: the particle
 // system has one nozzle, so the first liquid emitter drives it (others are named in the readings).
 void GraphScene::releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool& liquidDone) const {
-    const Entity& e = graph_.entities[size_t(ref.entity)];
+    const int index = indexOf(ref.entity);
+    if (index < 0) return;
+    const Entity& e = graph_.entities[size_t(index)];
     const EmitterRole& em = e.emitter;
     Vector3 centre = e.position, moving(0.0f);
     Matrix3x3 R = entityRotation(e).toMatrix3x3();
@@ -348,7 +353,10 @@ void GraphScene::describe(const Simulation& sim, RenderSnapshot& s) const {
         needsGas |= e.visible && (e.heat.enabled || e.flammable.enabled || (e.emitter.enabled && (e.emitter.smoke > 0 || e.emitter.temperature > 0)));
     if (needsGas && !graph_.world.gas) s.info.push_back({"Дым, тепло, огонь", "нужен газ: включите «газ» в мире"});
     int liquidEmitters = 0;
-    for (const EmitterRef& ref : emitters_) liquidEmitters += graph_.entities[size_t(ref.entity)].emitter.liquid > 0 ? 1 : 0;
+    for (const EmitterRef& ref : emitters_) {
+        const int index = indexOf(ref.entity);
+        liquidEmitters += index >= 0 && graph_.entities[size_t(index)].emitter.liquid > 0 ? 1 : 0;
+    }
     if (liquidEmitters > 1) s.info.push_back({"Струи жидкости", format("работает первая из %d (сопло одно)", liquidEmitters)});
     for (const std::string& note : notes_) s.info.push_back({"Роли", note});
     (void)sim;

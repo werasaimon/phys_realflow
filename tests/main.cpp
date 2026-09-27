@@ -106,6 +106,10 @@ int main() {
     run("scene graph: a flammable curtain over a hot emitter catches fire", testGraphFlammableCloth);
     run("scene graph: a model from a file as rigid, soft and (not) cloth", testGraphMeshShape);
     run("scene graph: a shape with no role is geometry only", testGraphGeometryOnly);
+    run("meta-objects: water -> jelly -> water -> jelly in place, the rest untouched", testMetaWaterSoftCycle);
+    run("meta-objects: a plane rigid -> cloth -> rigid, body slots reused", testMetaRigidToClothAndBack);
+    run("meta-objects: a magnet role off and on without a reload", testMetaMagnetToggle);
+    run("meta-objects: fifty changes leave no trace in memory", testMetaNoGrowth);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);

@@ -76,6 +76,7 @@ add_library(rfcore STATIC
   src/scene/Snapshot.cpp
   src/scene/SceneGraph.h          src/scene/SceneGraph.cpp
   src/scene/GraphScene.cpp
+  src/scene/MetaObjects.cpp
   src/scene/EntityShapes.cpp
   src/scene/Magnets.h             src/scene/Magnets.cpp
 )
@@ -161,7 +162,8 @@ if(RF_BUILD_TESTS)
     tests/TerrainTests.cpp
     tests/FractureTests.cpp
     tests/RelativityTests.cpp
-    tests/GraphTests.cpp)
+    tests/GraphTests.cpp
+    tests/MetaObjectTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()

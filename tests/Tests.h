@@ -95,3 +95,8 @@ void testGraphEmitterFollows();
 void testGraphFlammableCloth();
 void testGraphMeshShape();
 void testGraphGeometryOnly();
+// meta-objects (MetaObjectTests.cpp): one entity changes between frames, the rest does not notice
+void testMetaWaterSoftCycle();
+void testMetaRigidToClothAndBack();
+void testMetaMagnetToggle();
+void testMetaNoGrowth();

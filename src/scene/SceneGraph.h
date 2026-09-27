@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace rf {
@@ -154,49 +155,95 @@ bool entityIsGeometryOnly(const Entity& e);
 // and size and shared (decomposing takes seconds). Null for an unreadable file.
 std::shared_ptr<const CompoundShape> entityCompound(const Entity& e, const std::string& baseDirectory);
 
+// A meta-object: one physical incarnation a role of an entity created in the solvers. The entity
+// (the object) keeps its source and its roles; its meta-objects can be removed and built again from
+// the source one entity at a time, without touching the rest of the scene.
+struct MetaObject {
+    enum class Kind { RigidBody, SoftBody, Liquid, Cloth, Magnet, Emitter };
+    Kind kind = Kind::RigidBody;
+    // RigidBody: body index; SoftBody / Liquid / Cloth: the particle group; Magnet / Emitter: the
+    // rigid body it rides on (-1: none).
+    int handle = -1;
+    // RigidBody: the turn from the body's frame to the entity's frame (a hull body lives in its
+    // principal frame), to read the entity's orientation back from the body.
+    Quaternion bodyToEntity;
+};
+
 // A Scene built from a SceneGraph: the editor's scenes run through the same Scene interface as the
 // samples (configure the world, build the entities, apply the magnet forces every step).
+//
+// Three layers: the SOURCE (the shape or model, EntityShapes.cpp - physics never changes it), the
+// OBJECT (an Entity: pose and roles) and its META-OBJECTS (what the roles made in the solvers).
+// rebuildEntity / addEntity / removeEntity change one entity between frames: its meta-objects are
+// removed and built again from the source, the rest of the scene goes on untouched. The world
+// itself (gravity, box size, gas on or off, the gas's heat source and combustion, a plasma's
+// background field) is set when the scene is loaded; changing it needs a full reload.
 class GraphScene : public Scene {
 public:
-    explicit GraphScene(SceneGraph graph) : graph_(std::move(graph)) {}
+    // Every entity gets a stable id: those without one (id 0) are numbered after the largest.
+    explicit GraphScene(SceneGraph graph);
     void configure(Simulation& sim) override;
     void build(Simulation& sim) override;
     void afterStep(Simulation& sim) override;
     void describe(const Simulation& sim, RenderSnapshot& s) const override;
     const SceneGraph& graph() const { return graph_; }
-    // Which entity made rigid body b (-1: none); filled by build(). The editor selects the entity
-    // the mouse clicked on through it.
-    int entityOfBody(int body) const { return body >= 0 && body < int(entityOfBody_.size()) ? entityOfBody_[body] : -1; }
+    // Which entity made rigid body b: its index in graph().entities (-1: none) or its id (0: none).
+    // The editor selects the entity the mouse clicked on through it.
+    int entityOfBody(int body) const;
+    uint32_t entityIdOfBody(int body) const;
+
+    // One entity between frames, without reloading the scene. rebuildEntity replaces the entity of
+    // updated.id: its meta-objects go, new ones are built from the source where the entity is NOW
+    // (its body's or particles' live pose, unless `updated` moves it) and carry on its velocity.
+    // Returns false when a role of it needs something only a reload can switch on (the gas).
+    bool rebuildEntity(Simulation& sim, const Entity& updated);
+    bool addEntity(Simulation& sim, const Entity& entity); // an id of 0 gets a new one
+    void removeEntity(Simulation& sim, uint32_t id);
+    const std::vector<MetaObject>& metaObjects(uint32_t id) const;
 
 private:
     // An emitter and what carries it: the rigid body it rides on (-1: it stays where it was put) and
     // the turn from that body's frame to the entity's own frame (a hull body lives in its principal
     // frame), so the release direction turns with the body.
     struct EmitterRef {
-        int entity = -1;
+        uint32_t entity = 0; // the entity's id
         int body = -1;
         Matrix3x3 bodyToEntity = Matrix3x3::identity();
     };
+    // Where an entity is and how it moves, read from its meta-objects (the live state).
+    struct LiveState {
+        Vector3 position{0.0f}, rotationDeg{0.0f}, velocity{0.0f}, angularVelocity{0.0f};
+        bool fromParticles = false; // read from a particle group: the lowest particle centre below
+        float lowest = 0;
+    };
+    void standOnParticles(Entity& next, const LiveState& live) const;
 
+    int indexOf(uint32_t id) const;
     bool shapeUsable(const Entity& e);
-    void addEntity(Simulation& sim, int index);
+    void buildEntity(Simulation& sim, int index);
+    void destroyMetaObjects(Simulation& sim, uint32_t id);
+    LiveState liveState(const Simulation& sim, int index) const;
+    void carryVelocity(Simulation& sim, uint32_t id, const LiveState& live) const;
+    bool needsReload(const Simulation& sim, const Entity& e) const;
     // One function per role: builds that role of entity `index` fresh from the source of the entity
-    // and returns what it created (the next step makes these removable meta-objects).
+    // and returns what it created.
     int addRigid(Simulation& sim, int index);                  // rigid body index
-    int addSoft(Simulation& sim, int index);                   // soft body index
-    int addLiquid(Simulation& sim, int index);                 // liquid particles added
-    int addCloth(Simulation& sim, int index);                  // cloth index
-    int addMagnet(Simulation& sim, int index, int body);       // magnet slot (-1: no body)
-    int addEmitter(Simulation& sim, int index, int body);      // emitter slot
+    int addSoft(Simulation& sim, int index);                   // particle group
+    int addLiquid(Simulation& sim, int index);                 // particle group
+    int addCloth(Simulation& sim, int index);                  // particle group
+    void addMagnet(Simulation& sim, int index, int body);
+    void addEmitter(Simulation& sim, int index, int body);
     void releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool& liquidDone) const;
     void addMagnetFieldToGas(Simulation& sim) const;
 
     SceneGraph graph_;
-    std::vector<int> magnetBody_;       // rigid body index of each magnet entity
+    std::vector<int> magnetBody_;       // rigid body index of each magnet
     std::vector<Vector3> magnetMoment_; // its moment in the body frame
+    std::vector<uint32_t> magnetEntity_; // the id of its entity
     float maxMagnetForce_ = 0;          // the largest pair force of the last frame [N]
-    std::vector<int> entityOfBody_;     // body index -> entity index
+    std::vector<uint32_t> entityIdOfBody_; // body index -> entity id (0: none)
     std::vector<EmitterRef> emitters_;  // every visible entity with the emitter role
+    std::unordered_map<uint32_t, std::vector<MetaObject>> meta_; // entity id -> its meta-objects
     std::vector<std::string> notes_;    // roles that could not be honoured, shown in the readings
 };
 
