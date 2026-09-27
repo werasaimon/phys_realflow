@@ -189,7 +189,7 @@ void RigidWorld::prepare(float dt) {
     };
     std::stable_sort(manifolds_.begin(), manifolds_.end(),
                      [&](const Manifold& x, const Manifold& y) { return height(x) < height(y); });
-    for (const Manifold& m : manifolds_) contactCount_ += m.points.size();
+    for (const Manifold& m : manifolds_) contactCount_ += size_t(m.points.size());
     buildColors();
     forEachManifold([&](Manifold& m) { prepareManifold(m, dt); });
 }
@@ -229,11 +229,19 @@ void RigidWorld::step(float dt) {
         b.angVel += b.applyInvInertiaWorld(b.torque) * dt;
         b.angVel = gyroscopicStep(b, dt);
     }
+    // Allocations per stage (the probe's census: which stage churns memory).
+    long long allocs = Probe::allocations.load();
+    auto countAllocations = [&](const char* channel) {
+        const long long now = Probe::allocations.load();
+        Probe::add(channel, double(now - allocs));
+        allocs = now;
+    };
     {
         Probe::Timer t("rigid/collide ms");
         collide();
         if (params.sleeping && updateIslands(false, dt)) collide(); // woken island: contacts among its bodies
     }
+    countAllocations("memory/rigid collide");
     auto ts = std::chrono::steady_clock::now();
     prepare(dt);
     prepareGrab(dt);
@@ -249,7 +257,8 @@ void RigidWorld::step(float dt) {
     if (params.shockPropagation && !manifolds_.empty()) {
         computeLevels();
         // Ground-up order: sort by the lower level of each manifold.
-        std::vector<int> order(manifolds_.size());
+        std::vector<int>& order = shockOrder_; // kept between steps: no allocation
+        order.resize(manifolds_.size());
         for (size_t i = 0; i < order.size(); ++i) order[i] = int(i);
         auto lvl = [&](const Manifold& m) {
             int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
@@ -264,21 +273,26 @@ void RigidWorld::step(float dt) {
     }
     timings_.solve = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - ts).count();
     Probe::add("rigid/solve ms", timings_.solve); // prepare, the iterations, the bounces and the shock pass
+    countAllocations("memory/rigid solve");
     if (Probe::drawEnabled()) drawDebug();
 
     // Pairs of sleeping bodies produce no manifolds; keep their last impulses so a woken stack
-    // carries its weight immediately instead of sagging and being thrown apart.
-    std::unordered_map<uint64_t, CachedPair> keep;
-    for (auto& [k, c] : cache_) {
+    // carries its weight immediately instead of sagging and being thrown apart. The cache is
+    // pruned in place (erase allocates nothing) and a persistent pair keeps its node: only a new
+    // pair costs an allocation - rebuilding the map every step was a thousand allocations per
+    // frame for a sleeping tower.
+    for (auto it = cache_.begin(); it != cache_.end();) {
+        const uint64_t k = it->first;
         int a = int(k >> 32), b = int(k & 0xffffffffu) - 64;
         bool aSleep = a < int(bodies_.size()) && (bodies_[a].sleeping || bodies_[a].mass <= 0);
         bool bSleep = b < 0 || (b < int(bodies_.size()) && (bodies_[b].sleeping || bodies_[b].mass <= 0));
-        if (aSleep && bSleep) keep.emplace(k, std::move(c));
+        if (aSleep && bSleep) { ++it; continue; }
+        it->second.live = false; // refreshed below if the pair is in this step's manifolds
+        ++it;
     }
-    cache_.swap(keep);
-    cache_.reserve(cache_.size() + manifolds_.size());
     for (const Manifold& m : manifolds_) {
         CachedPair& c = cache_[key(m.a, m.b)];
+        c.live = true;
         c.points = m.points;
         c.friction = m.t1 * m.jt1 + m.t2 * m.jt2;
         c.twist = m.jtwist;
@@ -287,12 +301,16 @@ void RigidWorld::step(float dt) {
         c.lockRef = m.lockRef;
         c.lock = m.jlock;
     }
+    for (auto it = cache_.begin(); it != cache_.end();)
+        it = it->second.live ? std::next(it) : cache_.erase(it);
+    countAllocations("memory/rigid cache");
 
     // Resting-contact damping (cf. Bullet's additional damping): bodies that touch something and
     // move slower than the thresholds get an opposing velocity change, capped so that it only
     // eats the residual jitter and never real motion.
     if (params.restDamping > 0) {
-        std::vector<char> touching(bodies_.size(), 0);
+        std::vector<char>& touching = touching_; // kept between steps
+        touching.assign(bodies_.size(), 0);
         for (const Manifold& m : manifolds_) {
             bool active = false;
             for (const SolverPoint& p : m.points) active |= p.jn > 0;
@@ -340,6 +358,7 @@ void RigidWorld::step(float dt) {
     auto tEnd = std::chrono::steady_clock::now();
     timings_.islands = std::chrono::duration<float, std::milli>(tEnd - ti).count();
     timings_.total = std::chrono::duration<float, std::milli>(tEnd - tStart).count();
+    countAllocations("memory/rigid integrate"); // poses, CCD, joints, islands
     // What this step was made of, for the probe (the counts of the last substep, the hits summed).
     Probe::set("rigid/bodies", double(bodies_.size()));
     Probe::set("rigid/bodies awake", double(bodies_.size() - sleepingCount()));

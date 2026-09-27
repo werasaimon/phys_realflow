@@ -100,6 +100,7 @@ private:
     std::vector<AABB> bounds_; // stored (fat) boxes
     std::vector<Endpoint> axes_[3];
     std::unordered_set<uint64_t> pairs_;
+    mutable std::vector<uint64_t> keys_; // scratch of findPairs (the sorted output), kept between steps
     size_t swaps_ = 0;
 };
 

@@ -186,10 +186,28 @@ private:
         float bounce = 0;       // target separation speed of an impact (-e * approach speed), 0 for a resting touch
         float jn = 0, jp = 0;   // normal and split (pseudo) impulses; friction lives on the manifold
     };
+    // The points of a manifold: at most 4 (reduceManifold keeps the deepest and the spanning
+    // three), so they live inside the manifold - a manifold is a plain struct, and building or
+    // caching one costs no allocation.
+    struct SolverPoints {
+        static constexpr int kMax = 4;
+        SolverPoint items[kMax];
+        int count = 0;
+        int size() const { return count; }
+        bool empty() const { return count == 0; }
+        void clear() { count = 0; }
+        void push_back(const SolverPoint& p) { if (count < kMax) items[count++] = p; }
+        SolverPoint& operator[](int i) { return items[i]; }
+        const SolverPoint& operator[](int i) const { return items[i]; }
+        SolverPoint* begin() { return items; }
+        SolverPoint* end() { return items + count; }
+        const SolverPoint* begin() const { return items; }
+        const SolverPoint* end() const { return items + count; }
+    };
     struct Manifold {
         int a = -1, b = -1; // b < 0: static (walls / mesh)
         float friction = 0.5f, staticFriction = 0.7f, restitution = 0.2f, rolling = 0.0f;
-        std::vector<SolverPoint> points;
+        SolverPoints points;
         // Manifold-level friction, as in ReactPhysics3D: two tangents and twist at the centre of
         // the contact patch, plus rolling resistance. Accumulated impulses are warm started.
         Vector3 center, normal, t1, t2;
@@ -208,7 +226,8 @@ private:
     };
     // What survives from one step to the next for a body pair.
     struct CachedPair {
-        std::vector<SolverPoint> points;
+        SolverPoints points;
+        bool live = true;     // seen this step (the pruning of the cache after the solve)
         Vector3 friction;     // world tangential impulse at the patch centre
         float twist = 0;   // impulse moment about the normal
         Vector3 roll;         // rolling resistance impulse moment
@@ -222,7 +241,7 @@ private:
     // the same contact is found again next step without per-point searches.
     static float contactCell(const RigidBody& A);
     static uint64_t positionHash(const Vector3& localA, float cell);
-    static const SolverPoint* findCached(const std::vector<SolverPoint>& old, const SolverPoint& p, float cell);
+    static const SolverPoint* findCached(const SolverPoints& old, const SolverPoint& p, float cell);
 
     void collide();
     void collideStatic(int i, std::vector<Manifold>& out) const;
@@ -299,6 +318,25 @@ private:
     std::vector<RigidBody> bodies_;
     std::vector<Manifold> manifolds_;               // current step
     std::unordered_map<uint64_t, CachedPair> cache_; // previous step (warm starting), by body pair
+    // Scratch of the step, kept between steps: the same vectors every step, cleared but never
+    // freed, so the hot path allocates nothing (the probe's census counts allocations per frame).
+    std::vector<AABB> boxes_;                       // fat bounds of the bodies for the broad phase
+    std::vector<std::vector<Manifold>> slots_;      // narrow-phase output per body / pair, concatenated in order
+    std::vector<uint64_t> colorUsed_;               // colours already used at each body (buildColors)
+    std::vector<int> shockOrder_;                   // manifolds sorted by level for the shock pass
+    std::vector<char> touching_;                    // bodies with a loaded contact (rest damping)
+    std::vector<int> levelStart_, levelAdj_, levelQueue_, levelFill_; // computeLevels: adjacency rows and the BFS queue
+    std::vector<Frozen> frozenKeep_;                // unfreezeAll: the sleepers that stay frozen
+    std::vector<SweptPose> sweeps_;                 // continuousCollision: the sweeps of a pass
+    std::vector<AABB> sweepBoxes_;
+    // Scratch of the collision passes, one per thread of the pool (ThreadPool::workerIndex):
+    // cleared before use, never freed.
+    struct CollideScratch {
+        std::vector<Vector3> verts;             // the body's vertices against the domain walls
+        ContactManifold wall, mesh, triangle;   // one wall; the whole mesh; one of its triangles
+        ContactManifold pair;                   // a body pair
+    };
+    mutable std::vector<CollideScratch> collideScratch_;
     std::vector<std::vector<int>> colors_; // manifold batches without shared bodies
     bool parallelColors_ = false;
     std::vector<int> levels_; // contact-graph distance from the static environment

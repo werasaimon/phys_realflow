@@ -1,5 +1,7 @@
 #include "rigid/NarrowPhase.h"
 
+#include "core/Parallel.h"
+
 namespace rf {
 
 namespace {
@@ -45,10 +47,11 @@ void closestSegmentSegment(const Vector3& p1, const Vector3& q1, const Vector3& 
     c2 = p2 + d2 * t;
 }
 
-// Sutherland-Hodgman: keep the part of `poly` with dot(n, x) <= d.
-std::vector<Vector3> clipPolygon(const std::vector<Vector3>& poly, const Vector3& n, float d) {
-    std::vector<Vector3> out;
-    if (poly.empty()) return out;
+// Sutherland-Hodgman: keep the part of `poly` with dot(n, x) <= d, into `out` (the caller's
+// scratch, cleared here: no allocation once it has grown).
+void clipPolygon(const std::vector<Vector3>& poly, const Vector3& n, float d, std::vector<Vector3>& out) {
+    out.clear();
+    if (poly.empty()) return;
     for (size_t i = 0; i < poly.size(); ++i) {
         const Vector3& a = poly[i];
         const Vector3& b = poly[(i + 1) % poly.size()];
@@ -56,7 +59,6 @@ std::vector<Vector3> clipPolygon(const std::vector<Vector3>& poly, const Vector3
         if (da <= 0) out.push_back(a);
         if ((da <= 0) != (db <= 0)) out.push_back(a + (b - a) * (da / (da - db)));
     }
-    return out;
 }
 
 Vector3 perpendicular(const Vector3& n) {
@@ -94,8 +96,11 @@ void reduceManifold(std::vector<ContactPoint>& pts, size_t maxPoints) {
         float d = length2(pts[i].position - pts[i0].position);
         if (d > best) { best = d; i1 = i; }
     }
-    std::vector<ContactPoint> out = {pts[i0]};
-    if (i1 != i0) out.push_back(pts[i1]);
+    // The kept points, in this order, written back into `pts` (shrinking never allocates).
+    ContactPoint kept[4];
+    int nk = 0;
+    kept[nk++] = pts[i0];
+    if (i1 != i0) kept[nk++] = pts[i1];
     if (maxPoints >= 4 && i1 != i0) {
         const Vector3 n = pts[i0].normal, a = pts[i0].position, b = pts[i1].position;
         size_t left = pts.size(), right = pts.size();
@@ -105,11 +110,31 @@ void reduceManifold(std::vector<ContactPoint>& pts, size_t maxPoints) {
             if (s > maxLeft) { maxLeft = s; left = i; }
             if (s < maxRight) { maxRight = s; right = i; }
         }
-        if (left != pts.size()) out.push_back(pts[left]);
-        if (right != pts.size()) out.push_back(pts[right]);
+        if (left != pts.size()) kept[nk++] = pts[left];
+        if (right != pts.size()) kept[nk++] = pts[right];
     }
-    pts.swap(out);
+    pts.resize(size_t(nk));
+    for (int i = 0; i < nk; ++i) pts[size_t(i)] = kept[i];
 }
+
+// Scratch of the narrow phase, one per thread of the pool: the vectors are cleared before use
+// and never freed, so a collision costs no allocation. Indexed by the worker number rather than
+// held in thread_local objects, whose destructors MinGW's TLS cleanup double-frees at thread exit.
+namespace {
+struct NarrowScratch {
+    std::vector<Vector3> poly, clipped;    // box - box: the incident face and its clipped copy
+    std::vector<ContactPoint> boxPoints;   // box - box: the points below the reference face
+    std::vector<Vector3> fa, fb, inc, cut; // faceManifold: the two faces, the incident one clipped
+    std::vector<ContactPoint> hullPoints;  // convex - convex: the face manifold or the single point
+    std::vector<PosedShape> partsA, partsB; // compound: the convex parts of both sides
+    std::vector<AABB> partBounds;
+    ContactManifold flipped;               // a pair handled with the shapes swapped
+};
+NarrowScratch& scratch() {
+    static std::vector<NarrowScratch> all(size_t(ThreadPool::instance().threadCount()));
+    return all[size_t(ThreadPool::workerIndex())];
+}
+} // namespace
 
 // ---------------------------------------------------------------------------
 NarrowPhase::NarrowPhase() {
@@ -134,7 +159,14 @@ bool NarrowPhase::collide(const PosedShape& A, const PosedShape& B, ContactManif
             out.push_back({c.shape.get(), S.R * c.R, S.p + S.R * c.t});
     };
     if (A.shape->type() == ShapeType::Compound || B.shape->type() == ShapeType::Compound) {
-        std::vector<PosedShape> pa, pb;
+        // The worker's scratch (the parts are convex, so the recursive calls below never come
+        // back here and never touch these): no allocation per compound pair.
+        NarrowScratch& S = scratch();
+        std::vector<PosedShape>&pa = S.partsA, &pb = S.partsB;
+        std::vector<AABB>& bb = S.partBounds;
+        pa.clear();
+        pb.clear();
+        bb.clear();
         partsOf(A, pa);
         partsOf(B, pb);
         auto boundsOf = [](const PosedShape& S) {
@@ -144,7 +176,6 @@ bool NarrowPhase::collide(const PosedShape& A, const PosedShape& B, ContactManif
             bb.hi += Vector3(margin);
             return bb;
         };
-        std::vector<AABB> bb;
         for (const PosedShape& q : pb) bb.push_back(boundsOf(q));
         bool hit = false;
         for (const PosedShape& p : pa) {
@@ -157,7 +188,8 @@ bool NarrowPhase::collide(const PosedShape& A, const PosedShape& B, ContactManif
     int a = int(A.shape->type()), b = int(B.shape->type());
     if (table_[a][b]) return table_[a][b](A, B, m);
     if (table_[b][a]) {
-        ContactManifold tmp;
+        ContactManifold& tmp = scratch().flipped;
+        tmp.points.clear();
         bool hit = table_[b][a](B, A, tmp);
         flipAppend(tmp, m);
         return hit;
@@ -288,17 +320,24 @@ bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifo
     Vector3 fc = inc.p + ia[k] * (s * ih[k]);
     int k1 = (k + 1) % 3, k2 = (k + 2) % 3;
     Vector3 e1 = ia[k1] * ih[k1], e2 = ia[k2] * ih[k2];
-    std::vector<Vector3> poly = {fc + e1 + e2, fc - e1 + e2, fc - e1 - e2, fc + e1 - e2};
+    NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
+    std::vector<Vector3>&poly = S.poly, &clipped = S.clipped;
+    poly.assign({fc + e1 + e2, fc - e1 + e2, fc - e1 - e2, fc + e1 - e2});
 
     int u = (r + 1) % 3, v = (r + 2) % 3;
-    poly = clipPolygon(poly, ra[u], dot(ra[u], ref.p) + rh[u]);
-    poly = clipPolygon(poly, -ra[u], -dot(ra[u], ref.p) + rh[u]);
-    poly = clipPolygon(poly, ra[v], dot(ra[v], ref.p) + rh[v]);
-    poly = clipPolygon(poly, -ra[v], -dot(ra[v], ref.p) + rh[v]);
+    clipPolygon(poly, ra[u], dot(ra[u], ref.p) + rh[u], clipped);
+    poly.swap(clipped);
+    clipPolygon(poly, -ra[u], -dot(ra[u], ref.p) + rh[u], clipped);
+    poly.swap(clipped);
+    clipPolygon(poly, ra[v], dot(ra[v], ref.p) + rh[v], clipped);
+    poly.swap(clipped);
+    clipPolygon(poly, -ra[v], -dot(ra[v], ref.p) + rh[v], clipped);
+    poly.swap(clipped);
 
     Vector3 refCenter = ref.p + n * rh[r];
     const Vector3 nBA = refIsA ? -n : n;
-    std::vector<ContactPoint> pts;
+    std::vector<ContactPoint>& pts = S.boxPoints;
+    pts.clear();
     for (const Vector3& x : poly) {
         float sep = dot(n, x - refCenter);
         if (sep <= margin) pts.push_back({x - n * (0.5f * sep), nBA, -sep});
@@ -319,7 +358,10 @@ bool NarrowPhase::boxBox(const PosedShape& A, const PosedShape& B, ContactManifo
 // in the spirit of Jolt's ManifoldBetweenTwoFaces: the incident feature is clipped against the side
 // planes of the reference face and only points below the reference plane are kept.
 bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
-    std::vector<Vector3> fa, fb;
+    NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
+    std::vector<Vector3>&fa = S.fa, &fb = S.fb, &inc = S.inc, &clipped = S.cut;
+    fa.clear();
+    fb.clear();
     A.feature(-n, fa); // A's face towards B
     B.feature(n, fb);  // B's face towards A
     auto faceNormal = [](const std::vector<Vector3>& f) {
@@ -342,7 +384,7 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
     if (align < cosMax) return false; // no face faces the contact: vertex/edge contact
 
     const std::vector<Vector3>& ref = refIsB ? fb : fa;
-    std::vector<Vector3> inc = refIsB ? fa : fb;
+    inc = refIsB ? fa : fb;
     Vector3 nr = faceNormal(ref);
     if (dot(nr, refIsB ? n : -n) < 0) nr = -nr; // reference normal pointing towards the other shape
     Vector3 c(0.0f);
@@ -356,7 +398,8 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
         if (dot(side, c - r0) > 0) side = -side; // outward side plane
         float d = dot(side, r0);
         if (inc.size() >= 3) {
-            inc = clipPolygon(inc, side, d);
+            clipPolygon(inc, side, d, clipped);
+            inc.swap(clipped);
         } else if (inc.size() == 2) {
             float d0 = dot(side, inc[0]) - d, d1 = dot(side, inc[1]) - d;
             if (d0 > 0 && d1 > 0) inc.clear();
@@ -397,7 +440,8 @@ bool NarrowPhase::convexConvex(const PosedShape& A, const PosedShape& B, Contact
     }
 
     // 1) Boundary simplices: clip the supporting faces (exact multi-point manifold).
-    std::vector<ContactPoint> pts;
+    std::vector<ContactPoint>& pts = scratch().hullPoints; // the worker's scratch
+    pts.clear();
     if (faceManifold(A, B, n, pts)) {
         reduceManifold(pts, 4);
         for (auto& p : pts) m.points.push_back(p);

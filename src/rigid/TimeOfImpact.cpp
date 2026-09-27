@@ -135,8 +135,10 @@ void RigidWorld::continuousCollision() {
     // body stays put for the rest of the step (its sweep becomes static), and the pass repeats so
     // bodies that would now run into it are caught too (A hits B, B hits C, ...).
     for (int pass = 0; pass < 8; ++pass) {
-        std::vector<SweptPose> sw(n);
-        std::vector<AABB> swBox(n);
+        std::vector<SweptPose>& sw = sweeps_; // kept between steps
+        std::vector<AABB>& swBox = sweepBoxes_;
+        sw.resize(n);
+        swBox.resize(n);
         for (int i = 0; i < n; ++i) {
             sw[i] = sweptOf(bodies_[i]);
             swBox[i] = boundsAt(sw[i], 0);

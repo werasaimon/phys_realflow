@@ -2,8 +2,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <map>
 #include <mutex>
-#include <unordered_map>
+#include <string_view>
 
 namespace rf {
 
@@ -14,7 +15,9 @@ namespace {
 
 struct Store {
     std::mutex mutex;
-    std::unordered_map<std::string, Probe::Channel> channels;
+    // A map with a transparent comparator: find(const char*) compares without building a
+    // std::string, so reporting a channel allocates only the first time its name is seen.
+    std::map<std::string, Probe::Channel, std::less<>> channels;
     std::vector<Probe::Line> lines;
     std::vector<Probe::Point> points;
 };
@@ -26,8 +29,8 @@ Store& store() {
 }
 
 Probe::Channel& channel(Store& s, const char* name, Probe::Kind kind) {
-    auto it = s.channels.find(name);
-    if (it == s.channels.end()) it = s.channels.emplace(name, Probe::Channel{name, 0.0, kind}).first;
+    auto it = s.channels.find(std::string_view(name));
+    if (it == s.channels.end()) it = s.channels.emplace(std::string(name), Probe::Channel{name, 0.0, kind}).first;
     it->second.kind = kind;
     return it->second;
 }
@@ -108,8 +111,7 @@ Probe::Snapshot Probe::snapshot() {
     Snapshot out;
     std::lock_guard<std::mutex> lock(s.mutex);
     out.channels.reserve(s.channels.size());
-    for (const auto& [name, c] : s.channels) out.channels.push_back(c);
-    std::sort(out.channels.begin(), out.channels.end(), [](const Channel& a, const Channel& b) { return a.name < b.name; });
+    for (const auto& [name, c] : s.channels) out.channels.push_back(c); // a std::map: already sorted by name
     out.lines = s.lines;
     out.points = s.points;
     return out;
@@ -119,8 +121,7 @@ std::vector<std::string> Probe::channels() {
     Store& s = store();
     std::vector<std::string> names;
     std::lock_guard<std::mutex> lock(s.mutex);
-    for (const auto& [name, c] : s.channels) names.push_back(name);
-    std::sort(names.begin(), names.end());
+    for (const auto& [name, c] : s.channels) names.push_back(name); // sorted: it is a std::map
     return names;
 }
 

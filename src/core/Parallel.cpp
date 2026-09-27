@@ -19,6 +19,9 @@
 namespace rf {
 
 static thread_local bool tl_inPool = false;
+static thread_local int tl_worker = 0; // see ThreadPool::workerIndex
+
+int ThreadPool::workerIndex() { return tl_worker; }
 
 // A job lives in one of two slots selected by generation parity. The shared ticket packs
 // (generation << 32 | next chunk index); workers claim chunks with CAS, so a worker holding a
@@ -92,7 +95,11 @@ ThreadPool::ThreadPool() : impl_(new Impl) {
     // RF_THREADS=n limits the pool (profiling, benchmarks); default: all hardware threads.
     if (const char* env = std::getenv("RF_THREADS"); env && std::atoi(env) > 0) hw = unsigned(std::atoi(env));
     workers_ = hw > 1 ? hw - 1 : 0;
-    for (unsigned i = 0; i < workers_; ++i) impl_->threads.emplace_back([this] { impl_->workerLoop(); });
+    for (unsigned i = 0; i < workers_; ++i)
+        impl_->threads.emplace_back([this, i] {
+            tl_worker = int(i) + 1;
+            impl_->workerLoop();
+        });
 }
 
 ThreadPool::~ThreadPool() {

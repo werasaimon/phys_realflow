@@ -73,7 +73,8 @@ void RigidWorld::freezeSleepers() {
 }
 
 void RigidWorld::unfreezeAll(bool onlyAwake) {
-    std::vector<Frozen> keep;
+    std::vector<Frozen>& keep = frozenKeep_; // kept between steps (swapped with frozen_ below)
+    keep.clear();
     for (const Frozen& f : frozen_) {
         if (onlyAwake && bodies_[f.body].sleeping) { keep.push_back(f); continue; }
         restore(f);

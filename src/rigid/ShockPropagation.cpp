@@ -12,8 +12,11 @@ void RigidWorld::computeLevels() {
     const int n = int(bodies_.size());
     const int kFar = 1 << 28;
     levels_.assign(n, kFar);
-    // Adjacency in compressed rows (one allocation instead of one vector per body).
-    std::vector<int> start(n + 1, 0), adj, queue;
+    // Adjacency in compressed rows, in vectors kept between steps: no allocation at all.
+    std::vector<int>&start = levelStart_, &adj = levelAdj_, &queue = levelQueue_, &fill = levelFill_;
+    start.assign(n + 1, 0);
+    adj.clear();
+    queue.clear();
     auto dynamicPair = [&](const Manifold& m) {
         return m.b >= 0 && bodies_[m.a].invMass > 0 && bodies_[m.b].invMass > 0;
     };
@@ -26,7 +29,7 @@ void RigidWorld::computeLevels() {
     }
     for (int i = 0; i < n; ++i) start[i + 1] += start[i];
     adj.resize(start[n]);
-    std::vector<int> fill(start.begin(), start.end() - 1);
+    fill.assign(start.begin(), start.end() - 1);
     for (const Manifold& m : manifolds_)
         if (dynamicPair(m)) adj[fill[m.a]++] = m.b, adj[fill[m.b]++] = m.a;
     for (size_t h = 0; h < queue.size(); ++h) {

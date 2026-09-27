@@ -48,7 +48,11 @@ void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
     if (params.collideWithDomain) {
         const Vector3 normals[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
         const Vector3 points[6] = {domain_.lo, domain_.hi, domain_.lo, domain_.hi, domain_.lo, domain_.hi};
-        std::vector<Vector3> verts;
+        // The worker's scratch, kept between calls: no allocation per body and wall.
+        CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
+        std::vector<Vector3>& verts = S.verts;
+        ContactManifold& wallContacts = S.wall;
+        verts.clear();
         if (body.type() == ShapeType::Box) {
             Vector3 h = body.halfExtents();
             for (int k = 0; k < 8; ++k)
@@ -64,7 +68,8 @@ void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
             // Early out with the support point along -n.
             const float margin = params.contactMargin;
             if (dot(ps.support(-n) - points[w], n) >= margin) continue;
-            ContactManifold cm;
+            ContactManifold& cm = wallContacts;
+            cm.points.clear();
             if (body.type() == ShapeType::Sphere) {
                 float d = dot(body.pos - points[w], n) - body.radius();
                 cm.add(body.pos - n * (body.radius() + 0.5f * d), n, -d);
@@ -85,13 +90,19 @@ void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
         bb.lo -= Vector3(params.contactMargin);
         bb.hi += Vector3(params.contactMargin);
         if (!mesh_->bounds().overlaps(bb)) return;
-        ContactManifold cm;
+        // A terrain sends thousands of candidate triangles per step: the two manifolds are the
+        // worker's scratch, cleared, never reallocated.
+        CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
+        ContactManifold &meshContacts = S.mesh, &triangleContacts = S.triangle;
+        ContactManifold& cm = meshContacts;
+        cm.points.clear();
         mesh_->bvh().queryAABB(bb, [&](uint32_t t) {
             Vector3 a, b, c;
             mesh_->triangle(t, a, b, c);
             TriangleShape tri(a, b, c);
             PosedShape pt{&tri, Matrix3x3(), Vector3(0.0f)};
-            ContactManifold local;
+            ContactManifold& local = triangleContacts;
+            local.points.clear();
             if (!narrow_.collide(ps, pt, local)) return;
             const Vector3& fn = mesh_->faceNormal(t);
             for (const ContactPoint& p : local.points)
@@ -105,34 +116,39 @@ void RigidWorld::collide() {
     manifolds_.clear();
     NarrowPhase::margin = params.contactMargin;
     // 1) Broad phase: candidate pairs from fattened AABBs.
-    std::vector<AABB> boxes(bodies_.size());
+    boxes_.resize(bodies_.size());
     for (size_t i = 0; i < bodies_.size(); ++i) {
         AABB bb = bodies_[i].worldBounds();
         bb.lo -= Vector3(params.contactMargin);
         bb.hi += Vector3(params.contactMargin);
-        boxes[i] = bb;
+        boxes_[i] = bb;
     }
     auto t0 = std::chrono::steady_clock::now();
-    broadphase_->update(boxes);
+    broadphase_->update(boxes_);
     broadphase_->findPairs(pairs_);
     auto t1 = std::chrono::steady_clock::now();
     timings_.broad = std::chrono::duration<float, std::milli>(t1 - t0).count();
     // 2) Narrow phase in parallel (static environment per body, then body pairs). Each task writes
     //    its own slot and the slots are concatenated in a fixed order -> deterministic results.
+    //    The slots are kept between steps (cleared, not freed): the same vectors every step.
     const int nb = int(bodies_.size()), np = int(pairs_.size());
-    std::vector<std::vector<Manifold>> slots(size_t(nb) + np);
+    if (collideScratch_.size() != size_t(ThreadPool::instance().threadCount()))
+        collideScratch_.resize(size_t(ThreadPool::instance().threadCount()));
+    if (slots_.size() < size_t(nb) + np) slots_.resize(size_t(nb) + np);
+    for (auto& v : slots_) v.clear();
     // Small grains: pair costs differ by orders of magnitude (sphere-sphere vs compound-compound),
     // and the pool hands out chunks dynamically, so many small chunks balance the load.
-    parallelFor(nb, [&](int i) { collideStatic(i, slots[i]); }, 4);
+    parallelFor(nb, [&](int i) { collideStatic(i, slots_[i]); }, 4);
     parallelFor(np, [&](int k) {
         auto [i, j] = pairs_[k];
         const RigidBody &A = bodies_[i], &B = bodies_[j];
         if (A.invMass == 0 && B.invMass == 0) return;
-        ContactManifold cm;
-        if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots[size_t(nb) + k], i, j, cm);
+        ContactManifold& cm = collideScratch_[size_t(ThreadPool::workerIndex())].pair; // the worker's scratch
+        cm.points.clear();
+        if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
     }, 2);
-    for (auto& v : slots)
-        for (auto& m : v) manifolds_.push_back(std::move(m));
+    for (size_t s = 0; s < size_t(nb) + np; ++s)
+        for (const Manifold& m : slots_[s]) manifolds_.push_back(m);
     timings_.narrow = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t1).count();
 }
 
@@ -149,7 +165,7 @@ uint64_t RigidWorld::positionHash(const Vector3& localA, float cell) {
     return (k(q.x) << 42) | (k(q.y) << 21) | k(q.z);
 }
 
-const RigidWorld::SolverPoint* RigidWorld::findCached(const std::vector<SolverPoint>& old, const SolverPoint& p, float cell) {
+const RigidWorld::SolverPoint* RigidWorld::findCached(const SolverPoints& old, const SolverPoint& p, float cell) {
     // Exact hash hit first (O(1) in practice), then the nearest point when the contact crossed a cell border.
     for (const SolverPoint& o : old)
         if (o.id == p.id && dot(o.normal, p.normal) > 0.95f) return &o;
@@ -175,16 +191,19 @@ void RigidWorld::buildColors() {
     // Graph colouring of the contact graph (bodies = vertices, manifolds = edges): manifolds of one
     // colour share no dynamic body and can be solved in parallel. Small scenes keep one sequential
     // batch in bottom-up order, which is the best Gauss-Seidel order for stacks.
-    colors_.clear();
+    // The batches are kept between steps and only cleared: no allocation once they have grown.
+    for (auto& batch : colors_) batch.clear();
     const int nm = int(manifolds_.size());
     if (nm < 256) {
-        colors_.emplace_back(nm);
+        colors_.resize(1);
+        colors_[0].resize(nm);
         for (int i = 0; i < nm; ++i) colors_[0][i] = i;
         parallelColors_ = false;
         return;
     }
     parallelColors_ = true;
-    std::vector<uint64_t> used(bodies_.size(), 0);
+    std::vector<uint64_t>& used = colorUsed_;
+    used.assign(bodies_.size(), 0);
     colors_.resize(64);
     for (int i = 0; i < nm; ++i) {
         const Manifold& m = manifolds_[i];
@@ -197,7 +216,8 @@ void RigidWorld::buildColors() {
         used[m.a] |= uint64_t(1) << c;
         if (m.b >= 0) used[m.b] |= uint64_t(1) << c;
     }
-    while (!colors_.empty() && colors_.back().empty() && colors_.size() > 1) colors_.pop_back();
+    // Empty trailing batches stay (an empty batch costs nothing to visit, freeing it would cost
+    // an allocation next step).
 }
 
 void RigidWorld::prepareManifold(Manifold& m, float dt) {
@@ -325,7 +345,7 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
     float matched = 0;
     int unmatched = 0;
     char hit[8] = {0}; // addManifold keeps <= 4 points
-    for (size_t k = 0; k < m.points.size() && k < 8; ++k) {
+    for (int k = 0; k < m.points.size() && k < 8; ++k) {
         SolverPoint& p = m.points[k];
         if (const SolverPoint* q = findCached(old->points, p, cell)) {
             p.jn = q->jn;
@@ -337,7 +357,7 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
     }
     if (unmatched > 0 && oldTotal > matched) {
         float share = (oldTotal - matched) / float(unmatched);
-        for (size_t k = 0; k < m.points.size() && k < 8; ++k)
+        for (int k = 0; k < m.points.size() && k < 8; ++k)
             if (!hit[k]) m.points[k].jn = share;
     }
     float newTotal = 0;

@@ -180,7 +180,8 @@ void SweepAndPruneBroadPhase::rebuild() {
 
 void SweepAndPruneBroadPhase::findPairs(std::vector<std::pair<int, int>>& pairs) const {
     // Sorted output: the solver order (and so the result) does not depend on hash-set order.
-    std::vector<uint64_t> keys(pairs_.begin(), pairs_.end());
+    std::vector<uint64_t>& keys = keys_; // kept between steps
+    keys.assign(pairs_.begin(), pairs_.end());
     std::sort(keys.begin(), keys.end());
     pairs.clear();
     pairs.reserve(keys.size());

@@ -70,3 +70,4 @@ void testCylinderStrouhal();
 void testNoetherRigid();        // RigidTests.cpp: energy, momentum, angular momentum of the rigid solver
 void testGridConvergence();     // GasTests.cpp: order of convergence of the gas solver on refined grids
 void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Martin & Moyce 1952
+void testTerrain();             // TerrainTests.cpp: 150 bodies on a 51 200-triangle static mesh (BVH)

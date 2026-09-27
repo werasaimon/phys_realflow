@@ -84,6 +84,7 @@ int main() {
     run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
+    run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);

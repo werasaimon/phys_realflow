@@ -1,5 +1,7 @@
 #include "rigid/GjkEpa.h"
 
+#include "core/Parallel.h"
+
 #include <vector>
 
 namespace rf {
@@ -202,9 +204,33 @@ GjkResult gjk(const PosedShape& A, const PosedShape& B, float maxDistance) {
 // ---------------------------------------------------------------------------
 // EPA
 // ---------------------------------------------------------------------------
+// A face of the EPA polytope.
+struct EpaFace {
+    int a, b, c;
+    Vector3 n;
+    float d;
+};
+
+// Scratch of EPA, one per thread of the pool, cleared before use and never freed: a deep
+// contact costs no allocation (indexed by the worker number, not thread_local objects - see
+// ThreadPool::workerIndex).
+namespace {
+struct EpaScratch {
+    std::vector<SV> V;                          // the polytope's vertices
+    std::vector<EpaFace> faces, kept;           // its faces, and those that survive an expansion
+    std::vector<std::pair<int, int>> horizon;   // the edges the new vertex is joined to
+};
+EpaScratch& epaScratch() {
+    static std::vector<EpaScratch> all(size_t(ThreadPool::instance().threadCount()));
+    return all[size_t(ThreadPool::workerIndex())];
+}
+} // namespace
+
 PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult& g) {
     PenetrationResult res;
-    std::vector<SV> V;
+    EpaScratch& S = epaScratch();
+    std::vector<SV>& V = S.V;
+    V.clear();
     for (int i = 0; i < g.simplexSize; ++i) V.push_back({g.w[i], g.a[i], g.b[i]});
     const float eps = 1e-6f;
 
@@ -238,12 +264,9 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
     }
     if (V.size() < 4) return res; // touching with zero volume: no meaningful penetration
 
-    struct Face {
-        int a, b, c;
-        Vector3 n;
-        float d;
-    };
-    std::vector<Face> faces;
+    using Face = EpaFace;
+    std::vector<Face>& faces = S.faces;
+    faces.clear();
     auto makeFace = [&](int a, int b, int c) {
         Face f{a, b, c, cross(V[b].w - V[a].w, V[c].w - V[a].w), 0};
         float l = length(f.n);
@@ -273,9 +296,10 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
         int wi = int(V.size());
         V.push_back(w);
         // Remove the faces seen from w and collect the horizon (edges used by exactly one of them).
-        std::vector<std::pair<int, int>> horizon;
-        std::vector<Face> kept;
-        kept.reserve(faces.size());
+        std::vector<std::pair<int, int>>& horizon = S.horizon;
+        std::vector<Face>& kept = S.kept;
+        horizon.clear();
+        kept.clear();
         for (const Face& fc : faces) {
             if (fc.d != kInf && dot(fc.n, w.w - V[fc.a].w) > 1e-7f) {
                 const int e[3][2] = {{fc.a, fc.b}, {fc.b, fc.c}, {fc.c, fc.a}};

@@ -84,14 +84,19 @@ void testAllocationsPerFrame() {
     // A census, not a pass/fail: heap allocations per frame of six scenes, counted by the replaced
     // operator new in main.cpp (the SDK never touches the allocator). Thousands per frame would
     // call for a per-step arena; tens mean the vectors already keep their capacity.
-    struct Case { const char* name; Preset preset; int warmup, measure; };
-    const Case cases[] = {{"rigid tower (100 boxes)", Preset::RigidTower, 30, 30},
-                          {"100 teapots", Preset::RigidTeapots, 30, 30},
-                          {"water: wave in a pool", Preset::Water, 30, 30},
-                          {"fire: burning curtain", Preset::Fire, 10, 10},
-                          {"magnetosphere", Preset::Magnetosphere, 10, 10},
-                          {"terrain: 150 bodies on a mesh", Preset::Terrain, 30, 30}};
-    std::printf("  %-32s %12s %12s %12s\n", "scene", "allocs mean", "allocs max", "step ms");
+    // The limits are twice what the scenes make after the rigid solver was given persistent
+    // scratch (manifold points inside the manifold, per-worker narrow-phase and EPA scratch, the
+    // contact cache pruned in place): the tower went from 29 943 allocations per frame to 61, the
+    // teapots from 140 075 to 85, the terrain from 50 152 to 102. What remains is the probe's own
+    // channel lookups (a std::string key per timer) and the particle / gas solvers.
+    struct Case { const char* name; Preset preset; int warmup, measure; double limit; };
+    const Case cases[] = {{"rigid tower (100 boxes)", Preset::RigidTower, 30, 30, 150},
+                          {"100 teapots", Preset::RigidTeapots, 30, 30, 200},
+                          {"water: wave in a pool", Preset::Water, 30, 30, 2500},
+                          {"fire: burning curtain", Preset::Fire, 10, 10, 1100},
+                          {"magnetosphere", Preset::Magnetosphere, 10, 10, 1300},
+                          {"terrain: 150 bodies on a mesh", Preset::Terrain, 30, 30, 250}};
+    std::printf("  %-32s %12s %12s %12s %12s\n", "scene", "allocs mean", "allocs max", "step ms", "limit");
     for (const Case& c : cases) {
         Simulation sim;
         loadSample(sim, c.preset);
@@ -106,6 +111,7 @@ void testAllocationsPerFrame() {
             worst = std::max(worst, a);
             ms += s.value("frame/step ms");
         }
-        std::printf("  %-32s %12.0f %12.0f %12.2f\n", c.name, sum / c.measure, worst, ms / c.measure);
+        std::printf("  %-32s %12.0f %12.0f %12.2f %12.0f\n", c.name, sum / c.measure, worst, ms / c.measure, c.limit);
+        CHECK(sum / c.measure < c.limit, "%s: %.0f allocations per frame, limit %.0f", c.name, sum / c.measure, c.limit);
     }
 }

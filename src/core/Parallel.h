@@ -14,6 +14,11 @@ public:
 
     static ThreadPool& instance();
     int threadCount() const { return int(workers_) + 1; }
+    // Which thread of the pool is calling: 0 for the thread that owns the simulation (and any
+    // thread outside the pool), 1 .. threadCount() - 1 for the workers. Solvers keep one scratch
+    // per worker and index it by this - a plain thread_local int, nothing with a destructor
+    // (MinGW's TLS cleanup double-frees thread_local objects with destructors at thread exit).
+    static int workerIndex();
     // Runs fn(ctx, c) for c in [0, chunks); the calling thread participates. Blocks until done.
     void run(int chunks, ChunkFn fn, void* ctx);
 

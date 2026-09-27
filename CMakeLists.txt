@@ -175,7 +175,8 @@ if(RF_BUILD_TESTS)
     tests/ParticleTests.cpp
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
-    tests/SceneTests.cpp)
+    tests/SceneTests.cpp
+    tests/TerrainTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()
