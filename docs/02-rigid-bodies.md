@@ -344,6 +344,30 @@ while (j > 0 && before(e, E[j - 1])) {
 
 ---
 
+### Дерево мира
+
+Широкая фаза находит пары тел, но «какие тела рядом с этой точкой» спрашивают и другие: частицы (жидкость, ткань, мягкие тела ищут тела, о которые могут удариться), луч мыши, отладчик. До этого каждая частица перебирала **все** тела: 30 000 частиц × 150 тел × 15 проходов за кадр. Теперь в `RigidWorld` живёт одно динамическое AABB-дерево со всеми телами — как `btDbvtBroadphase` в Bullet и запросы сцены в PhysX, — и все ходят к нему с одним вопросом: `queryBodies(box, out)` возвращает тела, чьи раздутые боксы пересекают запрос (в порядке индексов, чтобы циклы вызывающих оставались детерминированными), а точную проверку делает вызывающий. Схема двухуровневая: в дереве мира — объекты, внутри статичного меша — свой BVH треугольников (рельеф из 51 200 треугольников — один объект).
+
+Дерево обновляется в начале каждого прохода столкновений и перед каждым проходом частиц; лист трогает дерево только когда тело покидает свой раздутый бокс, так что покоящаяся стопка не стоит ничего. Частицы перед проходом задают радиус запроса: радиус частицы плюс наибольший сдвиг и поворот тела в этом подшаге (`bodyShift_`, `bodyTurn_`) — кандидаты заведомо покрывают всё, что примет точная проверка, и контакты те же, что при полном переборе (все тесты частиц печатают прежние числа). Один вектор кандидатов на рабочий поток: проходы не выделяют память; обход дерева — со стеком фиксированной глубины 128 (высота сбалансированного дерева $\approx 1.5\log_2 n$).
+
+[src/rigid/RigidWorld.cpp:125](../src/rigid/RigidWorld.cpp#L125)
+```cpp
+void RigidWorld::updateWorldTree() const {
+    // New bodies get a leaf; every body's leaf follows its box (the tree changes only when a body
+    // leaves the fat box of its leaf).
+    for (size_t i = treeProxies_.size(); i < bodies_.size(); ++i)
+        treeProxies_.push_back(worldTree_.insert(bodies_[i].worldBounds(), int(i)));
+    for (size_t i = 0; i < bodies_.size(); ++i) worldTree_.update(treeProxies_[i], bodies_[i].worldBounds());
+}
+
+void RigidWorld::queryBodies(const AABB& box, std::vector<int>& out) const {
+    worldTree_.query(box, out);
+    std::sort(out.begin(), out.end()); // index order: the callers' loops stay deterministic
+}
+```
+
+Измерено (тест `particles vs many bodies`): бассейн 2 × 1 × 1 м, 30 118 частиц, 150 тел по 5–8 см, 1 с — **220 → 69 мс/кадр**, 451 770 запросов к дереву за кадр, те же 1566 контактов частица–тело; выделений памяти за кадр не прибавилось (перепись `memory`: 61 / 85 / 102).
+
 ## 2.7 Контактный решатель: последовательные импульсы
 
 ### Уравнение одной точки
@@ -360,7 +384,7 @@ $$
 m_{eff}^{-1} = w_A + (\mathbf r_A\times\mathbf n)^{\mathsf T}\mathbf I_A^{-1}(\mathbf r_A\times\mathbf n) + w_B + (\mathbf r_B\times\mathbf n)^{\mathsf T}\mathbf I_B^{-1}(\mathbf r_B\times\mathbf n).
 $$
 
-[src/rigid/ContactSolver.cpp:184](../src/rigid/ContactSolver.cpp#L184)
+[src/rigid/ContactSolver.cpp:187](../src/rigid/ContactSolver.cpp#L187)
 ```cpp
 static float effMass(const RigidBody& A, const RigidBody* B, const Vector3& ra, const Vector3& rb, const Vector3& dir) {
     float k = A.invMass + dot(cross(A.applyInvInertiaWorld(cross(ra, dir)), ra), dir);
@@ -399,7 +423,7 @@ $$
 
 сохраняют $|\mathbf L| = |\mathbf I\boldsymbol\omega|$ и энергию $\tfrac12\boldsymbol\omega\cdot\mathbf I\boldsymbol\omega$, а вращение вокруг средней оси неустойчиво (эффект Джанибекова, инкремент $\sigma = \omega_2\sqrt{(I_2-I_1)(I_3-I_2)/(I_1 I_3)}$). Без этого члена интегратор хранит $\boldsymbol\omega$, а не $\mathbf L$, и переворотов нет — так и было до теста Нётер. Явная схема при быстром вращении расходится; неявный Эйлер (Catto 2015) устойчив, но гасит $|\mathbf L|$ (5.6 % за 10 с). Взята **неявная средняя точка**: $\mathbf I(\boldsymbol\omega_1-\boldsymbol\omega_0) + h\,\boldsymbol\omega_m\times\mathbf I\boldsymbol\omega_m = 0$, $\boldsymbol\omega_m = \tfrac12(\boldsymbol\omega_0+\boldsymbol\omega_1)$ — симплектична и сохраняет оба квадратичных инварианта; три шага Ньютона с якобианом $\mathbf I + \tfrac h2\big([\boldsymbol\omega_m]_\times\mathbf I - [\mathbf I\boldsymbol\omega_m]_\times\big)$ сходятся до невязки $10^{-4}$ даже при $h|\boldsymbol\omega| = 0.33$ (пластина 200 рад/с при 600 Гц). Тест `CCD for a fast-spinning plate` теперь судит удар по $|\mathbf L|$, а не по одной компоненте $\boldsymbol\omega$: тонкая пластина, задетая за край, кувыркается ($I$ вдоль длинной оси в 300 раз меньше), и гироскопика перекачивает $\boldsymbol\omega$ между осями при постоянном $|\mathbf L|$ (37.5 % → 37.4 % за 0.1 с — только демпфирование); без члена $\boldsymbol\omega$ в мировой системе застывала — нефизично.
 
-[src/rigid/RigidWorld.cpp:166](../src/rigid/RigidWorld.cpp#L166)
+[src/rigid/RigidWorld.cpp:184](../src/rigid/RigidWorld.cpp#L184)
 ```cpp
 Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
     const Matrix3x3 R = b.rotation();
@@ -420,14 +444,14 @@ Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
 
 Скорость подхода берётся **в момент касания**. Шаг интегрирует гравитацию в скорости до решения контактов, поэтому $v_n$ несёт лишние $g\,\Delta t$, и мяч с $e = 1$ набирал $2g\Delta t/|v_n| = 0.74\,\%$ энергии за отскок при 600 Гц (тест Нётер). Поправка: $v_n^{imp} = v_n - (\mathbf g_A - \mathbf g_B)\cdot\mathbf n\,\Delta t$, где гравитация вычитается только у динамических тел. Тем же тестом найдено, что реституция применялась лишь к контактам, зажатым CCD, — обычные удары были неупругими.
 
-[src/rigid/ContactSolver.cpp:246](../src/rigid/ContactSolver.cpp#L246)
+[src/rigid/ContactSolver.cpp:249](../src/rigid/ContactSolver.cpp#L249)
 ```cpp
         const float vnImpact = vn - dot(gRel, n) * dt;
 ```
 
 Как *применять* отскок — отдельный вопрос, и ответ дала стопка из 100 кубов. Если цель $-e\,v_n^{imp}$ стоит внутри итераций как неравенство на весь шаг (так делает Box2D v2), то в стопке нижний контакт всё время дожимает верхний куб до скорости отскока, пока на него садится следующий: каждый уровень отскакивает быстрее предыдущего, и стопка разлетается (кубы 100-этажной стопки, сброшенной с 1 см, достигали 40 м/с). Поэтому отскок — **отдельный проход после итераций** (как в Box2D v3): для манифолда, который нёс нагрузку ($j_n > 0$) и чья скорость подхода была ударной, нормальная задача решается ещё раз с целью $-e\,v_n^{imp}$ — в той же блочной форме, что и основное решение (точка за точкой первый угол получал бы весь импульс и закручивал пластину, ударенную плашмя: встречные пластины потом били друг друга на 30 м/с). Импульсы отскока **не остаются в $j_n$**: $j_n$ разогревает следующий шаг (warm start), а удар — событие одноразовое; повторное приложение его как постоянной нагрузки давало +15 % кинетической энергии стопки за подшаг (замерено по стадиям шага: до решения → после итераций → после реституции → после ударного прохода). Порядок в шаге: итерации → отскок → ударный проход: он односторонний с нулевыми аккумуляторами и разлёт отнять не может, зато снимает вдавливание нижнего куба стопки, которое отскок оставляет (с отскоком после него стопка из 200 кубов рушилась). Единственный двусторонний пересчёт внутри ударного прохода — пары одного уровня — для ударных пар пропускается: он видел разлёт и отбирал его (пуля 300 м/с вязла в ящике). Порог `restitutionThreshold` = 1 м/с, как в Box2D: медленнее — покой, не удар. Итог: стопка из 200 кубов после исправления стоит точнее, чем до него (смещение 7 мм вместо 6 см).
 
-[src/rigid/ContactSolver.cpp:472](../src/rigid/ContactSolver.cpp#L472)
+[src/rigid/ContactSolver.cpp:475](../src/rigid/ContactSolver.cpp#L475)
 ```cpp
 void RigidWorld::applyRestitution() {
     for (Manifold& m : manifolds_) {
@@ -458,7 +482,7 @@ $$
 
 где $\mathbf x$ — накопленные импульсы, $\mathbf w$ — итоговые скорости расхождения. Для $n \le 4$ точек можно **перебрать все активные множества** (подмножества точек, где $x_i > 0$): на активном множестве решить $\mathbf K_{aa}\mathbf x_a = -\mathbf b'_a$ (`solveSmall`), проверить $\mathbf x_a \ge 0$ и $\mathbf w \ge 0$ на остальных точках.
 
-[src/rigid/ContactSolver.cpp:419](../src/rigid/ContactSolver.cpp#L419)
+[src/rigid/ContactSolver.cpp:422](../src/rigid/ContactSolver.cpp#L422)
 ```cpp
 auto tryMask = [&](int mask) {
     int idx[4], k = 0;
@@ -500,7 +524,7 @@ $$
 \mu = \begin{cases} \mu_s, & |\mathbf v_t| < v_{stick}\\ \mu_k, & \text{иначе}\end{cases}
 $$
 
-[src/rigid/ContactSolver.cpp:558](../src/rigid/ContactSolver.cpp#L558)
+[src/rigid/ContactSolver.cpp:561](../src/rigid/ContactSolver.cpp#L561)
 ```cpp
 Vector3 vc = relVel(m.center);
 float slide = length(vc - m.normal * dot(vc, m.normal));

@@ -1,0 +1,35 @@
+# The same checks as .github/workflows/ci.yml, for GitLab CI (free shared runners are Linux only):
+# GCC and Clang with warnings as errors and strict floating point, plus a sanitizer build.
+stages: [test]
+
+.build: &build
+  stage: test
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq cmake ninja-build g++ clang > /dev/null
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+
+gcc:
+  <<: *build
+  script:
+    - CC=gcc CXX=g++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRF_WERROR=ON -DRF_STRICT_FP=ON
+    - cmake --build build --parallel
+    - RF_JUNIT=junit.xml build/rf_tests
+
+clang:
+  <<: *build
+  script:
+    - CC=clang CXX=clang++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRF_WERROR=ON -DRF_STRICT_FP=ON
+    - cmake --build build --parallel
+    - RF_JUNIT=junit.xml build/rf_tests
+
+sanitizers:
+  <<: *build
+  script:
+    - CC=clang CXX=clang++ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DRF_SANITIZE=ON -DRF_STRICT_FP=ON
+    - cmake --build build --parallel
+    - export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ASAN_OPTIONS=detect_leaks=0
+    - for t in "math" "primitives" "bvh" "mass" "gjk" "rigid bodies" "box stack" "tall stack" "joints" "continuous" "particles rest" "grid uniform" "smoke closed" "combustion" "MHD" "probe"; do RF_TEST="$t" build/rf_tests; done

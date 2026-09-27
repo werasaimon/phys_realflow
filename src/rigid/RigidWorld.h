@@ -111,6 +111,16 @@ public:
     void setStaticMesh(const MeshBVH* bvh) { mesh_ = bvh; }
     void setBroadPhase(std::unique_ptr<BroadPhase> bp) { broadphase_ = std::move(bp); }
     const BroadPhase& broadPhase() const { return *broadphase_; }
+    // The world tree: one dynamic AABB tree with every body in it (Bullet's btDbvtBroadphase, the
+    // scene queries of PhysX), which every solver asks the same question - "which bodies may touch
+    // this box / this ray?". The static mesh keeps its own triangle BVH (two levels: objects in
+    // the world tree, triangles inside the mesh). Refreshed at the start of every collision pass
+    // and by the queries themselves; a body that jiggles inside its fat box costs nothing.
+    void updateWorldTree() const;
+    // Candidates: the bodies whose fat boxes overlap `box`, in index order (cleared into `out`).
+    // The caller does the exact test.
+    void queryBodies(const AABB& box, std::vector<int>& out) const;
+    const AABBTree& worldTree() const { return worldTree_; }
     size_t pairCount() const { return pairs_.size(); }
     int bodyLevel(int i) const { return i < int(levels_.size()) ? levels_[i] : -1; }
 
@@ -342,6 +352,11 @@ private:
     std::vector<int> levels_; // contact-graph distance from the static environment
     std::unique_ptr<BroadPhase> broadphase_ = std::make_unique<SweepAndPruneBroadPhase>(0.1f);
     std::vector<std::pair<int, int>> pairs_;
+    // The world tree and the leaf of every body in it. Mutable: it is a cache of the bodies'
+    // boxes that const queries (raycast from the viewer) bring up to date.
+    mutable AABBTree worldTree_{0.1f};
+    mutable std::vector<int> treeProxies_;
+    mutable std::vector<int> rayCandidates_; // raycast: the leaves the ray passes through
     NarrowPhase narrow_;
     AABB domain_{{-1, 0, -1}, {1, 2, 1}};
     const MeshBVH* mesh_ = nullptr;

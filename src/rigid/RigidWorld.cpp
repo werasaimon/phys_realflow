@@ -102,6 +102,8 @@ void RigidWorld::applyExternalWrench(int i, const Vector3& J, const Vector3& L) 
 
 void RigidWorld::clear() {
     bodies_.clear();
+    worldTree_.clear();
+    treeProxies_.clear();
     joints_.clear();
     grab_ = GrabJoint();
     cache_.clear();
@@ -120,12 +122,28 @@ void RigidWorld::clear() {
     substepCounter_ = 0;
 }
 
+void RigidWorld::updateWorldTree() const {
+    // New bodies get a leaf; every body's leaf follows its box (the tree changes only when a body
+    // leaves the fat box of its leaf).
+    for (size_t i = treeProxies_.size(); i < bodies_.size(); ++i)
+        treeProxies_.push_back(worldTree_.insert(bodies_[i].worldBounds(), int(i)));
+    for (size_t i = 0; i < bodies_.size(); ++i) worldTree_.update(treeProxies_[i], bodies_[i].worldBounds());
+}
+
+void RigidWorld::queryBodies(const AABB& box, std::vector<int>& out) const {
+    worldTree_.query(box, out);
+    std::sort(out.begin(), out.end()); // index order: the callers' loops stay deterministic
+}
+
 bool RigidWorld::raycast(const Vector3& o, const Vector3& d, float maxT, int& body, float& t, Vector3& normal) const {
     body = -1;
     t = maxT;
     Vector3 inv(1.0f / (std::fabs(d.x) > 1e-12f ? d.x : 1e-12f), 1.0f / (std::fabs(d.y) > 1e-12f ? d.y : 1e-12f),
              1.0f / (std::fabs(d.z) > 1e-12f ? d.z : 1e-12f));
-    for (int i = 0; i < int(bodies_.size()); ++i) {
+    updateWorldTree();
+    worldTree_.raycast(o, d, maxT, rayCandidates_);
+    std::sort(rayCandidates_.begin(), rayCandidates_.end()); // the nearest wins; ties go to the lower index, as before
+    for (int i : rayCandidates_) {
         const RigidBody& b = bodies_[i];
         if (b.worldBounds().rayHit(o, inv, t) == kInf) continue;
         Matrix3x3 Rt = b.rotation().transposed();

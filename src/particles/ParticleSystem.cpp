@@ -235,6 +235,7 @@ void ParticleSystem::stepClothsInSmallSteps(float dt) {
     const int m = std::max(1, params.clothSubsteps);
     const float h = dt / float(m);
     const Vector3 g = params.gravity;
+    prepareBodyQuery(false); // the small steps meet the bodies where the substep started
     for (Cloth& c : cloths_) {
         const int first = c.firstParticle, count = c.width * c.height;
         // Start of the substep: positions x, velocities before this substep's gravity; the
@@ -308,6 +309,7 @@ void ParticleSystem::step(float dt) {
     bodyTurn_.assign(nb, Vector3(0.0f));
 
     const Vector3 g = params.gravity;
+    prepareBodyQuery(true);
     parallelFor(n, [&](int i) {
         if (invMass_[i] == 0) { // pinned
             v_[i] = Vector3(0.0f);
@@ -319,6 +321,7 @@ void ParticleSystem::step(float dt) {
         collide(i, p, x_[i], true, dt);
         p_[i] = p;
     });
+    Probe::add("rigid/tree queries", n);
     {
         int touching = 0; // particles that met a movable body in the prediction (for the probe)
         for (int b : contactBody_) touching += b >= 0;
@@ -346,12 +349,14 @@ void ParticleSystem::step(float dt) {
             computeLambda();
             computeDeltaP();
         }
+        prepareBodyQuery(true);
         parallelFor(n, [&](int i) {
             if (invMass_[i] == 0) return;
             Vector3 p = p_[i] + dp_[i];
             collide(i, p, x_[i], true, dt);
             p_[i] = p;
         });
+        Probe::add("rigid/tree queries", n);
         solveBodyContacts(dt);
         if (!solids) continue;
         Probe::Timer contactTimer("particles/contacts ms"); // the solid passes of this iteration
@@ -362,10 +367,12 @@ void ParticleSystem::step(float dt) {
             // re-satisfied after every contact pass so the two converge together.
             for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt);
             solveShapeMatching(softBodies_, p_, invMass_, params.solverIterations * std::max(1, params.solidIterations));
+            prepareBodyQuery(true);
             parallelFor(n, [&](int i) {
                 if (invMass_[i] == 0 || isFluid(i)) return;
                 collide(i, p_[i], x_[i], true, dt);
             });
+            Probe::add("rigid/tree queries", n - int(fluidCount_));
             solveBodyContacts(dt);
         }
     }

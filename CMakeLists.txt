@@ -63,6 +63,10 @@ add_library(rfcore STATIC
   src/gas/SurfaceLoads.h          src/gas/SurfaceLoads.cpp
   # plasma
   src/plasma/MagneticField.h      src/plasma/MagneticField.cpp
+  # relativity: Kerr / Schwarzschild spacetime, geodesics, the reference ray tracer
+  src/relativity/Metric.h         src/relativity/Metric.cpp
+  src/relativity/Geodesic.h       src/relativity/Geodesic.cpp
+  src/relativity/RayTracer.h      src/relativity/RayTracer.cpp
   # the scene facade: the solvers together; the scenes themselves are in samples/
   src/scene/Scene.h
   src/scene/Simulation.h          src/scene/Simulation.cpp
@@ -148,7 +152,8 @@ if(RF_BUILD_TESTS)
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
     tests/SceneTests.cpp
-    tests/TerrainTests.cpp)
+    tests/TerrainTests.cpp
+    tests/RelativityTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   add_test(NAME rf_tests COMMAND rf_tests)
 endif()

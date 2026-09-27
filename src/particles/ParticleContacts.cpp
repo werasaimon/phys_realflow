@@ -101,6 +101,22 @@ void ParticleSystem::solveBodyContacts(float dt) {
     }
 }
 
+void ParticleSystem::prepareBodyQuery(bool coupled) {
+    if (!rigid_) return;
+    rigid_->updateWorldTree();
+    const auto& bodies = rigid_->bodies();
+    // The query box must reach every body the exact test could accept: a particle within r of the
+    // surface, the body shifted by bodyShift_ and turned by bodyTurn_ (a point of the surface moves
+    // at most |turn| times the bounding radius).
+    float reach = params.particleRadius;
+    if (coupled && bodyShift_.size() == bodies.size())
+        for (size_t b = 0; b < bodies.size(); ++b)
+            reach = std::max(reach, params.particleRadius + length(bodyShift_[b]) + length(bodyTurn_[b]) * bodies[b].boundingRadius());
+    bodyReach_ = reach;
+    if (bodyCandidates_.size() != size_t(ThreadPool::instance().threadCount()))
+        bodyCandidates_.resize(size_t(ThreadPool::instance().threadCount()));
+}
+
 void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool record, float dt) {
     const float r = params.particleRadius;
     // Domain walls.
@@ -129,7 +145,11 @@ void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool recor
     if (rigid_) {
         auto& bodies = rigid_->bodies();
         const bool coupled = record && bodyShift_.size() == bodies.size();
-        for (int b = 0; b < int(bodies.size()); ++b) {
+        // The bodies whose boxes reach this particle, from the world tree (prepareBodyQuery set
+        // the reach and refreshed the tree before the pass); in index order, as the full loop was.
+        std::vector<int>& candidates = bodyCandidates_[size_t(ThreadPool::workerIndex())];
+        rigid_->queryBodies(AABB(p - Vector3(bodyReach_), p + Vector3(bodyReach_)), candidates);
+        for (int b : candidates) {
             const RigidBody& body = bodies[b];
             const Vector3 shift = coupled ? bodyShift_[b] : Vector3(0.0f), turn = coupled ? bodyTurn_[b] : Vector3(0.0f);
             const Vector3 centre = body.pos + shift;

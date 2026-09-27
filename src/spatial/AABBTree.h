@@ -46,6 +46,13 @@ public:
     template <class F> void query(const AABB& box, F&& fn) const;
     // fn(object) for every object whose (fat) box the ray o + t d, 0 <= t <= maxT, passes through.
     template <class F> void raycast(const Vector3& origin, const Vector3& dir, float maxT, F&& fn) const;
+    // The same, collecting the objects into `out` (cleared first) - for callers that ask thousands
+    // of times per step and keep their own vector: no allocation once it has grown.
+    void query(const AABB& box, std::vector<int>& out) const;
+    void raycast(const Vector3& origin, const Vector3& dir, float maxT, std::vector<int>& out) const;
+    // The traversal stack: the tree is kept balanced, so its height stays about 1.5 log2(n) and a
+    // fixed stack of this depth serves any number of objects (2^60) without allocating.
+    static constexpr int kMaxDepth = 128;
     // All pairs of objects (a < b) with overlapping fat boxes.
     void findPairs(std::vector<std::pair<int, int>>& pairs) const;
 
@@ -77,16 +84,17 @@ private:
 // ---------------------------------------------------------------------------
 template <class F> void AABBTree::query(const AABB& box, F&& fn) const {
     if (root_ < 0) return;
-    std::vector<int> stack{root_};
-    while (!stack.empty()) {
-        const Node& n = nodes_[stack.back()];
-        stack.pop_back();
+    int stack[kMaxDepth];
+    int top = 0;
+    stack[top++] = root_;
+    while (top > 0) {
+        const Node& n = nodes_[stack[--top]];
         if (!n.box.overlaps(box)) continue;
         if (n.isLeaf()) {
             fn(n.object);
-        } else {
-            stack.push_back(n.left);
-            stack.push_back(n.right);
+        } else if (top + 2 <= kMaxDepth) {
+            stack[top++] = n.left;
+            stack[top++] = n.right;
         }
     }
 }
@@ -94,18 +102,29 @@ template <class F> void AABBTree::query(const AABB& box, F&& fn) const {
 template <class F> void AABBTree::raycast(const Vector3& origin, const Vector3& dir, float maxT, F&& fn) const {
     if (root_ < 0) return;
     const Vector3 inv(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z); // +-inf for axis-parallel rays is fine
-    std::vector<int> stack{root_};
-    while (!stack.empty()) {
-        const Node& n = nodes_[stack.back()];
-        stack.pop_back();
+    int stack[kMaxDepth];
+    int top = 0;
+    stack[top++] = root_;
+    while (top > 0) {
+        const Node& n = nodes_[stack[--top]];
         if (n.box.rayHit(origin, inv, maxT) == kInf) continue;
         if (n.isLeaf()) {
             fn(n.object);
-        } else {
-            stack.push_back(n.left);
-            stack.push_back(n.right);
+        } else if (top + 2 <= kMaxDepth) {
+            stack[top++] = n.left;
+            stack[top++] = n.right;
         }
     }
+}
+
+inline void AABBTree::query(const AABB& box, std::vector<int>& out) const {
+    out.clear();
+    query(box, [&](int object) { out.push_back(object); });
+}
+
+inline void AABBTree::raycast(const Vector3& origin, const Vector3& dir, float maxT, std::vector<int>& out) const {
+    out.clear();
+    raycast(origin, dir, maxT, [&](int object) { out.push_back(object); });
 }
 
 } // namespace rf

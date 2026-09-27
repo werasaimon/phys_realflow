@@ -396,3 +396,49 @@ void testDamBreakMartinMoyce() {
     CHECK(slope > 0.75f * 1.7f && slope < 1.25f * 1.7f, "late front slope %f vs ~1.7", slope);
     CHECK(s.maxSpeed() < 0.9f * 0.5f * 4 * r / dt, "the velocity clamp limits the front: %f m/s", s.maxSpeed());
 }
+
+// Many bodies in a pool: every particle looks for the bodies it may touch. Before the world tree
+// it tested all 150 bodies for each of 30 000 particles in every pass; with the tree it asks for
+// the few whose boxes overlap its own. Same contacts, less work.
+namespace {
+struct ManyBodiesScene : Scene {
+    void configure(Simulation& sim) override { sim.particles.params.particleRadius = 0.0135f; } // ~30 000 particles
+    void build(Simulation& sim) override {
+        const AABB tank({-1.0f, 0.0f, -0.5f}, {1.0f, 1.0f, 0.5f});
+        sim.useLiquidTank(tank);
+        uint32_t seed = 3;
+        auto rnd = [&] { seed = seed * 1664525u + 1013904223u; return (seed >> 8) * (1.0f / 16777216.0f); };
+        for (int i = 0; i < 150; ++i) {
+            const Vector3 p(-0.9f + 1.8f * rnd(), 0.5f + 0.4f * rnd(), -0.4f + 0.8f * rnd());
+            const float s = 0.025f + 0.015f * rnd(); // half-size 2.5-4 cm: 5-8 cm bodies
+            if (i % 2 == 0) sim.rigid.addBox(p, Vector3(s), Quaternion::fromAxisAngle({rnd(), rnd(), rnd() + 0.1f}, 6.28f * rnd()), 400.0f, Vector3(1));
+            else sim.rigid.addSphere(p, s, 600.0f, Vector3(1));
+        }
+        sim.particles.addBlock(AABB(tank.lo, {tank.hi.x, 0.3f, tank.hi.z})); // the pool, 30 cm deep
+    }
+};
+} // namespace
+
+void testParticlesManyBodies() {
+    Simulation sim;
+    sim.load(std::make_unique<ManyBodiesScene>());
+    std::printf("  many bodies: %zu particles, %zu bodies\n", sim.particles.size(), sim.rigid.bodies().size());
+    double stepMs = 0;
+    int frames = 0, contacts = 0;
+    for (int f = 0; f < 60; ++f) { // 1 s: the bodies fall in and float or sink
+        sim.stepFrame();
+        const Probe::Snapshot s = Probe::snapshot();
+        stepMs += s.value("frame/step ms");
+        contacts = std::max(contacts, int(s.value("particles/body contacts")));
+        ++frames;
+    }
+    stepMs /= frames;
+    // Measured on the build machine: brute force over 150 bodies per particle 220 ms per frame;
+    // with the world tree 69 ms (451 770 queries per frame, 15 passes x 30 118 particles), the
+    // same 1566 contacts and the same numbers in every other particle test.
+    std::printf("  many bodies: %.1f ms per frame, up to %d particle-body contacts in a pass, tree queries %.0f per frame\n",
+                stepMs, contacts, Probe::snapshot().value("rigid/tree queries"));
+    CHECK(std::isfinite(stepMs) && stepMs > 0, "no timing");
+    CHECK(contacts > 100, "the bodies must touch the water (%d contacts)", contacts);
+    CHECK(stepMs < 140.0f, "a frame of 30 000 particles and 150 bodies costs %.1f ms (tree: 69, brute force: 220)", stepMs);
+}

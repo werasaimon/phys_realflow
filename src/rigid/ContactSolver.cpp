@@ -4,6 +4,7 @@
 #include "rigid/RigidWorld.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <algorithm>
 #include <bitset>
@@ -126,6 +127,8 @@ void RigidWorld::collide() {
     auto t0 = std::chrono::steady_clock::now();
     broadphase_->update(boxes_);
     broadphase_->findPairs(pairs_);
+    updateWorldTree(); // the bodies' leaves follow them: particles, rays and the viewer ask this tree
+    Probe::set("rigid/tree height", worldTree_.height());
     auto t1 = std::chrono::steady_clock::now();
     timings_.broad = std::chrono::duration<float, std::milli>(t1 - t0).count();
     // 2) Narrow phase in parallel (static environment per body, then body pairs). Each task writes

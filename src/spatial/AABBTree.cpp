@@ -171,10 +171,10 @@ void AABBTree::refitUpwards(int i) {
 // Balancing: if one child of A is more than one level taller, rotate it up (Box2D).
 //
 //          A                    C
-//        /   \                /   \
-//       B     C      ->      A     F     (G taller than F: the other way round)
-//            / \            / \
-//           F   G          B   G
+//        /   |                /   |
+//       B    C       ->      A    F     (G taller than F: the other way round)
+//           / |             / |
+//          F  G            B  G
 // ---------------------------------------------------------------------------
 int AABBTree::balance(int iA) {
     Node& A = nodes_[iA];

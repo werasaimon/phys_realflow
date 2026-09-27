@@ -71,3 +71,12 @@ void testNoetherRigid();        // RigidTests.cpp: energy, momentum, angular mom
 void testGridConvergence();     // GasTests.cpp: order of convergence of the gas solver on refined grids
 void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Martin & Moyce 1952
 void testTerrain();             // TerrainTests.cpp: 150 bodies on a 51 200-triangle static mesh (BVH)
+void testParticlesManyBodies(); // ParticleTests.cpp: 30 000 particles find 150 bodies through the world tree
+
+// relativity (RelativityTests.cpp): geodesics in Kerr, light bending, the shadow of a black hole
+void testGeodesicInvariants();
+void testLightDeflection();
+void testPhotonSphere();
+void testPerihelionPrecession();
+void testShadow();
+void testHorizonPenetration();

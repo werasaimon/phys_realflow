@@ -219,6 +219,14 @@ private:
 
     const MeshBVH* mesh_ = nullptr;
     RigidWorld* rigid_ = nullptr;
+    // Bodies near a particle come from the rigid world's tree, not from a loop over all bodies:
+    // before a collision pass the tree is refreshed and the query reach is set to the particle
+    // radius plus the farthest any body has been shifted or turned in this substep (so the
+    // candidates are a superset of what the exact test accepts - the contacts are the same as
+    // with the full loop). One candidate vector per worker thread: the passes allocate nothing.
+    void prepareBodyQuery(bool coupled);
+    float bodyReach_ = 0;
+    std::vector<std::vector<int>> bodyCandidates_;
     float avgDensityError_ = 0, maxSpeed_ = 0;
 };
 

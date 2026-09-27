@@ -85,6 +85,14 @@ int main() {
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
     run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
+    run("particles vs many bodies: the world tree", testParticlesManyBodies);
+    // relativity: geodesics in Kerr, light bending, the shadow of a black hole
+    run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);
+    run("light deflection by a mass: 4M/b + second order", testLightDeflection);
+    run("photon sphere at 3M and the ISCO at 6M", testPhotonSphere);
+    run("perihelion precession: 6 pi M / (a (1 - e^2))", testPerihelionPrecession);
+    run("shadow of a Schwarzschild hole: 3 sqrt(3) M (ray tracer)", testShadow);
+    run("horizon crossing: Eddington-Finkelstein vs Boyer-Lindquist", testHorizonPenetration);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);
