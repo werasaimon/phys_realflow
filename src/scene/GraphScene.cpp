@@ -15,35 +15,6 @@ namespace rf {
 
 namespace {
 
-// The entity's orientation: yaw about y, then pitch about x, then roll about z (degrees).
-Quaternion entityRotation(const Entity& e) {
-    const Vector3& d = e.rotationDeg;
-    return Quaternion::fromAxisAngle({0, 1, 0}, degToRad(d.y)) * Quaternion::fromAxisAngle({1, 0, 0}, degToRad(d.x)) *
-           Quaternion::fromAxisAngle({0, 0, 1}, degToRad(d.z));
-}
-
-// The shape as a closed mesh around the origin in the entity's own frame: size is the full size,
-// round shapes take the diameter from size.x and the height (along y) from size.y.
-TriMesh entityMesh(const Entity& e) {
-    const Vector3 s = e.size;
-    TriMesh m;
-    switch (e.shape) {
-    case ShapeKind::Box: m = primitives::box(s * 0.5f); break;
-    case ShapeKind::Plane: m = primitives::box(Vector3(0.5f * s.x, 0.01f, 0.5f * s.z)); break;
-    case ShapeKind::Sphere: m = primitives::sphere(0.5f * s.x, 24, 12); break;
-    case ShapeKind::Cylinder: // the primitive's axis is z: turn it to y
-        m = primitives::cylinder(0.5f * s.x, s.y, 24);
-        m.transform(Quaternion::fromAxisAngle({1, 0, 0}, -0.5f * kPi).toMatrix3x3(), Vector3(1.0f), Vector3(0.0f));
-        break;
-    case ShapeKind::Cone: // the primitive's apex points to -x: turn it up (+y)
-        m = primitives::cone(0.5f * s.x, s.y, 24);
-        m.transform(Quaternion::fromAxisAngle({0, 0, 1}, -0.5f * kPi).toMatrix3x3(), Vector3(1.0f), Vector3(0.0f));
-        break;
-    }
-    m.translate(-m.bounds().center()); // centred on the entity's position
-    return m;
-}
-
 bool hasLiquid(const SceneGraph& g) {
     for (const Entity& e : g.entities)
         if (e.visible && e.liquid.enabled) return true;
@@ -140,41 +111,54 @@ void GraphScene::build(Simulation& sim) {
     if (sim.grid.magnetic.enabled) addMagnetFieldToGas(sim);
 }
 
-// One entity into the solvers: first what it is made of, then what it also does.
+// Whether the entity's shape can be built: a model file must be readable, and a model cannot be
+// made cloth yet. A shape that cannot be built is left out with a note in the readings.
+bool GraphScene::shapeUsable(const Entity& e) {
+    if (e.shape != ShapeKind::Mesh) return true;
+    std::string error;
+    if (entityLocalMesh(e, graph_.baseDirectory, &error).empty()) {
+        notes_.push_back(e.name + ": модель не прочитана — " + error);
+        return false;
+    }
+    if (madeOf(e) == Matter::Cloth) {
+        notes_.push_back(e.name + ": ткань из модели пока не поддерживается - только из плоскости или верхней грани формы");
+        return false;
+    }
+    return true;
+}
+
+// One entity into the solvers: first what it is made of, then what it also does. An entity with no
+// role at all is geometry only: it has no body and does not collide - the editor just draws it.
+// Each role has its own add* function that builds its part fresh from the entity's source (the
+// shape or model, EntityShapes.cpp) and returns what it created, so one role can later be rebuilt
+// alone without reloading the scene.
 void GraphScene::addEntity(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
-    const Quaternion q = entityRotation(e);
+    if (entityIsGeometryOnly(e) || !shapeUsable(e)) return;
     const Matter matter = madeOf(e);
     const std::string leftOut = leftOutMatter(e, matter);
     if (!leftOut.empty()) notes_.push_back(e.name + ": сделано из одного — не использовано: " + leftOut);
     int body = -1;
     switch (matter) {
-    case Matter::Rigid: body = addRigidBody(sim, e, e.rigid.fixed || e.shape == ShapeKind::Plane); break;
-    case Matter::Soft: {
-        TriMesh m = entityMesh(e);
-        m.transform(q.toMatrix3x3(), Vector3(1.0f), e.position);
-        sim.particles.addSoftBody(m, e.soft.density, e.soft.stiffness, e.color);
-        break;
-    }
-    case Matter::Liquid: sim.particles.addBlock(AABB(e.position - e.size * 0.5f, e.position + e.size * 0.5f)); break;
-    case Matter::Cloth: addCloth(sim, e); break;
+    case Matter::Rigid: body = addRigid(sim, index); break;
+    case Matter::Soft: addSoft(sim, index); break;
+    case Matter::Liquid: addLiquid(sim, index); break;
+    case Matter::Cloth: addCloth(sim, index); break;
     case Matter::None:
-        if (e.magnet.enabled) body = addRigidBody(sim, e, true); // a magnet with nothing else stays put
+        if (e.magnet.enabled) body = addRigid(sim, index); // a magnet with nothing else stays put
         break;
     }
-    if (e.magnet.enabled && body < 0) notes_.push_back(e.name + ": магнит бывает только твёрдым телом");
     if (e.flammable.enabled && matter != Matter::Cloth) notes_.push_back(e.name + ": горит только ткань (пока)");
+    if (e.magnet.enabled) addMagnet(sim, index, body);
     if (e.emitter.enabled) addEmitter(sim, index, body);
-    if (e.magnet.enabled && body >= 0) {
-        // The moment is given in the entity's frame; the body's own frame may differ (a hull body
-        // lives in its principal frame), so turn it into the body frame once here.
-        const Vector3 world = q.toMatrix3x3() * e.magnet.moment;
-        magnetBody_.push_back(body);
-        magnetMoment_.push_back(sim.rigid.bodies()[body].rotation().transposed() * world);
-    }
 }
 
-int GraphScene::addRigidBody(Simulation& sim, const Entity& e, bool fixed) {
+// Rigid: the shape as one body - a box or a sphere exactly, a model as its convex decomposition
+// (shared by every body of that model and size), any other shape as its convex hull. A fixed body,
+// a plane, and a magnet with no "made of" role do not move (density 0). Returns the body index.
+int GraphScene::addRigid(Simulation& sim, int index) {
+    const Entity& e = graph_.entities[size_t(index)];
+    const bool fixed = !e.rigid.enabled || e.rigid.fixed || e.shape == ShapeKind::Plane;
     const Quaternion q = entityRotation(e);
     const float density = fixed ? 0.0f : e.rigid.density; // density 0: a static body
     int id;
@@ -182,7 +166,8 @@ int GraphScene::addRigidBody(Simulation& sim, const Entity& e, bool fixed) {
     case ShapeKind::Box: id = sim.rigid.addBox(e.position, e.size * 0.5f, q, density, e.color); break;
     case ShapeKind::Plane: id = sim.rigid.addBox(e.position, Vector3(0.5f * e.size.x, 0.01f, 0.5f * e.size.z), q, 0.0f, e.color); break;
     case ShapeKind::Sphere: id = sim.rigid.addSphere(e.position, 0.5f * e.size.x, density, e.color); break;
-    default: id = sim.rigid.addConvex(entityMesh(e), e.position, q, density, e.color); break;
+    case ShapeKind::Mesh: id = sim.rigid.addCompound(entityCompound(e, graph_.baseDirectory), e.position, q, density, e.color); break;
+    default: id = sim.rigid.addConvex(entityLocalMesh(e), e.position, q, density, e.color); break;
     }
     RigidBody& b = sim.rigid.bodies()[id];
     if (e.rigid.enabled) {
@@ -197,13 +182,46 @@ int GraphScene::addRigidBody(Simulation& sim, const Entity& e, bool fixed) {
     return id;
 }
 
+// Soft: the shape's surface mesh in the world, filled with particles held by shape matching.
+// Returns the soft body's index in the particle system.
+int GraphScene::addSoft(Simulation& sim, int index) {
+    const Entity& e = graph_.entities[size_t(index)];
+    return sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
+}
+
+// Liquid: the shape's box (turned and moved as the entity) filled with water particles. Returns
+// how many particles it added.
+int GraphScene::addLiquid(Simulation& sim, int index) {
+    const Entity& e = graph_.entities[size_t(index)];
+    const size_t before = sim.particles.fluidCount();
+    sim.particles.addBlock(entityMesh(e, graph_.baseDirectory).bounds());
+    return int(sim.particles.fluidCount() - before);
+}
+
+// Magnet: a dipole riding on the entity's body (-1: none - a magnet has to be a rigid body). The
+// moment is given in the entity's frame; the body's own frame may differ (a hull body lives in its
+// principal frame), so it is turned into the body frame once here. Returns the magnet's slot.
+int GraphScene::addMagnet(Simulation& sim, int index, int body) {
+    const Entity& e = graph_.entities[size_t(index)];
+    if (body < 0) {
+        notes_.push_back(e.name + ": магнит бывает только твёрдым телом");
+        return -1;
+    }
+    const Vector3 world = entityRotation(e).toMatrix3x3() * e.magnet.moment;
+    magnetBody_.push_back(body);
+    magnetMoment_.push_back(sim.rigid.bodies()[body].rotation().transposed() * world);
+    return int(magnetBody_.size()) - 1;
+}
+
 // A sheet of cloth in place of the shape. A Plane becomes the sheet itself (size.x by size.z in its
 // plane); any other shape gives its top face. In the entity's frame the sheet starts at the corner
 // (-x, -z) and runs along +x (the cloth's rows) and +z (its columns), so the role's edges map onto
 // ParticleSystem::addCloth's pin bits: -z edge = first row (16), +z edge = last row (32),
 // -x edge = first column (64), +x edge = last column (128). "The top row" (role bit 16) is the edge
 // that is highest in the world after the turn - the rod of a curtain; for a level sheet, the -z edge.
-void GraphScene::addCloth(Simulation& sim, const Entity& e) const {
+// Returns the cloth's index in the particle system.
+int GraphScene::addCloth(Simulation& sim, int index) {
+    const Entity& e = graph_.entities[size_t(index)];
     const Matrix3x3 R = entityRotation(e).toMatrix3x3();
     const float lift = e.shape == ShapeKind::Plane ? 0.0f : 0.5f * e.size.y;
     const Vector3 corner = e.position + R * Vector3(-0.5f * e.size.x, lift, -0.5f * e.size.z);
@@ -227,16 +245,19 @@ void GraphScene::addCloth(Simulation& sim, const Entity& e) const {
     m.bendCompliance = e.cloth.bendCompliance;
     if (!e.cloth.tearable) m.strengthWarp = m.strengthWeft = 0.0f; // 0: the threads never break
     m.flammable = e.flammable.enabled;
-    sim.particles.addCloth(corner, u, v, m, pinMask, e.color);
+    return sim.particles.addCloth(corner, u, v, m, pinMask, e.color);
 }
 
-void GraphScene::addEmitter(Simulation& sim, int index, int body) {
+// Emitter: remembered with the body it rides on; releaseFromEmitter() runs it every frame.
+// Returns the slot of the emitter.
+int GraphScene::addEmitter(Simulation& sim, int index, int body) {
     EmitterRef ref;
     ref.entity = index;
     ref.body = body;
     if (body >= 0) // entity frame = body frame * (body frame at the start)^T * entity frame at the start
         ref.bodyToEntity = sim.rigid.bodies()[body].rotation().transposed() * entityRotation(graph_.entities[size_t(index)]).toMatrix3x3();
     emitters_.push_back(ref);
+    return int(emitters_.size()) - 1;
 }
 
 // What an emitter releases in one frame, at its entity's pose of now. The release point is just

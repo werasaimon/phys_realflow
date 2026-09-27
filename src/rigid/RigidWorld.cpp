@@ -44,8 +44,73 @@ int RigidWorld::addBody(std::shared_ptr<const ConvexShape> shape, const Vector3&
         b.invInertiaLocal = Vector3(0.0f);
     }
     b.updateInertia();
-    bodies_.push_back(std::move(b));
-    return int(bodies_.size()) - 1;
+    return placeBody(std::move(b));
+}
+
+// A new body goes into the slot a destroyed one left (the last freed first), else at the end.
+int RigidWorld::placeBody(RigidBody&& b) {
+    if (freeBodies_.empty()) {
+        bodies_.push_back(std::move(b));
+        return int(bodies_.size()) - 1;
+    }
+    const int slot = freeBodies_.back();
+    freeBodies_.pop_back();
+    bodies_[size_t(slot)] = std::move(b);
+    return slot; // its world-tree leaf is inserted again by the next updateWorldTree()
+}
+
+// Removes one body and leaves its slot as an inert tombstone: no mass, no velocity, parked far
+// outside the world at a spot of its own (two tombstones never touch each other), out of the
+// world tree. Everything that named the body - cached contacts, manifolds, joints, the mouse
+// joint, sleeping records - is dropped, so the next step does not see it at all.
+void RigidWorld::destroyBody(int i) {
+    if (!isAlive(i)) return;
+    forgetBody(i);
+    RigidBody& b = bodies_[size_t(i)];
+    b.alive = false;
+    b.mass = b.invMass = 0;
+    b.invInertiaLocal = Vector3(0.0f);
+    b.vel = b.angVel = b.force = b.torque = b.biasVel = b.biasAngVel = Vector3(0.0f);
+    b.sleeping = false;
+    b.sleepTimer = 0;
+    b.sleepIsland = -1;
+    b.pos = b.prevPos = Vector3(1e6f + 1000.0f * float(i), 1e6f, 1e6f);
+    b.rot = b.prevRot = Quaternion();
+    b.updateInertia();
+    if (size_t(i) < treeProxies_.size() && treeProxies_[size_t(i)] >= 0) {
+        worldTree_.remove(treeProxies_[size_t(i)]);
+        treeProxies_[size_t(i)] = -1;
+    }
+    freeBodies_.push_back(i);
+}
+
+void RigidWorld::forgetBody(int i) {
+    // The bodies it touched may rest on it: they are woken so they notice it is gone (a sleeping
+    // stack keeps the cached contacts of its pairs, so the cache names every neighbour).
+    std::vector<int> neighbours;
+    for (auto it = cache_.begin(); it != cache_.end();) {
+        const int a = int(it->first >> 32), b = int(it->first & 0xffffffffu) - 64; // key(a, b)
+        if (a == i || b == i) {
+            const int other = a == i ? b : a;
+            if (other >= 0) neighbours.push_back(other);
+            it = cache_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    auto names = [i](const Manifold& m) { return m.a == i || m.b == i; };
+    manifolds_.erase(std::remove_if(manifolds_.begin(), manifolds_.end(), names), manifolds_.end());
+    auto jointNames = [i](const std::unique_ptr<Joint>& j) { return j->a == i || j->b == i; };
+    joints_.erase(std::remove_if(joints_.begin(), joints_.end(), jointNames), joints_.end());
+    auto frozenNames = [i](const Frozen& f) { return f.body == i; };
+    frozen_.erase(std::remove_if(frozen_.begin(), frozen_.end(), frozenNames), frozen_.end());
+    held_.erase(std::remove_if(held_.begin(), held_.end(), frozenNames), held_.end());
+    auto xNames = [i](const XContact& c) { return c.a == i || c.b == i; };
+    xcontacts_.erase(std::remove_if(xcontacts_.begin(), xcontacts_.end(), xNames), xcontacts_.end());
+    if (grab_.body == i) grab_ = GrabJoint();
+    if (size_t(i) < ccdClamped_.size()) ccdClamped_[size_t(i)] = 0;
+    for (int n : neighbours)
+        if (n < int(bodies_.size()) && bodies_[size_t(n)].sleeping) wake(n);
 }
 
 int RigidWorld::addSphere(const Vector3& pos, float r, float density, const Vector3& color) {
@@ -102,6 +167,7 @@ void RigidWorld::applyExternalWrench(int i, const Vector3& J, const Vector3& L) 
 
 void RigidWorld::clear() {
     bodies_.clear();
+    freeBodies_.clear();
     worldTree_.clear();
     treeProxies_.clear();
     joints_.clear();
@@ -124,10 +190,14 @@ void RigidWorld::clear() {
 
 void RigidWorld::updateWorldTree() const {
     // New bodies get a leaf; every body's leaf follows its box (the tree changes only when a body
-    // leaves the fat box of its leaf).
-    for (size_t i = treeProxies_.size(); i < bodies_.size(); ++i)
-        treeProxies_.push_back(worldTree_.insert(bodies_[i].worldBounds(), int(i)));
-    for (size_t i = 0; i < bodies_.size(); ++i) worldTree_.update(treeProxies_[i], bodies_[i].worldBounds());
+    // leaves the fat box of its leaf). A destroyed body has no leaf (-1); a body placed into its
+    // slot gets one again.
+    treeProxies_.resize(bodies_.size(), -1);
+    for (size_t i = 0; i < bodies_.size(); ++i) {
+        if (!bodies_[i].alive) continue;
+        if (treeProxies_[i] < 0) treeProxies_[i] = worldTree_.insert(bodies_[i].worldBounds(), int(i));
+        else worldTree_.update(treeProxies_[i], bodies_[i].worldBounds());
+    }
 }
 
 void RigidWorld::queryBodies(const AABB& box, std::vector<int>& out) const {

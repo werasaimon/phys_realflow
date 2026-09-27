@@ -5,8 +5,10 @@
 
 #include "scene/Magnets.h"
 #include "scene/SceneGraph.h"
+#include "scene/Simulation.h"
 
 #include <cmath>
+#include <cstdio>
 
 using namespace rf;
 
@@ -327,4 +329,116 @@ void testGraphFlammableCloth() {
                 hottest, leastUnburnt, when);
     CHECK(sim.grid.combustion.enabled, "a flammable entity must switch the combustion on");
     CHECK(when >= 0, "the curtain did not catch fire in 5 s (hottest %f K)", hottest);
+}
+
+// A cube as an OBJ file (1 m, 8 vertices, 12 triangles), written next to the test program.
+static const char* writeCubeObj() {
+    static const char* path = "rf_test_cube.obj";
+    std::FILE* f = std::fopen(path, "w");
+    if (!f) return nullptr;
+    std::fputs("# unit cube\n"
+               "v -0.5 -0.5 -0.5\nv 0.5 -0.5 -0.5\nv 0.5 0.5 -0.5\nv -0.5 0.5 -0.5\n"
+               "v -0.5 -0.5 0.5\nv 0.5 -0.5 0.5\nv 0.5 0.5 0.5\nv -0.5 0.5 0.5\n"
+               "f 1 3 2\nf 1 4 3\nf 5 6 7\nf 5 7 8\nf 1 2 6\nf 1 6 5\n"
+               "f 4 8 7\nf 4 7 3\nf 1 5 8\nf 1 8 4\nf 2 3 7\nf 2 7 6\n", f);
+    std::fclose(f);
+    return path;
+}
+
+// A floor plane and one model entity with the given role, as the editor would make them.
+static SceneGraph meshGraph(const std::string& file, int role) {
+    SceneGraph g;
+    g.baseDirectory = ".";
+    g.world.size = {3, 2, 3};
+    Entity floor;
+    floor.name = "Floor";
+    floor.shape = ShapeKind::Plane;
+    floor.size = {3, 0.02f, 3};
+    floor.rigid.enabled = floor.rigid.fixed = true;
+    g.entities.push_back(floor);
+    Entity model;
+    model.name = "Model";
+    model.shape = ShapeKind::Mesh;
+    model.meshFile = file;
+    model.size = {0.3f, 0.3f, 0.3f};
+    model.position = {0, 1, 0};
+    if (role == 0) model.rigid.enabled = true;
+    if (role == 1) model.soft.enabled = true;
+    if (role == 2) model.cloth.enabled = true;
+    g.entities.push_back(model);
+    return g;
+}
+
+// True if the scene's readings mention `text`.
+static bool readingsMention(const Simulation& sim, const std::string& text) {
+    RenderSnapshot snap;
+    sim.fillSnapshot(snap);
+    for (const auto& line : snap.info)
+        if (line.second.find(text) != std::string::npos) return true;
+    return false;
+}
+
+// A model from a file as each "made of" role: rigid falls on the floor and rests at its half size
+// above it; soft becomes a soft body; cloth is not made from a model and is left out with a note;
+// an unreadable file makes nothing. And the model's file name survives save -> load -> save.
+void testGraphMeshShape() {
+    const char* file = writeCubeObj();
+    CHECK(file != nullptr, "cannot write the test OBJ file");
+    Simulation rigid;
+    rigid.load(std::make_unique<GraphScene>(meshGraph(file, 0)));
+    for (int f = 0; f < 120; ++f) rigid.stepFrame();
+    const RigidBody& cube = rigid.rigid.bodies().back();
+    const float expected = 0.01f + 0.15f; // the plane's top face + half the 0.3 m cube
+    std::printf("  model as rigid: %zu bodies, cube centre at y %.4f m (expected %.4f), speed %.4f m/s\n",
+                rigid.rigid.bodies().size(), cube.pos.y, expected, length(cube.vel));
+    CHECK(rigid.rigid.bodies().size() == 2, "rigid bodies: %zu (expected the floor and the model)", rigid.rigid.bodies().size());
+    CHECK(std::isfinite(cube.pos.y) && std::fabs(cube.pos.y - expected) < 0.01f, "the model rests at y %f, expected %f", cube.pos.y, expected);
+    Simulation soft;
+    soft.load(std::make_unique<GraphScene>(meshGraph(file, 1)));
+    CHECK(soft.particles.softBodies().size() == 1, "the model as soft: %zu soft bodies", soft.particles.softBodies().size());
+    Simulation cloth;
+    cloth.load(std::make_unique<GraphScene>(meshGraph(file, 2)));
+    CHECK(cloth.particles.cloths().empty(), "a model must not become cloth");
+    CHECK(readingsMention(cloth, "ткань из модели"), "no note about the model that cannot be cloth");
+    Simulation missing;
+    missing.load(std::make_unique<GraphScene>(meshGraph("no_such_model.obj", 0)));
+    CHECK(missing.rigid.bodies().size() == 1 && readingsMention(missing, "модель не прочитана"), "an unreadable model must make nothing, with a note");
+    const std::string text = meshGraph(file, 0).save();
+    SceneGraph back;
+    std::string error;
+    CHECK(back.load(text, error) && back.save() == text && back.entities[1].meshFile == file, "the model entity does not round-trip: %s", error.c_str());
+    std::remove(file);
+}
+
+// A shape with no role is geometry only: it is drawn (entityMesh gives its world mesh) but has no
+// body, so a ball dropped onto it falls through to the floor.
+void testGraphGeometryOnly() {
+    SceneGraph g;
+    g.world.size = {2, 2, 2};
+    Entity block;
+    block.name = "Block";
+    block.shape = ShapeKind::Box;
+    block.size = {0.4f, 0.4f, 0.4f};
+    block.position = {0, 0.5f, 0};
+    g.entities.push_back(block);
+    Entity ball;
+    ball.name = "Ball";
+    ball.shape = ShapeKind::Sphere;
+    ball.size = {0.1f, 0.1f, 0.1f};
+    ball.position = {0, 1.5f, 0};
+    ball.rigid.enabled = true;
+    g.entities.push_back(ball);
+    Simulation sim;
+    sim.load(std::make_unique<GraphScene>(g));
+    for (int f = 0; f < 120; ++f) sim.stepFrame();
+    const TriMesh mesh = entityMesh(block);
+    const AABB box = mesh.bounds();
+    std::printf("  geometry only: %zu bodies, ball at y %.3f m (floor 0.05, block top 0.7), block mesh %zu triangles, "
+                "box (%.2f %.2f %.2f)..(%.2f %.2f %.2f)\n", sim.rigid.bodies().size(), sim.rigid.bodies()[0].pos.y, mesh.triangles.size(),
+                box.lo.x, box.lo.y, box.lo.z, box.hi.x, box.hi.y, box.hi.z);
+    CHECK(entityIsGeometryOnly(block) && !entityIsGeometryOnly(ball), "the geometry-only rule");
+    CHECK(sim.rigid.bodies().size() == 1, "bodies: %zu (the roleless block must not have one)", sim.rigid.bodies().size());
+    CHECK(sim.rigid.bodies()[0].pos.y < 0.1f, "the ball stopped at y %f: it must fall through the block", sim.rigid.bodies()[0].pos.y);
+    CHECK(mesh.triangles.size() == 12, "the block mesh has %zu triangles", mesh.triangles.size());
+    CHECK(length(box.lo - Vector3(-0.2f, 0.3f, -0.2f)) < 1e-5f && length(box.hi - Vector3(0.2f, 0.7f, 0.2f)) < 1e-5f, "the block mesh is not in place");
 }

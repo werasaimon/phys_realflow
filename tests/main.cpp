@@ -88,6 +88,8 @@ int main() {
     run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
     run("Voronoi fracture: cells fill the body, convex and watertight", testVoronoiFracture);
     run("particles vs many bodies: the world tree", testParticlesManyBodies);
+    run("rigid: destroy one body, reuse its slot", testDestroyBody);
+    run("particles: remove one group (soft body, liquid)", testRemoveParticleGroup);
     // relativity: geodesics in Kerr, light bending, the shadow of a black hole
     run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);
     run("light deflection by a mass: 4M/b + second order", testLightDeflection);
@@ -102,6 +104,8 @@ int main() {
     run("scene graph: a plane made cloth hangs from its pinned edge", testGraphCloth);
     run("scene graph: a smoke emitter on a thrown box leaves a trail", testGraphEmitterFollows);
     run("scene graph: a flammable curtain over a hot emitter catches fire", testGraphFlammableCloth);
+    run("scene graph: a model from a file as rigid, soft and (not) cloth", testGraphMeshShape);
+    run("scene graph: a shape with no role is geometry only", testGraphGeometryOnly);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);

@@ -147,6 +147,14 @@ public:
     // Velocity change from outside the solver (particle coupling): also wakes the body up.
     void applyVelocityChange(int body, const Vector3& dv, const Vector3& dw);
     void wake(int body);
+    // Removing one body (the editor's meta-objects: a role changed on one object). The slot stays
+    // as an inert tombstone - no mass, parked far outside the world, out of the world tree, no
+    // contacts, no joints - so the indices of all other bodies stay valid, and the next add*
+    // reuses it (a pool with a free list, as Box2D's). Code that loops over bodies() without
+    // asking isAlive() sees a static body nobody touches.
+    void destroyBody(int body);
+    bool isAlive(int body) const { return body >= 0 && body < int(bodies_.size()) && bodies_[size_t(body)].alive; }
+    int bodyCount() const { return int(bodies_.size() - freeBodies_.size()); } // alive bodies
     size_t sleepingCount() const;
     size_t ccdHits() const { return ccdHits_; } // bodies clamped by CCD in the last step
 
@@ -394,6 +402,9 @@ private:
     mutable AABBTree worldTree_{0.1f};
     mutable std::vector<int> treeProxies_;
     mutable std::vector<int> rayCandidates_; // raycast: the leaves the ray passes through
+    std::vector<int> freeBodies_;            // destroyed slots, reused by the next add (last freed first)
+    int placeBody(RigidBody&& b);            // into a free slot or at the end; returns the index
+    void forgetBody(int body);               // drops every record that names the body (contacts, joints, ...)
     NarrowPhase narrow_;
     AABB domain_{{-1, 0, -1}, {1, 2, 1}};
     const MeshBVH* mesh_ = nullptr;

@@ -10,6 +10,10 @@
 //     magnet moment 1 0 0
 //     emitter smoke 1 temperature 0 liquid 0 velocity 0 0.5 0
 //   end
+//   entity "Horse"
+//     shape mesh file "models/horse.obj" size 0.5 0.5 0.5 position 1 0.3 0 rotation 0 90 0 color 0.6 0.4 0.3
+//     rigid density 600 friction 0.5 restitution 0.2 fixed 0 velocity 0 0 0 spin 0 0 0
+//   end
 //   entity "Curtain"
 //     object id 4 visible 1 locked 0
 //     shape plane size 1 0.02 1.2 position 0 1.2 0 rotation 90 0 0 color 0.9 0.85 0.7
@@ -29,7 +33,8 @@ namespace rf {
 
 namespace {
 
-const char* kShapeNames[] = {"box", "sphere", "cylinder", "cone", "plane"};
+const char* kShapeNames[] = {"box", "sphere", "cylinder", "cone", "plane", "mesh"};
+const int kShapeCount = 6;
 
 // The shortest decimal that reads back as the same float: 0.02 stays "0.02" (not the exact
 // "0.0199999996"), yet save -> load -> save is still exact. Nine digits always suffice for a float.
@@ -95,6 +100,12 @@ public:
         out = int(u);
         return true;
     }
+    // A word as it is (a quoted file path arrives without its quotes).
+    bool text(std::string& out) {
+        if (i_ >= w_.size()) return false;
+        out = w_[i_++];
+        return true;
+    }
     bool flag(bool& b) {
         float f;
         if (!number(f)) return false;
@@ -135,7 +146,9 @@ static void saveEntity(std::ostringstream& o, const Entity& e) {
         if (c == '"') c = '\''; // the name is written in double quotes
     o << "entity \"" << name << "\"\n";
     o << "  object id " << e.id << " visible " << (e.visible ? 1 : 0) << " locked " << (e.locked ? 1 : 0) << "\n";
-    o << "  shape " << kShapeNames[int(e.shape)] << " size " << vec(e.size) << " position " << vec(e.position)
+    o << "  shape " << kShapeNames[int(e.shape)];
+    if (e.shape == ShapeKind::Mesh) o << " file \"" << e.meshFile << "\"";
+    o << " size " << vec(e.size) << " position " << vec(e.position)
       << " rotation " << vec(e.rotationDeg) << " color " << vec(e.color) << "\n";
     if (e.rigid.enabled)
         o << "  rigid density " << num(e.rigid.density) << " friction " << num(e.rigid.friction) << " restitution "
@@ -173,13 +186,14 @@ static bool readWorld(LineReader& r, WorldSettings& w, std::string& bad) {
 
 static bool readShape(LineReader& r, Entity& e, const std::string& shapeName, std::string& bad) {
     bool known = false;
-    for (int s = 0; s < 5; ++s)
+    for (int s = 0; s < kShapeCount; ++s)
         if (shapeName == kShapeNames[s]) e.shape = ShapeKind(s), known = true;
     if (!known) return fail(bad, shapeName);
     while (!r.done()) {
         const std::string k = r.key();
         const bool ok = k == "size" ? r.vector(e.size) : k == "position" ? r.vector(e.position)
-                      : k == "rotation" ? r.vector(e.rotationDeg) : k == "color" ? r.vector(e.color) : false;
+                      : k == "rotation" ? r.vector(e.rotationDeg) : k == "color" ? r.vector(e.color)
+                      : k == "file" ? r.text(e.meshFile) : false;
         if (!ok) return fail(bad, k);
     }
     return true;
@@ -267,6 +281,7 @@ bool SceneGraph::load(const std::string& text, std::string& error) {
         error = "the last entity has no 'end'";
         return false;
     }
+    g.baseDirectory = baseDirectory; // where this graph's model files are: not in the text
     *this = std::move(g);
     return true;
 }

@@ -6,17 +6,27 @@
 // do is reachable from the editor without code.
 //
 // A role is plain data here; what it means physically is in GraphScene.cpp (which solver it goes
-// to) and, for the magnet, in Magnets.cpp (dipole-dipole forces between bodies).
+// to) and, for the magnet, in Magnets.cpp (dipole-dipole forces between bodies). The shape of an
+// entity as a mesh - for the solvers and for a viewer drawing the scene - is in EntityShapes.cpp.
+//
+// Edit and play: an editor edits the graph (geometry and roles); Play builds a Simulation from it
+// through GraphScene; Stop throws the simulation away and shows the graph again. Creating a shape
+// makes geometry only: without roles it is drawn but takes no part in the simulation.
+#include "core/Mesh.h"
 #include "math/Math.h"
 #include "scene/Scene.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace rf {
 
-enum class ShapeKind { Box, Sphere, Cylinder, Cone, Plane };
+class CompoundShape;
+
+// Mesh: a model read from an OBJ or STL file (Entity::meshFile).
+enum class ShapeKind { Box, Sphere, Cylinder, Cone, Plane, Mesh };
 
 // The roles an entity can have - the "Midas touch" of the editor: any shape can be turned into one
 // physical model or several interacting ones. Two kinds:
@@ -89,10 +99,15 @@ struct SceneObject {
     bool locked = false;        // the editor does not select or move it (a floor, a backdrop)
 };
 
-// A shape in the scene with its roles: what it is made of and what else it does.
+// A shape in the scene with its roles: what it is made of and what else it does. With no role at
+// all it is geometry only: drawn, but no body, no collision, no part in the simulation.
 struct Entity : SceneObject {
     ShapeKind shape = ShapeKind::Box;
-    Vector3 size{0.2f};         // full size: box edges; sphere/cylinder/cone: diameter, height in y
+    // Full size: box edges; sphere/cylinder/cone: diameter (x) and height (y). A mesh keeps the
+    // model's proportions: it is scaled uniformly so that its largest extent equals the largest
+    // component of size (entityLocalMesh(e).bounds() is its real box).
+    Vector3 size{0.2f};
+    std::string meshFile;       // ShapeKind::Mesh: the OBJ/STL file as written in the scene file
     RigidRole rigid;
     SoftRole soft;
     LiquidRole liquid;
@@ -113,11 +128,31 @@ struct WorldSettings {
 struct SceneGraph {
     WorldSettings world;
     std::vector<Entity> entities;
+    // Not saved: the folder relative mesh files are found in (the scene file's own folder). load()
+    // keeps it as it was.
+    std::string baseDirectory;
 
     // Text format, one line per fact, readable and diff-able (see SceneGraph.cpp for a sample).
     std::string save() const;
     bool load(const std::string& text, std::string& error);
 };
+
+// ---------------------------------------------------------------------------
+// The shape of an entity as a mesh (EntityShapes.cpp) - the same mesh the solvers get, so a viewer
+// can draw geometry-only entities and the whole scene while it is being edited.
+// ---------------------------------------------------------------------------
+// The entity's orientation: yaw about y, then pitch about x, then roll about z (degrees).
+Quaternion entityRotation(const Entity& e);
+// The shape as a closed mesh centred on the origin in the entity's own frame, at its size. A model
+// file is read once and cached; an unreadable file gives an empty mesh (and `error`, if asked).
+TriMesh entityLocalMesh(const Entity& e, const std::string& baseDirectory = std::string(), std::string* error = nullptr);
+// The same mesh posed in the world: turned by the rotation and moved to the position.
+TriMesh entityMesh(const Entity& e, const std::string& baseDirectory = std::string());
+// No role at all: drawn, but not part of the simulation.
+bool entityIsGeometryOnly(const Entity& e);
+// A model as a rigid body: its convex decomposition at the entity's size, computed once per file
+// and size and shared (decomposing takes seconds). Null for an unreadable file.
+std::shared_ptr<const CompoundShape> entityCompound(const Entity& e, const std::string& baseDirectory);
 
 // A Scene built from a SceneGraph: the editor's scenes run through the same Scene interface as the
 // samples (configure the world, build the entities, apply the magnet forces every step).
@@ -143,10 +178,16 @@ private:
         Matrix3x3 bodyToEntity = Matrix3x3::identity();
     };
 
+    bool shapeUsable(const Entity& e);
     void addEntity(Simulation& sim, int index);
-    int addRigidBody(Simulation& sim, const Entity& e, bool fixed);
-    void addCloth(Simulation& sim, const Entity& e) const;
-    void addEmitter(Simulation& sim, int index, int body);
+    // One function per role: builds that role of entity `index` fresh from the source of the entity
+    // and returns what it created (the next step makes these removable meta-objects).
+    int addRigid(Simulation& sim, int index);                  // rigid body index
+    int addSoft(Simulation& sim, int index);                   // soft body index
+    int addLiquid(Simulation& sim, int index);                 // liquid particles added
+    int addCloth(Simulation& sim, int index);                  // cloth index
+    int addMagnet(Simulation& sim, int index, int body);       // magnet slot (-1: no body)
+    int addEmitter(Simulation& sim, int index, int body);      // emitter slot
     void releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool& liquidDone) const;
     void addMagnetFieldToGas(Simulation& sim) const;
 

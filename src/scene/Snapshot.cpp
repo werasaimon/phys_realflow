@@ -340,6 +340,12 @@ void Simulation::fillSettings(RenderSnapshot& s) const {
 // Every rigid body with its pose, shape and colour; hulls and compounds carry their mesh.
 void Simulation::fillBodies(RenderSnapshot& s) const {
     for (const RigidBody& b : rigid.bodies()) {
+        // A destroyed body keeps its slot so that the viewer's body indices stay the solver's
+        // (picking reports them back): an entry of zero size that draws nothing and cannot be hit.
+        if (!b.alive) {
+            s.bodies.push_back({ShapeType::Sphere, b.pos, b.rot, Vector3(0.0f), 0.0f, b.color, nullptr, true, nullptr, false});
+            continue;
+        }
         std::shared_ptr<const TriMesh> mesh;
         if (b.type() == ShapeType::ConvexHull) mesh = static_cast<const ConvexHullShape*>(b.shape.get())->mesh();
         else if (b.type() == ShapeType::Compound) mesh = static_cast<const CompoundShape*>(b.shape.get())->visualMesh();

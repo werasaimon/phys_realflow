@@ -26,6 +26,7 @@ struct SoftCluster {
 
 struct SoftBody {
     int object = -1;                   // particle object id (for self-collision filtering)
+    int group = -1;                    // particle group (ParticleSystem::removeGroup removes it whole)
     std::vector<int> particles;
     std::vector<SoftCluster> clusters;
     // Fraction of the way back to the rest shape per substep (0.05 jelly, 0.3 rubber, 1 rigid).

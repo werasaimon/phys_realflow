@@ -442,3 +442,55 @@ void testParticlesManyBodies() {
     CHECK(contacts > 100, "the bodies must touch the water (%d contacts)", contacts);
     CHECK(stepMs < 140.0f, "a frame of 30 000 particles and 150 bodies costs %.1f ms (tree: 69, brute force: 220)", stepMs);
 }
+
+// Removing one group of particles (the editor's meta-objects: a soft cube turned into something
+// else): a pool of liquid, a soft cube in it and a cloth hanging on a rod. The cube's group goes
+// mid-run, then the liquid; the cloth goes on hanging from the same rod, and a new soft body
+// added afterwards works.
+static bool allFinite(const ParticleSystem& s) {
+    for (const Vector3& x : s.positions())
+        if (!std::isfinite(x.x + x.y + x.z)) return false;
+    return true;
+}
+
+void testRemoveParticleGroup() {
+    const float dt = 1.0f / 180.0f;
+    ParticleSystem s;
+    s.reset(AABB({-0.5f, 0, -0.3f}, {0.5f, 1.2f, 0.3f}));
+    const int liquid = s.addBlock(AABB({-0.5f, 0, -0.3f}, {0.5f, 0.15f, 0.3f}));
+    TriMesh cube = primitives::box(Vector3(0.06f));
+    cube.translate({-0.2f, 0.4f, 0});
+    const int soft = s.softBodyGroup(s.addSoftBody(cube, 400.0f, 0.3f, Vector3(1)));
+    const int cloth = s.clothGroup(s.addCloth({0.05f, 1.0f, -0.2f}, {0.4f, 0, 0}, {0, -0.4f, 0}, ClothMaterial(), 16, Vector3(1)));
+    for (int k = 0; k < 90; ++k) s.step(dt);
+    const size_t before = s.size(), softCount = s.groupSize(soft), liquidCount = s.groupSize(liquid);
+    std::vector<Vector3> rod; // the pinned particles of the cloth
+    const Cloth& c0 = s.cloths()[0];
+    for (int x = 0; x < c0.width; ++x) rod.push_back(s.positions()[size_t(c0.particle(x, 0))]);
+    s.removeGroup(soft);
+    for (int k = 0; k < 90; ++k) s.step(dt);
+    const Cloth& c1 = s.cloths()[0];
+    float rodShift = 0;
+    for (int x = 0; x < c1.width; ++x) rodShift = std::max(rodShift, length(s.positions()[size_t(c1.particle(x, 0))] - rod[size_t(x)]));
+    std::printf("  remove the soft cube: %zu -> %zu particles (its %zu), soft bodies %zu, cloth rod moved %.1e m, finite %d\n", before,
+                s.size(), softCount, s.softBodies().size(), rodShift, int(allFinite(s)));
+    CHECK(s.size() == before - softCount, "%zu particles left, expected %zu", s.size(), before - softCount);
+    CHECK(s.softBodies().empty() && s.cloths().size() == 1 && s.cloths()[0].group == cloth, "the cube must be gone, the cloth kept");
+    CHECK(rodShift < 1e-6f, "the cloth's rod moved %e m", rodShift);
+    CHECK(allFinite(s), "NaN after removing the soft cube");
+    s.removeGroup(liquid);
+    for (int k = 0; k < 90; ++k) s.step(dt);
+    std::printf("  remove the liquid: %zu particles left (fluid %zu), cloth %d x %d\n", s.size(), s.fluidCount(), s.cloths()[0].width,
+                s.cloths()[0].height);
+    CHECK(s.fluidCount() == 0 && s.size() == before - softCount - liquidCount, "the liquid must be gone (%zu fluid)", s.fluidCount());
+    CHECK(allFinite(s), "NaN after removing the liquid");
+    TriMesh ball = primitives::sphere(0.05f, 12, 6);
+    ball.translate({-0.2f, 0.3f, 0});
+    const int body = s.addSoftBody(ball, 400.0f, 0.3f, Vector3(1));
+    for (int k = 0; k < 180; ++k) s.step(dt);
+    float lowest = 1e9f;
+    for (int i : s.softBodies()[size_t(body)].particles) lowest = std::min(lowest, s.positions()[size_t(i)].y);
+    std::printf("  a new soft ball afterwards: %zu particles, lowest at y %.3f (floor 0)\n", s.softBodies()[size_t(body)].particles.size(),
+                lowest);
+    CHECK(allFinite(s) && lowest > -0.001f && lowest < 0.05f, "the new soft ball must fall to the floor (lowest %f)", lowest);
+}

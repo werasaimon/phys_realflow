@@ -29,6 +29,8 @@ struct RigidBody {
     // Pose at the start of the (sub)step: XPBD velocity update and CCD sweeps.
     Vector3 prevPos;
     Quaternion prevRot;
+    // false: the slot of a destroyed body (RigidWorld::destroyBody) - static, parked far away.
+    bool alive = true;
 
     ShapeType type() const { return shape->type(); }
     float radius() const { return shape->boundingRadius(); }

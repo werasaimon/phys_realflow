@@ -74,6 +74,8 @@ void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Ma
 void testVoronoiFracture();     // FractureTests.cpp: Voronoi cells of a convex body fill it, convex and watertight
 void testTerrain();             // TerrainTests.cpp: 150 bodies on a 51 200-triangle static mesh (BVH)
 void testParticlesManyBodies(); // ParticleTests.cpp: 30 000 particles find 150 bodies through the world tree
+void testDestroyBody();         // RigidTests.cpp: one body removed, its slot reused, the rest untouched
+void testRemoveParticleGroup(); // ParticleTests.cpp: one soft body / liquid removed, the rest goes on
 
 // relativity (RelativityTests.cpp): geodesics in Kerr, light bending, the shadow of a black hole
 void testGeodesicInvariants();
@@ -91,3 +93,5 @@ void testGraphSceneBuilds();
 void testGraphCloth();
 void testGraphEmitterFollows();
 void testGraphFlammableCloth();
+void testGraphMeshShape();
+void testGraphGeometryOnly();

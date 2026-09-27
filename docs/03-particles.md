@@ -56,7 +56,7 @@ $$
 
 Перед шагом частиц $p$ выполняются все шаги тел, которые заканчиваются внутри него. Когда шаг частиц начинается, тела уже стоят там, где будут к его концу. При $n_r = 10$, $n_p = 3$ получаются группы 3, 3, 4.
 
-[src/scene/Coupling.cpp:154](../src/scene/Coupling.cpp#L154)
+[src/scene/Coupling.cpp:162](../src/scene/Coupling.cpp#L162)
 ```cpp
     const int nr = std::max(1, rigid.params.substeps), np = std::max(1, particles.params.substeps);
     const float hr = frameDt / float(nr), hp = frameDt / float(np);
@@ -89,7 +89,7 @@ W_{poly6}(\mathbf r) = \frac{315}{64\pi h^9}\,(h^2 - |\mathbf r|^2)^3, \qquad
 \nabla W_{spiky}(\mathbf r) = -\frac{45}{\pi h^6}\,(h - |\mathbf r|)^2\,\frac{\mathbf r}{|\mathbf r|}, \qquad |\mathbf r| < h.
 $$
 
-[src/particles/ParticleSystem.h:168](../src/particles/ParticleSystem.h#L168)
+[src/particles/ParticleSystem.h:187](../src/particles/ParticleSystem.h#L187)
 ```cpp
 inline float W(float r2) const {
     if (r2 >= h2_) return 0.0f;
@@ -406,7 +406,7 @@ $$
 
 где $\sigma$ = `areaDensity` [кг/м²]. Через ту же $A_p$ = `Cloth::particleArea` считаются тепло и топливо при горении и сопротивление ткани в газе ([Cloth.cpp:262](../src/particles/Cloth.cpp#L262)). Масса, горение и сопротивление поэтому согласованы, а сумма масс частиц в точности равна массе листа. Раньше масса считалась по $A_p$, а тепло и топливо — по $s^2$ с шагом сетки $s = |\mathbf u|/(W-1)$. Для квадратного листа из 11×11 частиц это $1/100$ против $1/121$ площади листа, то есть расхождение 21 %.
 
-[src/particles/ParticleSystem.cpp:140](../src/particles/ParticleSystem.cpp#L140)
+[src/particles/ParticleSystem.cpp:151](../src/particles/ParticleSystem.cpp#L151)
 ```cpp
     c.particleArea = length(cross(u, v)) / float(c.width * c.height);
     const float invMass = 1.0f / (material.areaDensity * c.particleArea);
@@ -422,7 +422,7 @@ $$
 \mathbf p_a \mathrel{+}= w_a\Delta\lambda\,\mathbf n, \quad \mathbf p_b \mathrel{-}= w_b\Delta\lambda\,\mathbf n .
 $$
 
-[src/particles/Cloth.cpp:159](../src/particles/Cloth.cpp#L159)
+[src/particles/Cloth.cpp:175](../src/particles/Cloth.cpp#L175)
 ```cpp
 static void solveConstraint(DistanceConstraint& c, std::vector<Vector3>& p, const std::vector<float>& invMass, float invDt2) {
     const float wa = invMass[c.a], wb = invMass[c.b];
@@ -476,6 +476,26 @@ $$
 
 Горение ткани (пиролиз, обугливание, прогорание нитей) — в [главе 5](05-fire.md#55-пиролиз-хлопка).
 
+### Удаление по одному: группы частиц
+
+Каждое `add*` создаёт **группу**: блок жидкости, мягкое тело, полотно ткани; всё, что выпускает сопло, — ещё одна группа. `removeGroup` убирает одну группу, не трогая остальные (мета-объекты редактора: объект был мягким телом, стал водой — заменяется только его группа, и из **источника** — геометрии объекта — строится новая). Частицы группы уходят, массивы смыкаются **с сохранением порядка**, поэтому оставшаяся система — та же самая, только без дыр: мягкие тела переписывают номера своих частиц и кластеров, полотно ткани (его частицы идут одним блоком) сдвигается целиком на число удалённых перед ним частиц — нити, тросы и индекс нитей следуют за ним.
+
+[src/particles/ParticleSystem.cpp:454](../src/particles/ParticleSystem.cpp#L454)
+```cpp
+void ParticleSystem::removeGroup(int group) {
+    if (group < 0 || std::find(group_.begin(), group_.end(), group) == group_.end()) return;
+    releaseGrab(); // the grabbed particles may be among the removed ones
+    const std::vector<int> newIndex = renumberWithout(group);
+    size_t kept = 0;
+    for (int k : newIndex) kept += k >= 0 ? 1 : 0;
+    renumberSolids(group, newIndex); // uses the old numbering of the cloths' first particles
+    compactParticles(newIndex, kept);
+    if (group == emitterGroup_) emitterGroup_ = -1; // the nozzle starts a new group next time
+}
+```
+
+Тест `particles: remove one group`: бассейн, мягкий куб в нём и штора на штанге; куб удалён на ходу — частиц стало 4148 → 4084 (ровно его 64), штанга шторы не сдвинулась (0 м), NaN нет; затем удалена вода — осталась только штора (784 частицы); новый мягкий шар после этого падает на пол и ложится (нижняя частица на 0.015 м).
+
 ---
 
 ## 3.8 Параметры
@@ -517,6 +537,7 @@ $$
 
 | Тест | Результат |
 |---|---|
+| `particles: remove one group` — бассейн, мягкий куб и штора на штанге; куб, затем вода удаляются на ходу | 4148 → 4084 частиц (ровно 64 куба), штанга шторы сдвинулась на 0 м, NaN нет; после удаления воды остаётся 784 частицы шторы; новый мягкий шар ложится на пол |
 | `benchmark: dam break front` — обрушение столба воды $a \times 2a$ (Martin & Moyce 1952, $n^2 = 2$), фронт $Z = x/a$ от $T = t\sqrt{2g/a}$ | среднее отклонение от эксперимента **12 %** при $T \in [0.5, 3]$ (коды SPH/PBF: 3–8 %), поздний наклон $dZ/dT$ 1.30 (эксперимент ~1.7). До исправления искусственного давления было 35 %: столб *в покое* раздувался на 80 % (5-мм частицы) — коэффициент $k$ у Маклина безразмерный, а наша $\lambda$ в м², поправка $s_{corr}$ теперь умножается на $h^2$ |
 | `liquid walls in the density` | $\Phi(0) = 0.5000$, внутри 0; бак с волной за 4 с: $\rho_{max}$ = **1091** кг/м³ (было 10 279 в углах) |
 | `light body in a wave` | пляжный мяч 80 кг/м³: $\max\lVert\mathbf v\rVert$ = **2.35** м/с, $\max\lVert\boldsymbol\omega\rVert$ = **12.2** рад/с (было 155 м/с и 9000 рад/с); плавает: центр в среднем на 0.43 м при спокойном уровне ≈ 0.32 м |

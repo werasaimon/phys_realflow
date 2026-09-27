@@ -75,6 +75,7 @@ struct Tether {
 
 struct Cloth {
     int object = -1;          // particle object id
+    int group = -1;           // particle group (ParticleSystem::removeGroup removes it whole)
     int firstParticle = 0;    // particle (x, y) = firstParticle + x + width * y
     int width = 0, height = 0;
     float spacing = 0;
@@ -107,6 +108,10 @@ struct Cloth {
 // Threads, shear and bending constraints of the grid (rest positions `rest`), in 16 independent
 // batches (graph colouring of the grid), stiffnesses and strengths from the material.
 void buildClothConstraints(Cloth& cloth, const std::vector<Vector3>& rest);
+
+// The cloth's particles moved down by `offset` in the particle arrays (particles before it were
+// removed; its own stay together and in order): every global index it keeps follows.
+void shiftCloth(Cloth& cloth, int offset);
 
 // Tethers from every particle to every pinned one, lengths measured along the cloth.
 void buildTethers(Cloth& cloth, const std::vector<float>& invMass);

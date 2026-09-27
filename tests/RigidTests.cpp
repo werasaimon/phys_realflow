@@ -5,6 +5,8 @@
 #include "TestRunner.h"
 #include "Tests.h"
 
+#include "core/Probe.h"
+
 void testRigid() {
     RigidWorld w;
     w.setDomain(AABB({-5, 0, -5}, {5, 10, 5}));
@@ -885,4 +887,69 @@ void testNoetherRigid() {
         CHECK(worstL < 1e-3f, "|L| of a free body drifts %e", worstL);
         CHECK(worstE < 1e-2f, "rotational energy of a free body drifts %e", worstE);
     }
+}
+
+// Removing one body (the editor's meta-objects): a stack of five boxes and a ball rolling beside
+// it; the ball is destroyed mid-run, then the top box of the stack. What stays keeps standing,
+// the slot of a destroyed body is reused by the next add, and add/destroy cycles allocate
+// nothing that grows.
+static void stepFrames(RigidWorld& w, int frames) {
+    for (int f = 0; f < frames; ++f)
+        for (int k = 0; k < w.params.substeps; ++k) w.step(1.0f / 60 / w.params.substeps);
+}
+
+static float stackDrift(const RigidWorld& w, const std::vector<int>& boxes, const std::vector<Vector3>& start) {
+    float drift = 0;
+    for (size_t k = 0; k < boxes.size(); ++k)
+        if (w.isAlive(boxes[k])) drift = std::max(drift, length(w.bodies()[size_t(boxes[k])].pos - start[k]));
+    return drift;
+}
+
+void testDestroyBody() {
+    RigidWorld w;
+    w.setDomain(AABB({-3, 0, -3}, {3, 4, 3}));
+    std::vector<int> boxes;
+    for (int i = 0; i < 5; ++i) boxes.push_back(w.addBox({0, 0.1f + 0.2f * i, 0}, Vector3(0.1f), Quaternion(), 500, Vector3(1)));
+    const int ball = w.addSphere({-1.5f, 0.1f, 0.8f}, 0.1f, 500, Vector3(1));
+    w.bodies()[size_t(ball)].vel = {1.0f, 0, 0};
+    stepFrames(w, 60);
+    std::vector<Vector3> start;
+    for (int b : boxes) start.push_back(w.bodies()[size_t(b)].pos);
+    const size_t contactsBefore = w.contactCount();
+    w.destroyBody(ball);
+    stepFrames(w, 60);
+    const float drift1 = stackDrift(w, boxes, start);
+    std::printf("  destroy the ball: bodies %d, contacts %zu -> %zu, stack drift %.2e m\n", w.bodyCount(), contactsBefore,
+                w.contactCount(), drift1);
+    CHECK(w.bodyCount() == 5 && !w.isAlive(ball), "the ball must be gone (%d bodies)", w.bodyCount());
+    CHECK(w.contactCount() < contactsBefore, "the ball's floor contact must go: %zu -> %zu", contactsBefore, w.contactCount());
+    CHECK(drift1 < 1e-3f, "the stack moved %f m when the ball went", drift1);
+    w.destroyBody(boxes.back()); // the top box: the rest must keep standing
+    stepFrames(w, 120);
+    const float drift2 = stackDrift(w, boxes, start);
+    const int again = w.addSphere({1.0f, 0.5f, 0}, 0.1f, 500, Vector3(1));
+    stepFrames(w, 120);
+    const RigidBody& reused = w.bodies()[size_t(again)];
+    std::printf("  destroy the top box: stack drift %.2e m; the next body takes slot %d (the top box was %d), rests at y %.4f\n",
+                drift2, again, boxes.back(), reused.pos.y);
+    CHECK(drift2 < 1e-3f, "the stack moved %f m when its top box went", drift2);
+    CHECK(again == boxes.back(), "a new body must reuse the freed slot %d, got %d", boxes.back(), again);
+    CHECK(std::fabs(reused.pos.y - 0.1f) < 0.01f && std::isfinite(reused.pos.x), "the new body must land normally (y %f)", reused.pos.y);
+    // 100 add / destroy cycles: the number of slots does not grow, a step allocates as before.
+    const size_t slots = w.bodies().size();
+    const long long b0 = Probe::allocations.load();
+    stepFrames(w, 10);
+    const long long perFrameBefore = (Probe::allocations.load() - b0) / 10;
+    for (int c = 0; c < 100; ++c) {
+        const int t = w.addBox({-1.0f, 0.3f, -1.0f}, Vector3(0.05f), Quaternion(), 500, Vector3(1));
+        stepFrames(w, 1);
+        w.destroyBody(t);
+    }
+    const long long a0 = Probe::allocations.load();
+    stepFrames(w, 10);
+    const long long perFrame = (Probe::allocations.load() - a0) / 10;
+    std::printf("  100 add/destroy cycles: %zu slots before, %zu after; %lld allocations per frame before, %lld after\n", slots,
+                w.bodies().size(), perFrameBefore, perFrame);
+    CHECK(w.bodies().size() == slots, "slots grew from %zu to %zu", slots, w.bodies().size());
+    CHECK(perFrame <= perFrameBefore + 2, "a frame allocates %lld times after the cycles, %lld before", perFrame, perFrameBefore);
 }

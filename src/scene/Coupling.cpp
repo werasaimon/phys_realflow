@@ -23,6 +23,14 @@ std::vector<MovingSolid> Simulation::movingSolids() const {
     out.reserve(rigid.bodies().size());
     for (const RigidBody& b : rigid.bodies()) {
         MovingSolid m;
+        // A destroyed body keeps its slot (the gas forces are indexed like the bodies): an empty
+        // solid that marks no cell.
+        if (!b.alive) {
+            m.inside = [](const Vector3&) { return false; };
+            m.resting = true;
+            out.push_back(std::move(m));
+            continue;
+        }
         m.bounds = b.worldBounds();
         m.position = b.pos;
         m.velocity = b.vel;

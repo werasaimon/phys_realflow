@@ -1,10 +1,13 @@
 // ParticleSystem: the particles, what is made of them (blocks of liquid, soft bodies, cloth),
-// the emitter and the step. The liquid's density solver is in DensitySolver.cpp, the contacts in
+// the emitter, the step, and taking one group out again. The liquid's density solver is in
+// DensitySolver.cpp, the contacts in
 // ParticleContacts.cpp, cloth and soft bodies in Cloth.cpp and SoftBody.cpp.
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
 #include "core/Probe.h"
+
+#include <algorithm>
 
 namespace rf {
 
@@ -26,11 +29,13 @@ void ParticleSystem::reset(const AABB& domain) {
     deltaQW_ = W(0.04f * h2_); // |dq| = 0.2 h
 
     x_.clear(); v_.clear(); p_.clear(); dp_.clear(); omega_.clear(); vtmp_.clear();
-    phase_.clear(); object_.clear(); invMass_.clear(); volume_.clear(); rest_.clear();
+    phase_.clear(); object_.clear(); group_.clear(); invMass_.clear(); volume_.clear(); rest_.clear();
     contacts_.clear();
     softBodies_.clear(); cloths_.clear();
     grab_ = ParticleGrab();
     nextObject_ = 0;
+    nextGroup_ = 0;
+    emitterGroup_ = -1;
     fluidCount_ = 0;
     rho_.clear(); lambda_.clear(); nbrCount_.clear(); nbr_.clear();
     contactBody_.clear(); contactNormal_.clear(); contactPoint_.clear(); contactDepth_.clear();
@@ -62,25 +67,29 @@ static bool blockedBySolid(const Vector3& p, float r, const MeshBVH* mesh, const
     return false;
 }
 
-void ParticleSystem::addBlock(const AABB& box, const Vector3& vel) {
+int ParticleSystem::addBlock(const AABB& box, const Vector3& vel) {
     const float r = params.particleRadius, s = 2 * r;
+    const int group = nextGroup_++;
     AABB b(vmax(box.lo, domain_.lo + Vector3(r)), vmin(box.hi, domain_.hi - Vector3(r)));
-    if (!b.valid()) return;
+    if (!b.valid()) return group;
     int nx = int(b.extent().x / s) + 1, ny = int(b.extent().y / s) + 1, nz = int(b.extent().z / s) + 1;
     uint32_t seed = 12345;
     auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (seed >> 8) * (1.0f / 16777216.0f) - 0.5f; };
     for (int k = 0; k < nz; ++k)
         for (int j = 0; j < ny; ++j)
             for (int i = 0; i < nx; ++i) {
-                if (int(x_.size()) >= params.maxParticles) return;
+                if (int(x_.size()) >= params.maxParticles) return group;
                 Vector3 p = b.lo + Vector3(float(i), float(j), float(k)) * s + Vector3(rnd(), rnd(), rnd()) * (0.02f * s);
                 if (blockedBySolid(p, r, mesh_, rigid_)) continue;
-                addParticle(p, vel, ParticlePhase::Fluid, -1, 1.0f / mass_);
+                addParticle(p, vel, ParticlePhase::Fluid, -1, group, 1.0f / mass_);
             }
+    return group;
 }
 
-void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, float volume) {
+void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, int group, float invMass,
+                                 float volume) {
     x_.push_back(x);
+    group_.push_back(group);
     v_.push_back(v);
     phase_.push_back(uint8_t(phase));
     object_.push_back(object);
@@ -97,6 +106,7 @@ int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiff
     const AABB b = shape.bounds();
     SoftBody body;
     body.object = nextObject_++;
+    body.group = nextGroup_++;
     body.stiffness = stiffness;
     body.color = color;
     const float invMass = 1.0f / (density * s * s * s);
@@ -108,7 +118,7 @@ int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiff
                 if (int(x_.size()) >= params.maxParticles || !domain_.contains(p) || !bvh.isInside(p)) continue;
                 body.particles.push_back(int(x_.size()));
                 rest.push_back(p);
-                addParticle(p, velocity, ParticlePhase::Soft, body.object, invMass);
+                addParticle(p, velocity, ParticlePhase::Soft, body.object, body.group, invMass);
             }
     if (body.particles.empty()) return -1;
     // Clusters every 1.5 particle spacings, each 2 spacings in radius (as FleX): a cluster spans
@@ -129,6 +139,7 @@ int ParticleSystem::addCloth(const Vector3& origin, const Vector3& u, const Vect
     const float sheetVolume = sqr(0.5f * params.clothSpacing); // s x s x 2r relative to (2r)^3
     Cloth c;
     c.object = nextObject_++;
+    c.group = nextGroup_++;
     c.color = color;
     c.material = material;
     c.width = std::max(2, int(std::lround(length(u) / s)) + 1);
@@ -149,7 +160,7 @@ int ParticleSystem::addCloth(const Vector3& origin, const Vector3& u, const Vect
                           (corner11 && (pinMask & 8)) || (y == 0 && (pinMask & 16)) || (y == c.height - 1 && (pinMask & 32)) ||
                           (x == 0 && (pinMask & 64)) || (x == c.width - 1 && (pinMask & 128));
             rest.push_back(p);
-            addParticle(p, Vector3(0.0f), ParticlePhase::Cloth, c.object, pinned ? 0.0f : invMass, sheetVolume);
+            addParticle(p, Vector3(0.0f), ParticlePhase::Cloth, c.object, c.group, pinned ? 0.0f : invMass, sheetVolume);
         }
     buildClothConstraints(c, rest);
     buildTethers(c, invMass_);
@@ -290,7 +301,8 @@ void ParticleSystem::emitParticles(float dt) {
                 if (int(x_.size()) >= params.maxParticles) return;
                 Vector3 p = c + u * (a * s) + w * (b * s);
                 if (!domain_.contains(p)) continue;
-                addParticle(p, d * emitter.speed, ParticlePhase::Fluid, -1, 1.0f / mass_);
+                if (emitterGroup_ < 0) emitterGroup_ = nextGroup_++; // everything the nozzle releases
+                addParticle(p, d * emitter.speed, ParticlePhase::Fluid, -1, emitterGroup_, 1.0f / mass_);
             }
     }
 }
@@ -430,6 +442,66 @@ void ParticleSystem::finishStep(float dt) {
     for (size_t b = 0; b < bodyShift_.size(); ++b)
         if (length2(bodyShift_[b]) + length2(bodyTurn_[b]) > 0)
             rigid_->applyVelocityChange(int(b), bodyShift_[b] / dt, bodyTurn_[b] / dt);
+}
+
+// ---------------------------------------------------------------------------
+// Groups: removing one object without touching the rest
+// ---------------------------------------------------------------------------
+size_t ParticleSystem::groupSize(int group) const {
+    return size_t(std::count(group_.begin(), group_.end(), group));
+}
+
+void ParticleSystem::removeGroup(int group) {
+    if (group < 0 || std::find(group_.begin(), group_.end(), group) == group_.end()) return;
+    releaseGrab(); // the grabbed particles may be among the removed ones
+    const std::vector<int> newIndex = renumberWithout(group);
+    size_t kept = 0;
+    for (int k : newIndex) kept += k >= 0 ? 1 : 0;
+    renumberSolids(group, newIndex); // uses the old numbering of the cloths' first particles
+    compactParticles(newIndex, kept);
+    if (group == emitterGroup_) emitterGroup_ = -1; // the nozzle starts a new group next time
+}
+
+// Where every particle goes: -1 for the removed group, the others close up in their order, so
+// what remains is the same system with the gaps taken out.
+std::vector<int> ParticleSystem::renumberWithout(int group) const {
+    std::vector<int> newIndex(x_.size(), -1);
+    int next = 0;
+    for (size_t i = 0; i < x_.size(); ++i)
+        if (group_[i] != group) newIndex[i] = next++;
+    return newIndex;
+}
+
+// Every per-particle array keeps the entries of the particles that stay, in order. The arrays a
+// step rebuilds from scratch (neighbours, the grid, contacts) are just emptied.
+void ParticleSystem::compactParticles(const std::vector<int>& newIndex, size_t kept) {
+    const size_t n = newIndex.size();
+    auto compact = [&](auto& values) {
+        if (values.size() != n) return;
+        for (size_t i = 0; i < n; ++i)
+            if (newIndex[i] >= 0) values[size_t(newIndex[i])] = values[i];
+        values.resize(kept);
+    };
+    compact(x_); compact(v_); compact(p_); compact(dp_); compact(omega_); compact(vtmp_);
+    compact(rho_); compact(lambda_); compact(phase_); compact(object_); compact(group_);
+    compact(invMass_); compact(volume_); compact(rest_);
+    compact(contactBody_); compact(contactNormal_); compact(contactPoint_); compact(contactDepth_);
+    nbrCount_.clear(); nbr_.clear(); cellOf_.clear(); sorted_.clear(); contacts_.clear();
+    fluidCount_ = size_t(std::count(phase_.begin(), phase_.end(), uint8_t(ParticlePhase::Fluid)));
+}
+
+// Soft bodies and cloths of the group go; the others follow the new numbering. A cloth's
+// particles are one block, so it moves down as a whole by the particles removed before it.
+void ParticleSystem::renumberSolids(int group, const std::vector<int>& newIndex) {
+    auto ofGroup = [group](const auto& solid) { return solid.group == group; };
+    softBodies_.erase(std::remove_if(softBodies_.begin(), softBodies_.end(), ofGroup), softBodies_.end());
+    for (SoftBody& b : softBodies_) {
+        for (int& i : b.particles) i = newIndex[size_t(i)];
+        for (SoftCluster& c : b.clusters)
+            for (int& i : c.particles) i = newIndex[size_t(i)];
+    }
+    cloths_.erase(std::remove_if(cloths_.begin(), cloths_.end(), ofGroup), cloths_.end());
+    for (Cloth& c : cloths_) shiftCloth(c, c.firstParticle - newIndex[size_t(c.firstParticle)]);
 }
 
 } // namespace rf

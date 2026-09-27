@@ -71,7 +71,8 @@ public:
     ParticleEmitter emitter;
 
     void reset(const AABB& domain);
-    void addBlock(const AABB& box, const Vector3& velocity = Vector3(0.0f));
+    // Liquid filling the box; returns its particle group.
+    int addBlock(const AABB& box, const Vector3& velocity = Vector3(0.0f));
     // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space);
     // stiffness 0..1 (1 = rigid). Returns the soft body index, -1 if nothing fitted.
     int addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color,
@@ -85,6 +86,18 @@ public:
                  const Vector3& color);
     void setStaticMesh(const MeshBVH* bvh) { mesh_ = bvh; }
     void setRigidWorld(RigidWorld* w) { rigid_ = w; }
+
+    // Groups: every add makes one - a block of liquid, a soft body, a cloth - and the emitter keeps
+    // one of its own for everything it releases. removeGroup takes one group out without touching
+    // the rest (the editor's meta-objects: a role changed on one object): its particles go, the
+    // arrays close up in order, and the soft bodies and cloths left over are renumbered. The
+    // simulation of everything else goes on as if the group had never been there.
+    void removeGroup(int group);
+    int groupOf(int particle) const { return group_[size_t(particle)]; }
+    int softBodyGroup(int body) const { return softBodies_[size_t(body)].group; }
+    int clothGroup(int cloth) const { return cloths_[size_t(cloth)].group; }
+    int emitterGroup() const { return emitterGroup_; } // -1 until the emitter released something
+    size_t groupSize(int group) const;
 
     // Advances one substep of length dt.
     void step(float dt);
@@ -143,7 +156,13 @@ private:
     void collide(int i, Vector3& p, const Vector3& start, bool recordImpulse, float dt);
     void applyViscosityAndVorticity(float dt);
     // (Colours live on the objects: SoftBody::color, Cloth::color.)
-    void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, float invMass, float volume = 1.0f);
+    void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, int group, float invMass,
+                     float volume = 1.0f);
+    // The steps of removeGroup: which particles stay and where they go, then the arrays, the
+    // soft bodies and the cloths follow the new numbering.
+    std::vector<int> renumberWithout(int group) const;
+    void compactParticles(const std::vector<int>& newIndex, size_t kept);
+    void renumberSolids(int group, const std::vector<int>& newIndex);
     // Particles of different phases (and non-adjacent particles of one cloth) keep 2r apart:
     // the candidate pairs are collected once per substep, then projected Gauss-Seidel style.
     struct ParticleContact {
@@ -187,6 +206,8 @@ private:
     // (cloth self-collision filter)
     std::vector<uint8_t> phase_;
     std::vector<int> object_;
+    std::vector<int> group_;   // the group of every particle (removeGroup)
+    int nextGroup_ = 0, emitterGroup_ = -1;
     std::vector<float> invMass_;
     std::vector<float> volume_; // volume relative to a fluid particle (cloth sheets are thinner)
     std::vector<Vector3> rest_;

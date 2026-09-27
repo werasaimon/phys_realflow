@@ -135,6 +135,22 @@ void updateTethers(Cloth& cloth) {
     cloth.tethersDirty = false;
 }
 
+void shiftCloth(Cloth& cloth, int offset) {
+    if (offset == 0) return;
+    cloth.firstParticle -= offset;
+    for (DistanceConstraint& c : cloth.constraints) {
+        c.a -= offset;
+        c.b -= offset;
+    }
+    for (Tether& t : cloth.tethers) {
+        t.particle -= offset;
+        t.anchor -= offset;
+    }
+    cloth.constraintIndex.clear();
+    for (int k = 0; k < int(cloth.constraints.size()); ++k)
+        cloth.constraintIndex[pairKey(cloth.constraints[k].a, cloth.constraints[k].b)] = k;
+}
+
 void buildTethers(Cloth& cloth, const std::vector<float>& invMass) {
     const int count = cloth.width * cloth.height, first = cloth.firstParticle;
     std::vector<int>& anchors = cloth.anchors;

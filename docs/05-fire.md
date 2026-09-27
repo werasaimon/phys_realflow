@@ -225,7 +225,7 @@ $$
 T_{heated} = T_g + \frac{R}{hA_2} + \left(T - T_g - \frac{R}{hA_2}\right)e^{-hA_2\Delta t/C}.
 $$
 
-[src/particles/Cloth.cpp:302](../src/particles/Cloth.cpp#L302)
+[src/particles/Cloth.cpp:318](../src/particles/Cloth.cpp#L318)
 ```cpp
 const float Tabs = T + T0;
 const float radiation = m.emissivity * area * (irradiance[k] - 2.0f * sigma * (Tabs * Tabs * Tabs * Tabs - T0 * T0 * T0 * T0));
@@ -252,7 +252,7 @@ $$
 
 $g$ монотонно растёт, $g(T_{heated}) \ge 0$, а при $T_{end} = T_{heated} - H_p m_v/C$ (всё разложилось) $g \le 0$. Корень ищется **бисекцией**, 30 шагов:
 
-[src/particles/Cloth.cpp:312](../src/particles/Cloth.cpp#L312)
+[src/particles/Cloth.cpp:328](../src/particles/Cloth.cpp#L328)
 ```cpp
 const float volatileMass = freshMass * (1.0f - m.charMassFraction) * unburnt; // [kg] left to decompose
 float decomposed = 0;                                                         // fraction of `unburnt`
@@ -299,7 +299,7 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 `Simulation::stepGasWithBodies` ([Coupling.cpp:190](../src/scene/Coupling.cpp#L190)) один раз за кадр:
 
-[src/scene/Coupling.cpp:194](../src/scene/Coupling.cpp#L194)
+[src/scene/Coupling.cpp:202](../src/scene/Coupling.cpp#L202)
 ```cpp
 if (grid.combustion.enabled) {
     std::vector<FireOutput> fire;

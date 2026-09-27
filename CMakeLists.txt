@@ -76,6 +76,7 @@ add_library(rfcore STATIC
   src/scene/Snapshot.cpp
   src/scene/SceneGraph.h          src/scene/SceneGraph.cpp
   src/scene/GraphScene.cpp
+  src/scene/EntityShapes.cpp
   src/scene/Magnets.h             src/scene/Magnets.cpp
 )
 target_include_directories(rfcore PUBLIC src)
