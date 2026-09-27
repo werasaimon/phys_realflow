@@ -1,0 +1,60 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Разброс среднего падает как 1/√N</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Разброс среднего падает как 1/√N</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>сколько кубиков усредняли, N</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>разброс среднего σ</text>
+<text x='84' y='404' class='cap'>Среднее N случайных чисел из [0, 1), 400 повторов. Теория σ = 1/√(12N). Тест «mathbook: the spread…»</text>
+<text x='84' y='419' class='cap'>(RF_PLOT_DIR=… rf_tests, tests/MathBookTests.cpp)</text>
+<line x1='84' x2='736' y1='319.7' y2='319.7' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='323.7' text-anchor='end' class='tick'>0,005</text>
+<line x1='84' x2='736' y1='270.2' y2='270.2' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='274.2' text-anchor='end' class='tick'>0,01</text>
+<line x1='84' x2='736' y1='220.8' y2='220.8' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='224.8' text-anchor='end' class='tick'>0,02</text>
+<line x1='84' x2='736' y1='155.5' y2='155.5' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='159.5' text-anchor='end' class='tick'>0,05</text>
+<line x1='84' x2='736' y1='106.1' y2='106.1' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='110.1' text-anchor='end' class='tick'>0,1</text>
+<line x1='123.4' x2='123.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='123.4' y='364' text-anchor='middle' class='tick'>5</text>
+<line x1='184.7' x2='184.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='184.7' y='364' text-anchor='middle' class='tick'>10</text>
+<line x1='246.0' x2='246.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='246.0' y='364' text-anchor='middle' class='tick'>20</text>
+<line x1='326.9' x2='326.9' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='326.9' y='364' text-anchor='middle' class='tick'>50</text>
+<line x1='388.2' x2='388.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='388.2' y='364' text-anchor='middle' class='tick'>100</text>
+<line x1='449.4' x2='449.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='449.4' y='364' text-anchor='middle' class='tick'>200</text>
+<line x1='530.4' x2='530.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='530.4' y='364' text-anchor='middle' class='tick'>500</text>
+<line x1='591.7' x2='591.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='591.7' y='364' text-anchor='middle' class='tick'>1000</text>
+<line x1='652.9' x2='652.9' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='652.9' y='364' text-anchor='middle' class='tick'>2000</text>
+<line x1='733.9' x2='733.9' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='733.9' y='364' text-anchor='middle' class='tick'>5000</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='103.7,84.6 226.2,131.8 348.7,179.2 471.3,227.8 593.8,277.8 716.3,328.1' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='103.7' cy='84.6' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='226.2' cy='131.8' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='348.7' cy='179.2' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='471.3' cy='227.8' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='593.8' cy='277.8' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='716.3' cy='328.1' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<polyline points='103.7,79.9 226.2,129.3 348.7,178.8 471.3,228.2 593.8,277.6 716.3,327.0' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<circle cx='103.7' cy='79.9' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='226.2' cy='129.3' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='348.7' cy='178.8' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='471.3' cy='228.2' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='593.8' cy='277.6' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='716.3' cy='327.0' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>измерено</text>
+<line x1='185.6' x2='211.6' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='217.6' y='51' font-size='12.5'>теория 1/√(12N)</text>
+</svg>

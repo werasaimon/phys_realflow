@@ -1,0 +1,70 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>0,1 + 0,1 + … десять миллионов раз</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>0,1 + 0,1 + … десять миллионов раз</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>сколько раз сложили</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>относительная ошибка суммы</text>
+<text x='84' y='404' class='cap'>float хранит ~7 значащих цифр, double ~16. Тест «mathbook: float and double…» (RF_PLOT_DIR=… rf_tests,</text>
+<text x='84' y='419' class='cap'>tests/MathBookTests.cpp)</text>
+<line x1='84' x2='736' y1='343.0' y2='343.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='347.0' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-16</tspan></text>
+<line x1='84' x2='736' y1='287.4' y2='287.4' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='291.4' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-13</tspan></text>
+<line x1='84' x2='736' y1='231.7' y2='231.7' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='235.7' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-10</tspan></text>
+<line x1='84' x2='736' y1='176.1' y2='176.1' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='180.1' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-7</tspan></text>
+<line x1='84' x2='736' y1='120.4' y2='120.4' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='124.4' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-4</tspan></text>
+<line x1='84' x2='736' y1='64.8' y2='64.8' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='68.8' text-anchor='end' class='tick'>0,1</text>
+<line x1='94.2' x2='94.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='94.2' y='364' text-anchor='middle' class='tick'>10</text>
+<line x1='199.5' x2='199.5' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='199.5' y='364' text-anchor='middle' class='tick'>100</text>
+<line x1='304.7' x2='304.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='304.7' y='364' text-anchor='middle' class='tick'>1000</text>
+<line x1='410.0' x2='410.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='410.0' y='364' text-anchor='middle' class='tick'>1·10<tspan dy='-6' font-size='10'>4</tspan></text>
+<line x1='515.3' x2='515.3' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='515.3' y='364' text-anchor='middle' class='tick'>1·10<tspan dy='-6' font-size='10'>5</tspan></text>
+<line x1='620.5' x2='620.5' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='620.5' y='364' text-anchor='middle' class='tick'>1·10<tspan dy='-6' font-size='10'>6</tspan></text>
+<line x1='725.8' x2='725.8' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='725.8' y='364' text-anchor='middle' class='tick'>1·10<tspan dy='-6' font-size='10'>7</tspan></text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='94.2,174.7 144.4,169.1 199.5,170.9 249.7,149.8 304.7,139.4 355.0,130.0 410.0,120.7 460.2,115.2 515.3,117.5 565.5,94.0 620.5,83.7 670.8,74.3 725.8,65.8' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='94.2' cy='174.7' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='144.4' cy='169.1' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='199.5' cy='170.9' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='249.7' cy='149.8' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='304.7' cy='139.4' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='355.0' cy='130.0' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='410.0' cy='120.7' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='460.2' cy='115.2' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='515.3' cy='117.5' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='565.5' cy='94.0' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='620.5' cy='83.7' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='670.8' cy='74.3' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='725.8' cy='65.8' r='4' fill='var(--s0)' stroke='var(--surface)' stroke-width='1.5'/>
+<polyline points='94.2,342.2 144.4,331.0 199.5,319.1 249.7,311.2 304.7,303.2 355.0,324.9 410.0,283.7 460.2,273.7 515.3,263.7 565.5,255.5 620.5,248.0 670.8,253.7 725.8,227.9' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<circle cx='94.2' cy='342.2' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='144.4' cy='331.0' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='199.5' cy='319.1' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='249.7' cy='311.2' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='304.7' cy='303.2' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='355.0' cy='324.9' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='410.0' cy='283.7' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='460.2' cy='273.7' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='515.3' cy='263.7' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='565.5' cy='255.5' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='620.5' cy='248.0' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='670.8' cy='253.7' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<circle cx='725.8' cy='227.9' r='4' fill='var(--s1)' stroke='var(--surface)' stroke-width='1.5'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>float</text>
+<line x1='164.0' x2='190.0' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='196.0' y='51' font-size='12.5'>double</text>
+</svg>
