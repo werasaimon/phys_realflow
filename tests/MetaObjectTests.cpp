@@ -103,7 +103,7 @@ void testMetaWaterSoftCycle() {
     stepFrames(sim, 30);
     const Vector3 boxStart = boxPos();
     float worstJump = 0, worstOffset = 0;
-    bool countsRight = true, finite = true;
+    bool countsRight = true, volumeKept = true, finite = true;
     for (int k = 0; k < 3; ++k) { // water -> jelly -> water -> jelly
         const bool toWater = k % 2 == 1;
         const GroupState before = groupState(sim, particleGroupOf(*scene, cubeId));
@@ -114,6 +114,7 @@ void testMetaWaterSoftCycle() {
         worstJump = std::max(worstJump, length(boxPos() - boxBefore));
         worstOffset = std::max(worstOffset, length(after.centre - before.centre));
         countsRight &= sim.particles.size() == total - size_t(before.count) + size_t(after.count);
+        volumeKept &= after.count == before.count; // the same cube of 7 x 7 x 7: none lost on the floor
         std::printf("  switch %d -> %s: %d particles out, %d in, centre moved %.3f m\n", k + 1, toWater ? "water" : "jelly",
                     before.count, after.count, length(after.centre - before.centre));
         stepFrames(sim, 30);
@@ -122,6 +123,7 @@ void testMetaWaterSoftCycle() {
     const float boxDrift = length(boxPos() - boxStart);
     std::printf("  the resting box: jump at the switches %.1e m, drift over the run %.1e m\n", worstJump, boxDrift);
     CHECK(countsRight, "the particle count did not change by exactly the removed and added groups");
+    CHECK(volumeKept, "a switch lost particles: the volume is not kept");
     CHECK(worstJump < 1e-6f, "switching the cube moved the resting box by %e m", double(worstJump));
     CHECK(boxDrift < 2e-3f, "the resting box drifted %f m", double(boxDrift));
     CHECK(worstOffset < 0.2f, "the new shape appeared %f m away from the old one", double(worstOffset));

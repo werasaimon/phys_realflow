@@ -38,16 +38,40 @@ float Tokamak::verticalFieldStrength() const {
     return kMu0 * plasmaCurrent() * equilibriumShift() / (2.0f * kPi * vesselRadius * vesselRadius);
 }
 
+float Tokamak::freeRingVerticalField() const {
+    // A current ring pushes itself outwards (its own field is stronger on the inner side: the
+    // hoop force). With no shell around it, only the vertical field holds it, by I B_v per metre:
+    //   B_v = mu0 I_p / (4 pi R0) [ln(8 R0 / a) + beta_p + l_i / 2 - 3/2]   (Shafranov 1966).
+    if (!verticalField) return 0.0f;
+    const float betaPoloidal = 0.0f; // a cold plasma, as in equilibriumShift
+    const float hoopFactor = std::log(8.0f * majorRadius / minorRadius) + betaPoloidal + 0.5f * internalInductance() - 1.5f;
+    return kMu0 * plasmaCurrent() / (4.0f * kPi * majorRadius) * hoopFactor;
+}
+
 float Tokamak::wallLimit() const {
     const float a2 = minorRadius * minorRadius, b2 = vesselRadius * vesselRadius;
     return 2.0f * a2 / (a2 + b2);
 }
 
 float Tokamak::kinkGrowthRate(float density) const {
+    // The scene's case: the gas around the column is the column's own (Tokamak.h).
+    return kinkGrowthRateWithOuterGas(density, 1.0f);
+}
+
+float Tokamak::kinkGrowthRateWithOuterGas(float density, float outerDensityRatio) const {
+    // The energy principle in three lines (Tokamak.h has the assumptions):
+    //   1. the rigid helical shift xi changes the energy by delta W < 0 (the head of Tokamak.h);
+    //   2. its kinetic energy is (1/2) M (d xi/dt)^2, M = the column's mass times
+    //      (1 + the added mass of the gas it pushes, in column masses);
+    //   3. xi ~ e^(gamma t) balances them: gamma^2 = -2 delta W / (M xi^2).
+    // Step 1 with a massless vacuum is gamma_vac below; step 2 divides it by the inertia.
     if (!kinkUnstable()) return 0.0f;
     const float a = minorRadius, a2 = a * a, b2 = vesselRadius * vesselRadius, q = safetyFactorEdge;
-    const float vA = poloidalField(a) / std::sqrt(kMu0 * std::max(density, 1e-12f)); // on the poloidal field at the edge
-    return vA / a * std::sqrt((1.0f - q) * (q * (b2 + a2) - 2.0f * a2) / b2);
+    const float alfvenSpeed = poloidalField(a) / std::sqrt(kMu0 * std::max(density, 1e-12f)); // on B_theta at the edge
+    const float growthRate2InVacuum =
+        2.0f * sqr(alfvenSpeed / a) * (1.0f - q) * (q * (b2 + a2) - 2.0f * a2) / (b2 - a2);
+    const float addedMassInColumnMasses = std::max(outerDensityRatio, 0.0f) * (b2 + a2) / (b2 - a2);
+    return std::sqrt(growthRate2InVacuum / (1.0f + addedMassInColumnMasses));
 }
 
 bool Tokamak::inside(const Vector3& x) const {
@@ -72,16 +96,22 @@ float Tokamak::channelRadius(const Vector3& x) const {
     return std::hypot(R - cR, p.y - cy);
 }
 
-void Tokamak::controlGains(float density, float& gain, float& damping) const {
-    // The shell's restoring stiffness per unit length k = mu0 I^2 / (2 pi b^2); the control adds
-    // 4 k (a change dB_v of the vertical field is a force -I dB_v); the ring plus the fluid it
-    // pushes around (added mass with the wall) weighs m = rho pi a^2 2 b^2 / (b^2 - a^2) per
-    // unit length; critical damping 2 sqrt(5 k m).
+void Tokamak::controlGains(float density, float& gain, float& damping, float& integral) const {
+    // The ring as a mass on a spring, per metre of its length:
+    //   1. the shell's image currents pull it back with the stiffness k = mu0 I^2 / (2 pi b^2);
+    //   2. it moves together with the gas it pushes around (the added mass with the wall):
+    //      m = rho pi a^2 2 b^2 / (b^2 - a^2);
+    //   3. a change dB_v of the vertical field is a force -I dB_v, so a gain g in B_v per metre of
+    //      shift is a stiffness I g: the control adds 4 k, 5 k in all;
+    //   4. critical damping of that spring: 2 sqrt(5 k m); its frequency w = sqrt(5 k / m);
+    //   5. the integral part acts at w / 4, slow enough not to shake the damped loop.
     const float I = plasmaCurrent(), a2 = sqr(minorRadius), b2 = sqr(vesselRadius);
-    const float k = kMu0 * I * I / (2.0f * kPi * b2);
-    const float m = density * kPi * a2 * 2.0f * b2 / (b2 - a2);
-    gain = 4.0f * k / I;
-    damping = 2.0f * std::sqrt(5.0f * k * m) / I;
+    const float shellStiffness = kMu0 * I * I / (2.0f * kPi * b2);
+    const float ringMass = density * kPi * a2 * 2.0f * b2 / (b2 - a2);
+    const float loopFrequency = std::sqrt(5.0f * shellStiffness / ringMass);
+    gain = 4.0f * shellStiffness / I;
+    damping = 2.0f * std::sqrt(5.0f * shellStiffness * ringMass) / I;
+    integral = gain * 0.25f * loopFrequency;
 }
 
 Vector3 Tokamak::coilPotential(const Vector3& x, float verticalFieldT) const {
@@ -203,10 +233,43 @@ float Tokamak::measuredShift(const MagneticField& m, float dx) const {
     return c.empty() ? 0.0f : s / float(c.size());
 }
 
+void Tokamak::tracerCentroids(const Field3& tracer, const Vector3& gridOrigin, float dx, std::vector<Vector2>& out) const {
+    // In each of N poloidal planes around the torus: the tracer-weighted mean position of the
+    // points of the vessel's cross-section, sampled every dx - where the glowing plasma is.
+    const int N = 24;
+    const float b = vesselRadius - dx;
+    out.clear();
+    for (int n = 0; n < N; ++n) {
+        const float phi = 2.0f * kPi * float(n) / float(N);
+        const Vector3 Rhat(std::cos(phi), 0.0f, std::sin(phi));
+        double w = 0, sR = 0, sy = 0;
+        for (float y = -b; y <= b; y += dx)
+            for (float R = majorRadius - b; R <= majorRadius + b; R += dx) {
+                if (std::hypot(R - majorRadius, y) >= b) continue;
+                const Vector3 x = centre + Rhat * R + Vector3(0.0f, y, 0.0f);
+                const float s = clampv(tracer.sample((x - gridOrigin) / dx), 0.0f, 1.0f);
+                w += s;
+                sR += s * (R - majorRadius);
+                sy += s * y;
+            }
+        out.push_back(w > 0 ? Vector2(float(sR / w), float(sy / w)) : Vector2(0.0f, 0.0f));
+    }
+}
+
 float Tokamak::kinkAmplitude(const MagneticField& m, float dx) const {
-    // The n = 1 Fourier amplitude of (dR + i dy) around the torus, for either sense of the helix.
     std::vector<Vector2> c;
     currentCentroids(m, dx, c);
+    return helicalAmplitude(c);
+}
+
+float Tokamak::plasmaKinkAmplitude(const Field3& tracer, const Vector3& gridOrigin, float dx) const {
+    std::vector<Vector2> c;
+    tracerCentroids(tracer, gridOrigin, dx, c);
+    return helicalAmplitude(c);
+}
+
+float Tokamak::helicalAmplitude(const std::vector<Vector2>& c) {
+    // The n = 1 Fourier amplitude of (dR + i dy) around the torus, for either sense of the helix.
     std::complex<double> plus = 0, minus = 0;
     for (size_t n = 0; n < c.size(); ++n) {
         const float phi = 2.0f * kPi * float(n) / float(c.size());

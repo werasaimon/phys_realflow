@@ -121,7 +121,7 @@ void Simulation::stepFrame() {
             lastGridDt_ = grid.step(0.05f);
             // Plasma: the Alfven waves keep the steps short - take a few per frame (up to 1/60 s).
             for (int extra = 0; extra < 3 && grid.magnetic.enabled && grid.time() - time_ < frameDt; ++extra)
-                lastGridDt_ = grid.step(frameDt - (grid.time() - time_));
+                lastGridDt_ = grid.step(float(frameDt - (grid.time() - time_)));
             time_ = grid.time();
         } else {
             stepGasWithBodies();

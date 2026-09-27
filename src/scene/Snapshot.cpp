@@ -289,10 +289,40 @@ void Simulation::fillSnapshot(RenderSnapshot& s) const {
     case SimMode::Rigid: fillRigidView(s); break;
     }
     fillJointsAndGrab(s);
+    s.lights.clear();                       // a scene with lights of its own fills them in describe()
     if (scene_) scene_->describe(*this, s); // the scene's own readings, after the generic ones
+    drawResearchLayers();
+    fillContacts(s);
     s.probe = Probe::snapshot();            // every channel the engine reported this frame
     s.info.insert(s.info.begin(), {"Время", format("%.3f с", time_)});
     s.info.push_back({"Шаг расчёта", format("%.1f мс", lastStepMs_)});
+}
+
+// The research layers that depend on the view (see core/Probe.h): the gas on the viewer's slice
+// plane and the field lines B coloured by |B|. The solvers draw their own layers inside the step;
+// these are drawn here, once per Probe frame however often the viewer asks for a snapshot.
+void Simulation::drawResearchLayers() const {
+    if (Probe::layers() == 0 || researchDrawnFrame_ == Probe::frameIndex()) return;
+    researchDrawnFrame_ = Probe::frameIndex();
+    if (mode_ == SimMode::WindTunnel) grid.drawDebug(vis.sliceAxis, sliceLayer());
+    if (!Probe::layerOn(DrawLayer::FieldLinesB) || !grid.magnetic.enabled) return;
+    RenderSnapshot lines;
+    computeFieldLines(lines);
+    for (size_t n = 0; n < lines.fieldLines.size(); ++n) {
+        const std::vector<Vector3>& p = lines.fieldLines[n];
+        const std::vector<float>& B = lines.fieldLineStrength[n];
+        for (size_t i = 1; i < p.size(); ++i)
+            Probe::line(DrawLayer::FieldLinesB, p[i - 1], p[i], heatColor(B[i] / lines.fieldLineMax));
+    }
+    Probe::label(DrawLayer::FieldLinesB, grid.domain().hi, format("|B| макс. %.3g Тл", double(lines.fieldLineMax)));
+}
+
+// The contact points of the last rigid step, while the ContactPoints layer is on.
+void Simulation::fillContacts(RenderSnapshot& s) const {
+    s.contacts.clear();
+    if (!Probe::layerOn(DrawLayer::ContactPoints)) return;
+    for (const RigidWorld::DebugContact& c : rigid.debugContacts())
+        s.contacts.push_back({c.position, c.normal, c.depth, c.impulse, c.frictionImpulse, c.a, c.b});
 }
 
 // The current parameters and the frame's counters, and every list of the snapshot cleared.
@@ -568,7 +598,7 @@ void Simulation::fillGasCounts(RenderSnapshot& s) const {
         s.info.push_back({"Тел в газе", format("%zu (%d ячеек, спят %zu)", rigid.bodies().size(), grid.movingSolidCells(),
                                             rigid.sleepingCount())});
         s.info.push_back({"Сила газа на тело (макс.)", format("%.3f Н", gasForceMax_)});
-        if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", format("%.1f с", std::max(0.0f, releaseTime - time_))});
+        if (rigid.anyHeld()) s.info.push_back({"Тела отпустятся через", format("%.1f с", std::max(0.0, double(releaseTime) - time_))});
     }
     if (!s.arrowPos.empty()) s.info.push_back({"Векторов скорости", format("%zu", s.arrowPos.size())});
     if (!grid.hasObstacle()) {

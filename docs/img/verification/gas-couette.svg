@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="400" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Течение Куэтта–Пуазейля: подвижная пластина (p = 1.98)</text>
+<line x1="187.5" y1="50.0" x2="187.5" y2="330.0" stroke="#e5e4df"/><text x="187.5" y="348.0" text-anchor="middle" fill="#52514e">0.02</text>
+<line x1="363.7" y1="50.0" x2="363.7" y2="330.0" stroke="#e5e4df"/><text x="363.7" y="348.0" text-anchor="middle" fill="#52514e">0.05</text>
+<line x1="497.1" y1="50.0" x2="497.1" y2="330.0" stroke="#e5e4df"/><text x="497.1" y="348.0" text-anchor="middle" fill="#52514e">0.1</text>
+<line x1="80.0" y1="329.6" x2="600.0" y2="329.6" stroke="#e5e4df"/><text x="72.0" y="333.6" text-anchor="end" fill="#52514e">2e-05</text>
+<line x1="80.0" y1="290.6" x2="600.0" y2="290.6" stroke="#e5e4df"/><text x="72.0" y="294.6" text-anchor="end" fill="#52514e">5e-05</text>
+<line x1="80.0" y1="261.1" x2="600.0" y2="261.1" stroke="#e5e4df"/><text x="72.0" y="265.1" text-anchor="end" fill="#52514e">0.0001</text>
+<line x1="80.0" y1="231.7" x2="600.0" y2="231.7" stroke="#e5e4df"/><text x="72.0" y="235.7" text-anchor="end" fill="#52514e">0.0002</text>
+<line x1="80.0" y1="192.7" x2="600.0" y2="192.7" stroke="#e5e4df"/><text x="72.0" y="196.7" text-anchor="end" fill="#52514e">0.0005</text>
+<line x1="80.0" y1="163.3" x2="600.0" y2="163.3" stroke="#e5e4df"/><text x="72.0" y="167.3" text-anchor="end" fill="#52514e">0.001</text>
+<line x1="80.0" y1="133.8" x2="600.0" y2="133.8" stroke="#e5e4df"/><text x="72.0" y="137.8" text-anchor="end" fill="#52514e">0.002</text>
+<line x1="80.0" y1="94.8" x2="600.0" y2="94.8" stroke="#e5e4df"/><text x="72.0" y="98.8" text-anchor="end" fill="#52514e">0.005</text>
+<line x1="80.0" y1="65.4" x2="600.0" y2="65.4" stroke="#e5e4df"/><text x="72.0" y="69.4" text-anchor="end" fill="#52514e">0.01</text>
+<text x="340.0" y="370.0" text-anchor="middle" fill="#52514e">dx, м (лог.)</text>
+<text transform="translate(18 190.0) rotate(-90)" text-anchor="middle" fill="#52514e">ошибка (лог.)</text>
+<line x1="140.0" y1="251.4" x2="540.0" y2="76.6" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="540.0" cy="77.1" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.125, ошибка 0.007591</title></circle>
+<circle cx="406.7" cy="134.3" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.0625, ошибка 0.001975</title></circle>
+<circle cx="273.3" cy="192.8" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.03125, ошибка 0.0004989</title></circle>
+<circle cx="140.0" cy="251.7" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.01562, ошибка 0.0001248</title></circle>
+<polygon points="140.0,296.4 273.3,296.4 273.3,237.4" fill="none" stroke="#52514e" stroke-dasharray="4 3"/>
+<text x="279.3" y="270.9" fill="#52514e">теория p = 2</text>
+</svg>

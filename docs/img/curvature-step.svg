@@ -1,0 +1,69 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Кривизна из метрики: ошибка против шага разности</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Кривизна из метрики: ошибка против шага разности</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>шаг h, доля размера координаты</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>относительная ошибка</text>
+<text x='84' y='416' class='cap'>Шварцшильд, r = 7M. Тест «curvature: Schwarzschild…» (RF_PLOT_DIR=… rf_tests, tests/CurvatureTests.cpp)</text>
+<line x1='84' x2='736' y1='337.0' y2='337.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='341.0' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-12</tspan></text>
+<line x1='84' x2='736' y1='299.0' y2='299.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='303.0' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-11</tspan></text>
+<line x1='84' x2='736' y1='261.1' y2='261.1' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='265.1' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-10</tspan></text>
+<line x1='84' x2='736' y1='223.2' y2='223.2' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='227.2' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-9</tspan></text>
+<line x1='84' x2='736' y1='185.2' y2='185.2' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='189.2' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-8</tspan></text>
+<line x1='84' x2='736' y1='147.3' y2='147.3' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='151.3' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-7</tspan></text>
+<line x1='84' x2='736' y1='109.4' y2='109.4' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='113.4' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-6</tspan></text>
+<line x1='84' x2='736' y1='71.4' y2='71.4' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='75.4' text-anchor='end' class='tick'>1·10<tspan dy='-6' font-size='10'>-5</tspan></text>
+<line x1='149.1' x2='149.1' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='149.1' y='364' text-anchor='middle' class='tick'>5·10<tspan dy='-6' font-size='10'>-5</tspan></text>
+<line x1='210.5' x2='210.5' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='210.5' y='364' text-anchor='middle' class='tick'>1·10<tspan dy='-6' font-size='10'>-4</tspan></text>
+<line x1='272.0' x2='272.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='272.0' y='364' text-anchor='middle' class='tick'>2·10<tspan dy='-6' font-size='10'>-4</tspan></text>
+<line x1='353.2' x2='353.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='353.2' y='364' text-anchor='middle' class='tick'>5·10<tspan dy='-6' font-size='10'>-4</tspan></text>
+<line x1='414.7' x2='414.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='414.7' y='364' text-anchor='middle' class='tick'>0,001</text>
+<line x1='476.1' x2='476.1' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='476.1' y='364' text-anchor='middle' class='tick'>0,002</text>
+<line x1='557.4' x2='557.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='557.4' y='364' text-anchor='middle' class='tick'>0,005</text>
+<line x1='618.8' x2='618.8' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='618.8' y='364' text-anchor='middle' class='tick'>0,01</text>
+<line x1='680.3' x2='680.3' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='680.3' y='364' text-anchor='middle' class='tick'>0,02</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='716.2,67.7 618.8,140.2 512.1,219.6 414.7,291.6 307.9,334.8 210.5,340.3 103.8,303.6' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='716.2' cy='67.7' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='618.8' cy='140.2' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='512.1' cy='219.6' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='414.7' cy='291.6' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='307.9' cy='334.8' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='210.5' cy='340.3' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='103.8' cy='303.6' r='4.5' fill='var(--s0)' stroke='var(--surface)' stroke-width='2'/>
+<polyline points='716.2,68.5 618.8,141.0 512.1,220.4 414.7,249.5 307.9,211.7 210.5,190.8 103.8,140.2' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<circle cx='716.2' cy='68.5' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='618.8' cy='141.0' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='512.1' cy='220.4' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='414.7' cy='249.5' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='307.9' cy='211.7' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='210.5' cy='190.8' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<circle cx='103.8' cy='140.2' r='4.5' fill='var(--s1)' stroke='var(--surface)' stroke-width='2'/>
+<polygon points='618.8,160.8 716.2,160.8 716.2,88.5' fill='none' stroke='var(--muted)' stroke-width='1.2'/>
+<text x='710.2' y='128.7' text-anchor='end' class='cap'>наклон 4</text>
+<line x1='414.7' y1='64' x2='414.7' y2='344' stroke='var(--muted)' stroke-dasharray='3 4'/>
+<text x='420.7' y='78' class='cap'>шаг по умолчанию 10⁻³</text>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>символы Кристоффеля Γ</text>
+<line x1='279.2' x2='305.2' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='311.2' y='51' font-size='12.5'>инвариант Кречмана K = R_abcd R^abcd</text>
+</svg>

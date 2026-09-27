@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 350" width="760" height="350" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="760" height="350" fill="#ffffff"/>
+<text x="380" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Верхний индекс — стрелка, нижний — линейка, свёртка — сколько делений пересекла стрелка</text>
+
+<!-- 1: the vector -->
+<text x="125" y="62" text-anchor="middle" font-weight="600" fill="#111827">вектор v^a (индекс сверху)</text>
+<text x="125" y="80" text-anchor="middle" fill="#4b5563" font-size="12">стрелка: куда и насколько</text>
+<line x1="60" y1="250" x2="182" y2="130" stroke="#2563eb" stroke-width="3"/>
+<path d="M190 122 L175 128 L184 138 Z" fill="#2563eb"/>
+<circle cx="60" cy="250" r="4" fill="#2563eb"/>
+<text x="125" y="290" text-anchor="middle" fill="#374151" font-size="12">скорость, смещение, импульс света</text>
+
+<!-- 2: the covector -->
+<text x="380" y="62" text-anchor="middle" font-weight="600" fill="#111827">ковектор w_a (индекс снизу)</text>
+<text x="380" y="80" text-anchor="middle" fill="#4b5563" font-size="12">линейка: плоскости-деления, чем гуще, тем больше</text>
+<g stroke="#dc2626" stroke-width="2">
+<line x1="300" y1="250" x2="340" y2="110"/><line x1="335" y1="250" x2="375" y2="110"/><line x1="370" y1="250" x2="410" y2="110"/><line x1="405" y1="250" x2="445" y2="110"/><line x1="440" y1="250" x2="480" y2="110"/>
+</g>
+<text x="380" y="290" text-anchor="middle" fill="#374151" font-size="12">градиент: линии уровня высоты, температуры, фазы</text>
+
+<!-- 3: contraction -->
+<text x="635" y="62" text-anchor="middle" font-weight="600" fill="#111827">свёртка w_a v^a — число</text>
+<text x="635" y="80" text-anchor="middle" fill="#4b5563" font-size="12">сколько делений пересекла стрелка</text>
+<g stroke="#dc2626" stroke-width="2" opacity="0.85">
+<line x1="560" y1="250" x2="600" y2="110"/><line x1="595" y1="250" x2="635" y2="110"/><line x1="630" y1="250" x2="670" y2="110"/><line x1="665" y1="250" x2="705" y2="110"/><line x1="700" y1="250" x2="740" y2="110"/>
+</g>
+<line x1="560" y1="200" x2="665" y2="176" stroke="#2563eb" stroke-width="3"/>
+<path d="M674 174 L659 170 L662 183 Z" fill="#2563eb"/>
+<circle cx="560" cy="200" r="4" fill="#2563eb"/>
+<circle cx="575" cy="197" r="5" fill="none" stroke="#111827" stroke-width="1.6"/>
+<circle cx="613" cy="188" r="5" fill="none" stroke="#111827" stroke-width="1.6"/>
+<circle cx="650" cy="179" r="5" fill="none" stroke="#111827" stroke-width="1.6"/>
+<text x="635" y="290" text-anchor="middle" fill="#111827" font-size="13" font-weight="600">w_a v^a = 3</text>
+<text x="380" y="318" text-anchor="middle" fill="#4b5563" font-size="12">Стрелку можно измерить только линейкой: поэтому повторяющийся индекс — один сверху, один снизу.</text>
+<text x="380" y="336" text-anchor="middle" fill="#4b5563" font-size="12">Метрика g_ab превращает стрелку в линейку: v_a = g_ab v^b.</text>
+</svg>

@@ -23,13 +23,14 @@ void MagneticField::reset(int nx, int ny, int nz, float dx, const Vector3& origi
     nx_ = nx; ny_ = ny; nz_ = nz;
     dx_ = dx;
     origin_ = origin;
-    bx.init(nx + 1, ny, nz, {0.0f, 0.5f, 0.5f}, applied.x);
-    by.init(nx, ny + 1, nz, {0.5f, 0.0f, 0.5f}, applied.y);
-    bz.init(nx, ny, nz + 1, {0.5f, 0.5f, 0.0f}, applied.z);
+    bx.init(nx + 1, ny, nz, {0.0f, 0.5f, 0.5f});
+    by.init(nx, ny + 1, nz, {0.5f, 0.0f, 0.5f});
+    bz.init(nx, ny, nz + 1, {0.5f, 0.5f, 0.0f});
     for (Field3* e : {&ex_, &jx_}) e->init(nx, ny + 1, nz + 1, {0.5f, 0.0f, 0.0f});
     for (Field3* e : {&ey_, &jy_}) e->init(nx + 1, ny, nz + 1, {0.0f, 0.5f, 0.0f});
     for (Field3* e : {&ez_, &jz_}) e->init(nx + 1, ny + 1, nz, {0.0f, 0.0f, 0.5f});
     b0x_ = b0y_ = b0z_ = Field3();
+    if (applied.x != 0 || applied.y != 0 || applied.z != 0) initBackground(); // the coils' uniform field is background
     etaCell_.clear();
     etaX_ = etaY_ = etaZ_ = Field3();
     etaMax_ = 0;
@@ -103,11 +104,16 @@ void MagneticField::addFromPotential(const std::function<Vector3(const Vector3&)
 }
 
 void MagneticField::setBackgroundFromPotential(const std::function<Vector3(const Vector3&)>& A) {
-    b0x_.init(bx.nx, bx.ny, bx.nz, bx.offset);
-    b0y_.init(by.nx, by.ny, by.nz, by.offset);
-    b0z_.init(bz.nx, bz.ny, bz.nz, bz.offset);
+    initBackground();
     addCurl(A, b0x_, b0y_, b0z_);
     updateTotal();
+}
+
+// The background B0 on the faces: the coils' uniform `applied` field (a potential's curl is added on top).
+void MagneticField::initBackground() {
+    b0x_.init(bx.nx, bx.ny, bx.nz, bx.offset, applied.x);
+    b0y_.init(by.nx, by.ny, by.nz, by.offset, applied.y);
+    b0z_.init(bz.nx, bz.ny, bz.nz, bz.offset, applied.z);
 }
 
 void MagneticField::addCurl(const std::function<Vector3(const Vector3&)>& A, Field3& bx, Field3& by, Field3& bz) const {
@@ -281,15 +287,34 @@ void MagneticField::applyLorentzForce(Field3& u, Field3& v, Field3& w, const std
     }, 1);
 }
 
+// Joule heat J^2 / sigma = mu0 eta J^2, counted where the scheme spends the field's energy: on the
+// edges, and only on the FREE ones. The field's energy falls by exactly sum over free edges of
+// mu0 eta J^2 dx^3 per second (summation by parts of dW/dt = -sum E.J dV); an edge on a perfectly
+// conducting wall carries E = 0 and does no work. Each edge's heat goes in equal quarters to its
+// four cells. (Before, the heat came from the cell-averaged J, wall edges included: 3.2 % too much
+// heat on a 32-cell box, tests/ActionTests.cpp.) The numerical dissipation of the advection
+// (numericalDissipation) removes field energy too; that energy is not turned into heat.
 void MagneticField::jouleHeating(std::vector<float>& heat, float dt) {
-    // J^2 / sigma = mu0 eta J^2 per cell.
     heat.assign(size_t(nx_) * ny_ * nz_, 0.0f);
+    const float eta0 = resistivity();
+    const bool mapped = !etaCell_.empty();
+    // mu0 eta J^2 / 4 of one edge (0 on a wall), a quarter for each of its four cells.
+    auto quarter = [&](const std::vector<uint8_t>& fixed, const Field3& J, const Field3& eta, int i, int j, int k) {
+        const size_t e = J.idx(i, j, k);
+        if (fixed[e]) return 0.0f;
+        return 0.25f * kMu0 * (mapped ? eta.d[e] : eta0) * J.d[e] * J.d[e];
+    };
     parallelFor(nz_, [&](int k) {
         for (int j = 0; j < ny_; ++j)
             for (int i = 0; i < nx_; ++i) {
-                const size_t c = size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k));
-                const float eta = etaCell_.empty() ? resistivity() : etaCell_[c];
-                heat[c] = dt * kMu0 * eta * length2(cellCurrent(i, j, k));
+                float p = 0; // the cell's twelve edges: four along each axis
+                for (int a = 0; a <= 1; ++a)
+                    for (int b = 0; b <= 1; ++b) {
+                        p += quarter(fixedEx_, jx_, etaX_, i, j + a, k + b);
+                        p += quarter(fixedEy_, jy_, etaY_, i + a, j, k + b);
+                        p += quarter(fixedEz_, jz_, etaZ_, i + a, j + b, k);
+                    }
+                heat[size_t(i) + size_t(nx_) * (size_t(j) + size_t(ny_) * size_t(k))] = dt * p;
             }
     }, 1);
 }
@@ -375,11 +400,27 @@ float MagneticField::maxField() const {
     }, 1);
 }
 
+// The cell's field B0 + B1, each part averaged from its two faces, added and squared in double: a
+// strong background carrying a weak wave then loses nothing to float rounding. Summed in float, a
+// 0.01 T field with a wave 4 million times weaker in energy lost the wave's energy change: the
+// Alfven test read 92.5 % or 79 % "energy kept" depending on FMA contraction, for a true 98.4 %.
 double MagneticField::energy() const {
+    const bool background = !b0x_.d.empty();
+    auto mean = [](const Field3& f, int i0, int j0, int k0, int i1, int j1, int k1) {
+        return 0.5 * (double(f.at(i0, j0, k0)) + double(f.at(i1, j1, k1)));
+    };
     double e = 0;
     for (int k = 0; k < nz_; ++k)
         for (int j = 0; j < ny_; ++j)
-            for (int i = 0; i < nx_; ++i) e += length2(cellField(i, j, k));
+            for (int i = 0; i < nx_; ++i) {
+                double b[3] = {mean(bx, i, j, k, i + 1, j, k), mean(by, i, j, k, i, j + 1, k), mean(bz, i, j, k, i, j, k + 1)};
+                if (background) {
+                    b[0] += mean(b0x_, i, j, k, i + 1, j, k);
+                    b[1] += mean(b0y_, i, j, k, i, j + 1, k);
+                    b[2] += mean(b0z_, i, j, k, i, j, k + 1);
+                }
+                e += b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+            }
     return e * double(dx_) * dx_ * dx_ / (2.0 * kMu0);
 }
 

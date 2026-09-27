@@ -13,7 +13,8 @@
 | [Quaternion.h](../src/math/Quaternion.h) | `Quaternion`, `slerp`, `extractRotation` |
 | [Matrix3x3.h](../src/math/Matrix3x3.h) | `Matrix3x3`, `symmetricEigen` (Якоби 3×3) |
 | [Matrix4x4.h](../src/math/Matrix4x4.h) | аффинные преобразования, `perspective`, `lookAt`, `inverse` |
-| [MatrixNxN.h](../src/math/MatrixNxN.h) | `MatrixNxN` (LU, Холецкий, Якоби), `solveSmall` (n ≤ 4) |
+| [MatrixNxN.h](../src/math/MatrixNxN.h) | `MatrixNxN` (LU, Холецкий, Якоби, QR, SVD, `expm`, `outer`, `kronecker`), `solveSmall` (n ≤ 4) |
+| [Tensor.h](../src/math/Tensor.h) | `Tensor` любого ранга, `einstein` (правило Эйнштейна), `raise`, `lower`, `outer`, `permute`, `trace` — раздел 1.9 |
 | [AABB.h](../src/math/AABB.h) | ограничивающий параллелепипед, slab-тест луча |
 
 ---
@@ -58,7 +59,7 @@ $$
 
 При малом угле отношение $\sin\theta/\theta$ даёт $0/0$. Код переходит на ряды Тейлора при $\theta < 10^{-2}$:
 
-[src/math/Quaternion.h:96](../src/math/Quaternion.h#L96)
+[src/math/Quaternion.h:97](../src/math/Quaternion.h#L97)
 ```cpp
 Quaternion integrated(const Vector3& omega, float dt) const {
     const float th = 0.5f * dt * std::sqrt(omega.x * omega.x + omega.y * omega.y + omega.z * omega.z);
@@ -68,8 +69,8 @@ Quaternion integrated(const Vector3& omega, float dt) const {
         c = 1.0f - t2 * (0.5f - t2 / 24.0f);           // 1 - th^2/2 + th^4/24
         sinc = 1.0f - t2 * (1.0f / 6.0f - t2 / 120.0f); // 1 - th^2/6 + th^4/120
     } else {
-        c = std::cos(th);
-        sinc = std::sin(th) / th;
+        c = rf::cos(th);
+        sinc = rf::sin(th) / th;
     }
     const float k = 0.5f * dt * sinc; // vector part = omega/|omega| * sin(th) = omega * dt/2 * sinc
     Quaternion e{c, omega.x * k, omega.y * k, omega.z * k};
@@ -77,7 +78,7 @@ Quaternion integrated(const Vector3& omega, float dt) const {
 }
 ```
 
-Обратная операция — **логарифм** `log()` ([Quaternion.h:80](../src/math/Quaternion.h#L80)): вектор поворота $\mathbf r = \theta\,\mathbf n$ по кратчайшей дуге (при $w < 0$ кватернион сначала меняет знак). Логарифм нужен везде, где ошибку ориентации надо превратить в вектор: сочленения, блокировка вращения контактов, CCD.
+Обратная операция — **логарифм** `log()` ([Quaternion.h:81](../src/math/Quaternion.h#L81)): вектор поворота $\mathbf r = \theta\,\mathbf n$ по кратчайшей дуге (при $w < 0$ кватернион сначала меняет знак). Логарифм нужен везде, где ошибку ориентации надо превратить в вектор: сочленения, блокировка вращения контактов, CCD.
 
 ### Сферическая интерполяция (slerp)
 
@@ -85,7 +86,7 @@ $$
 \operatorname{slerp}(a, b, t) = \frac{\sin((1-t)\Omega)}{\sin\Omega}\,a + \frac{\sin(t\Omega)}{\sin\Omega}\,b, \qquad \cos\Omega = a\cdot b.
 $$
 
-[src/math/Quaternion.h:116](../src/math/Quaternion.h#L116)
+[src/math/Quaternion.h:117](../src/math/Quaternion.h#L117)
 ```cpp
 inline Quaternion slerp(const Quaternion& a, Quaternion b, float t) {
     float c = dot(a, b);
@@ -94,8 +95,8 @@ inline Quaternion slerp(const Quaternion& a, Quaternion b, float t) {
         Quaternion r{a.w + (b.w - a.w) * t, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t};
         return r.normalized();
     }
-    float theta = std::acos(c);
-    float wa = std::sin((1 - t) * theta) / std::sin(theta), wb = std::sin(t * theta) / std::sin(theta);
+    float theta = rf::acos(c);
+    float wa = rf::sin((1 - t) * theta) / rf::sin(theta), wb = rf::sin(t * theta) / rf::sin(theta);
     return Quaternion{a.w * wa + b.w * wb, a.x * wa + b.x * wb, a.y * wa + b.y * wb, a.z * wa + b.z * wb}.normalized();
 }
 ```
@@ -113,7 +114,7 @@ $$
 q \leftarrow \exp(\boldsymbol\omega)\, q .
 $$
 
-[src/math/Quaternion.h:132](../src/math/Quaternion.h#L132)
+[src/math/Quaternion.h:133](../src/math/Quaternion.h#L133)
 ```cpp
 inline Quaternion extractRotation(const Matrix3x3& A, Quaternion q, int iterations = 20) {
     for (int it = 0; it < iterations; ++it) {
@@ -257,7 +258,7 @@ $$
 
 где $N$ — число примитивов, $S$ — площадь поверхности бокса. Перебирать все возможные разрезы дорого, поэтому центроиды раскладываются по **12 корзинам** вдоль каждой оси, и оцениваются 11 разрезов между корзинами за один проход вперёд и один назад:
 
-[src/spatial/BVH.cpp:68](../src/spatial/BVH.cpp#L68)
+[src/spatial/BVH.cpp:69](../src/spatial/BVH.cpp#L69)
 ```cpp
 for (int b = 0; b < kBins - 1; ++b) {
     acc.expand(binBox[b]);
@@ -288,7 +289,7 @@ for (int b = kBins - 1; b > 0; --b) {
 
 С такими нормалями знак $\operatorname{sign}\big((\mathbf p - \mathbf p_{closest})\cdot\mathbf n_{pseudo}\big)$ точен для замкнутого меша. Функция `closestPtTri` (Ericson, *Real-Time Collision Detection*, §5.1.5) возвращает, какой элемент ближайший: грань, одна из вершин или одно из рёбер.
 
-[src/spatial/BVH.cpp:272](../src/spatial/BVH.cpp#L272)
+[src/spatial/BVH.cpp:286](../src/spatial/BVH.cpp#L286)
 ```cpp
 Vector3 N;
 const auto& tri = tris_[bestTri];
@@ -366,6 +367,108 @@ while (!nodes_[index].isLeaf()) {
 
 ---
 
+## 1.9 Тензоры и правило Эйнштейна
+
+Язык природы — математика, и у этого языка есть грамматика: правило, по которому числа можно складывать и перемножать так, чтобы ответ не зависел от того, как мы нарисовали оси координат. Эта грамматика — тензоры. Каждое понятие ниже идёт в одном порядке: идея простыми словами, картинка, формула, код, тест, какую физику оно открывает.
+
+### Тензор: машина, которая берёт направления и возвращает число
+
+**Идея.** Тензор — это машина с несколькими входами. В каждый вход вставляют направление, на выходе одно число, и машина линейна по каждому входу: вдвое длиннее стрелка — вдвое больше ответ. Входы бывают двух сортов. **Верхний индекс — стрелка**: скорость, смещение, импульс света («куда и насколько»). **Нижний индекс — линейка**: стопка параллельных плоскостей-делений, как линии уровня на карте высот («насколько быстро меняется»). Стрелку измеряют линейкой: сколько делений она пересекла, такое и число.
+
+**Картинка.**
+
+![Стрелка, линейка и свёртка](img/tensor-arrow-ruler.svg)
+
+**Формула.** У тензора $T^{a}{}_{bc}$ один вход-стрелка и два входа-линейки; в $n$ измерениях у него $n^3$ чисел-компонент. Скорость — $v^a$, градиент температуры — $\partial_a T$, метрика — $g_{ab}$ (два нижних: она берёт две стрелки и возвращает их скалярное произведение), символы Кристоффеля — $\Gamma^{l}{}_{mn}$, кривизна — $R^{r}{}_{smn}$.
+
+**Код.** Класс `Tensor` хранит размерность, строку вариантности (по символу на индекс: `^` сверху, `_` снизу, `"^__"` для $\Gamma^{l}{}_{mn}$) и компоненты подряд: [src/math/Tensor.h](../src/math/Tensor.h). Ранг и размерность задаются при выполнении, без шаблонов.
+
+**Тест.** `RF_TEST="math: tensors"`.
+
+**Физика.** Тензор одинаково правдив в любых координатах: если он равен нулю в одних, он равен нулю во всех. Поэтому законы природы пишут тензорами. На этом стоит общая теория относительности (гл. 8), механика сплошной среды (напряжения $\sigma_{ij}$, гл. 3) и электродинамика ($F_{\mu\nu}$).
+
+### Правило Эйнштейна: повторённая буква — суммирование
+
+**Идея.** Эйнштейну надоело писать знак суммы, и он договорился: если буква встречается в произведении дважды, один раз сверху и один раз снизу, по ней суммируют. «Один сверху, один снизу» — не прихоть, а смысл: стрелку можно измерить только линейкой. Две стрелки без линейки не дают числа, которое не зависит от координат.
+
+**Картинка.** Та же: $w_a v^a$ — сколько делений линейки $w$ пересекла стрелка $v$.
+
+**Формула.**
+
+$$
+w_a v^a \equiv \sum_{a=0}^{n-1} w_a v^a, \qquad
+C^{a} = A^{a}{}_{bc}\,B^{bc} \equiv \sum_{b}\sum_{c} A^{a}{}_{bc}\,B^{bc}.
+$$
+
+Свободные буквы (встречаются один раз) остаются в ответе, повторённые исчезают. Буква дважды сверху — ошибка: сначала опустите один индекс метрикой.
+
+**Код.** Функция `einstein(формула, тензоры…)` принимает формулу текстом, как её пишут на доске: `"^a_bc ^bc -> ^a"`. Маркер `^` или `_` действует на буквы после него, пробел разделяет тензоры, после `->` идут индексы ответа. Проверка правила — [Tensor.cpp:219](../src/math/Tensor.cpp#L219). Если индекс дважды сверху, `einstein` отказывается с сообщением «индекс b дважды сверху: свёртка по Эйнштейну требует одного верхнего и одного нижнего; опустите индекс метрикой». Сама сумма — обход всех значений всех букв, как одометр:
+
+[src/math/Tensor.cpp:309](../src/math/Tensor.cpp#L309)
+```cpp
+do { // every value of every letter: the sum over the repeated ones happens by adding up
+    double product = 1.0;
+    for (size_t i = 0; i < inputs.size(); ++i) product *= inputs[i]->data()[offsetOf(access[i], value)];
+    result.data()[offsetOf(outAccess, value)] += product;
+} while (nextIndex(value, dim));
+```
+
+**Тест.** `RF_TEST="math: tensors"`: $A^{a}{}_{bc}B^{bc}$ через `einstein` и через явные циклы совпадают до $5.6\cdot10^{-17}$; след $T^{a}{}_{a}$ тремя способами одинаков; четыре неправильные формулы отвергнуты: индекс дважды сверху, пропущенный свободный индекс, неверная вариантность, индекс, сменивший положение.
+
+**Физика.** Уравнения гл. 8 записаны в коде так же, как в учебнике. Например, символы Кристоффеля:
+
+[src/relativity/Curvature.cpp:96](../src/relativity/Curvature.cpp#L96)
+```cpp
+return einstein("^ls _smn -> ^l_mn", ginv, B) * 0.5;
+```
+
+### Метрика: переводчик между стрелками и линейками
+
+**Идея.** Метрика $g_{ab}$ — линейка, встроенная в само пространство: она говорит, какой длины стрелка. Она же превращает стрелку в линейку (опускает индекс), а обратная метрика $g^{ab}$ превращает линейку в стрелку (поднимает).
+
+**Картинка.** Нижняя строка рисунка выше: $v_a = g_{ab}\,v^b$.
+
+**Формула.**
+
+$$
+ds^2 = g_{ab}\,dx^a dx^b, \qquad v_a = g_{ab}\,v^b, \qquad w^a = g^{ab}\,w_b, \qquad g^{ab}g_{bc} = \delta^a{}_c .
+$$
+
+**Код.** `raise(t, слот, g^{ab})` и `lower(t, слот, g_{ab})` — [Tensor.cpp:123](../src/math/Tensor.cpp#L123) и [Tensor.cpp:129](../src/math/Tensor.cpp#L129); сами они написаны через `einstein`. Там же `outer` (тензорное произведение, [строка 94](../src/math/Tensor.cpp#L94)), `permute` (перестановка индексов, [строка 135](../src/math/Tensor.cpp#L135)), `symmetrize` и `antisymmetrize`, `trace` (свёртка верхнего индекса с нижним, [строка 166](../src/math/Tensor.cpp#L166)).
+
+**Тест.** `RF_TEST="math: tensors"`: поднять после опускания — исходный тензор до $1.1\cdot10^{-16}$; симметричная плюс антисимметричная часть — исходный тензор.
+
+**Физика.** Метрика и есть гравитация в ОТО: кривизна, приливы и орбиты выводятся из $g_{ab}$ (гл. 8, «Кривизна из метрики»). В плоском пространстве в декартовых осях $g_{ab} = \mathrm{diag}(-1, 1, 1, 1)$, и верхние компоненты отличаются от нижних только знаком времени.
+
+### Матрицы: разложения и экспонента
+
+**Идея.** Матрица — тензор с одним верхним и одним нижним индексом: она берёт стрелку и возвращает стрелку. Всякую матрицу можно разобрать на понятные части. **QR**: повернуть так, чтобы матрица стала треугольной. **SVD**: любая матрица — это поворот, растяжение вдоль осей и ещё поворот. **Экспонента** $e^{\mathbf A}$ решает уравнение $\dot{\mathbf x} = \mathbf A\mathbf x$ за один раз, а экспонента кососимметричной матрицы — это поворот.
+
+**Картинка.** «Поворот, растяжение, поворот» — формула SVD ниже читается справа налево: $\mathbf V^{\mathsf T}$ поворачивает, $\boldsymbol\Sigma$ растягивает вдоль осей, $\mathbf U$ поворачивает снова.
+
+**Формула.**
+
+$$
+\mathbf A = \mathbf U\,\boldsymbol\Sigma\,\mathbf V^{\mathsf T},\qquad
+\mathbf A = \mathbf Q\mathbf R,\qquad
+e^{\mathbf A} = \sum_{k\ge0}\frac{\mathbf A^k}{k!},\qquad
+e^{[\boldsymbol\omega]_\times} = \mathbf I + \sin\theta\,[\mathbf n]_\times + (1-\cos\theta)[\mathbf n]_\times^2 .
+$$
+
+Последнее равенство — формула Родрига: $\theta = |\boldsymbol\omega|$, $\mathbf n = \boldsymbol\omega/\theta$. Экспонента считается масштабированием и возведением в квадрат с аппроксимацией Паде порядка 13 (Higham 2005): $e^{\mathbf A} = \big(e^{\mathbf A/2^s}\big)^{2^s}$.
+
+**Код.** [src/math/MatrixFunctions.cpp](../src/math/MatrixFunctions.cpp): `outer` и `kronecker` ([строка 23](../src/math/MatrixFunctions.cpp#L23)), QR отражениями Хаусхолдера ([строка 66](../src/math/MatrixFunctions.cpp#L66)), SVD односторонним методом Якоби ([строка 132](../src/math/MatrixFunctions.cpp#L132)), `expm` ([строка 164](../src/math/MatrixFunctions.cpp#L164)).
+
+**Тест.** `RF_TEST="math: outer"`: $|\mathbf Q\mathbf R - \mathbf A| = 4.4\cdot10^{-16}$, $|\mathbf U\boldsymbol\Sigma\mathbf V^{\mathsf T} - \mathbf A| = 4.4\cdot10^{-16}$; экспонента кососимметричной матрицы совпадает с формулой Родрига до $1.1\cdot10^{-16}$ и с поворотом нашим кватернионом до $1.1\cdot10^{-7}$ (кватернион хранится во `float`); $e^{\mathrm{diag}(10,-4,2)}$ — до $8.7\cdot10^{-15}$ относительно.
+
+**Физика.** Экспонента — точный шаг для линейных систем (колебания, затухание) и отображение «угловая скорость → поворот» твёрдого тела. На ней строятся вариационные интеграторы вращения, которые убирают дрейф момента импульса (открытый изъян гл. 2 и 11). SVD даёт ранг и число обусловленности: сколько цифр ответа можно потерять при решении системы.
+
+### Границы
+
+Слой тензоров — инструмент анализа и обучения, а не горячий цикл решателя: он выделяет память и сообщает об ошибке исключением `std::invalid_argument`. Решатели твёрдых тел, частиц и газа его не используют. Обход всех значений всех букв стоит $n^k$ шагов ($k$ — число разных букв): $4^8 = 65\,536$ для инварианта Кречмана в четырёх измерениях, это миллисекунды.
+
+---
+
 ## Проверка
 
 | Тест (`RF_TEST=...`) | Что проверяет |
@@ -375,6 +478,8 @@ while (!nodes_[index].isLeaf()) {
 | `bvh` | 2000 случайных точек: ближайшая точка совпадает с перебором, знак расстояния совпадает с уравнением эллипсоида (0 ошибок); луч по сфере, $t = 4$ |
 | `dynamic AABB tree` | инварианты дерева (`validate()`), запросы = перебор, высота ≤ $2\log_2 n + 2$, дрожащие объекты не трогают дерево |
 | `broad phase` | BVH, SAP и AABB-дерево дают **ровно те же пары**, что перебор, 200 кадров подряд |
+| `math: tensors` | правило Эйнштейна против явных циклов ($5.6\cdot10^{-17}$), след тремя способами, поднять и опустить индекс, симметричная и антисимметричная части; отказ на неправильных формулах |
+| `math: outer` | внешнее и кронекерово произведения, QR, SVD, экспонента матрицы против формулы Родрига и кватерниона |
 
 ## Литература
 
@@ -384,3 +489,7 @@ while (!nodes_[index].isLeaf()) {
 - J. A. Bærentzen, H. Aanæs. *Signed Distance Computation Using the Angle Weighted Pseudonormal.* IEEE TVCG 11(3), 2005.
 - C. Ericson. *Real-Time Collision Detection.* Morgan Kaufmann, 2005.
 - E. Catto. *Dynamic Bounding Volume Hierarchies.* GDC 2019.
+- A. Einstein. *Die Grundlage der allgemeinen Relativitätstheorie.* Annalen der Physik 49 (1916) 769, §5 — соглашение о суммировании.
+- C. W. Misner, K. S. Thorne, J. A. Wheeler. *Gravitation.* Freeman, 1973, гл. 2–3 (векторы как стрелки, 1-формы как стопки плоскостей).
+- N. J. Higham. *The Scaling and Squaring Method for the Matrix Exponential Revisited.* SIAM J. Matrix Anal. Appl. 26(4), 2005, 1179.
+- M. R. Hestenes. *Inversion of Matrices by Biorthogonalization.* J. SIAM 6 (1958) 51; J. Demmel, K. Veselić. *Jacobi's Method Is More Accurate than QR.* SIAM J. Matrix Anal. Appl. 13 (1992) 1204.

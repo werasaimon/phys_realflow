@@ -1,0 +1,37 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Магнитная энергия уходит в джоулево тепло</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Магнитная энергия уходит в джоулево тепло</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>время, мс</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>энергия, мДж</text>
+<text x='84' y='404' class='cap'>Bz = B₁cos(πx), σ = 10⁵ См/м, стенки — идеальные проводники. Тест «action: magnetic energy…» (RF_PLOT_DIR=…</text>
+<text x='84' y='419' class='cap'>rf_tests, tests/ActionTests.cpp)</text>
+<line x1='84' x2='736' y1='344.0' y2='344.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='348.0' text-anchor='end' class='tick'>0</text>
+<line x1='84' x2='736' y1='259.3' y2='259.3' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='263.3' text-anchor='end' class='tick'>2</text>
+<line x1='84' x2='736' y1='174.6' y2='174.6' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='178.6' text-anchor='end' class='tick'>4</text>
+<line x1='84' x2='736' y1='89.9' y2='89.9' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='93.9' text-anchor='end' class='tick'>6</text>
+<line x1='84.0' x2='84.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='84.0' y='364' text-anchor='middle' class='tick'>0</text>
+<line x1='301.3' x2='301.3' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='301.3' y='364' text-anchor='middle' class='tick'>1</text>
+<line x1='518.7' x2='518.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='518.7' y='364' text-anchor='middle' class='tick'>2</text>
+<line x1='736.0' x2='736.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='736.0' y='364' text-anchor='middle' class='tick'>3</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='84.0,344.0 105.7,328.7 127.5,314.3 149.2,300.7 170.9,287.7 192.7,275.3 214.4,263.3 236.1,251.8 257.9,240.8 279.6,230.1 301.3,219.8 323.1,209.9 344.8,200.3 366.5,191.1 388.3,182.1 410.0,173.5 431.7,165.1 453.5,157.0 475.2,149.2 496.9,141.6 518.7,134.3 540.4,127.2 562.1,120.4 583.9,113.7 605.6,107.3 627.3,101.1 649.1,95.0 670.8,89.2 692.5,83.5 714.3,78.0 736.0,72.7' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<polyline points='84.0,344.0 105.7,328.6 127.5,314.3 149.2,300.7 170.9,287.7 192.7,275.3 214.4,263.4 236.1,251.9 257.9,240.8 279.6,230.2 301.3,219.9 323.1,210.0 344.8,200.5 366.5,191.2 388.3,182.3 410.0,173.7 431.7,165.3 453.5,157.2 475.2,149.4 496.9,141.9 518.7,134.6 540.4,127.5 562.1,120.6 583.9,114.0 605.6,107.5 627.3,101.3 649.1,95.3 670.8,89.5 692.5,83.8 714.3,78.3 736.0,73.0' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<polyline points='84.0,344.0 105.7,328.2 127.5,313.5 149.2,299.5 170.9,286.2 192.7,273.5 214.4,261.2 236.1,249.5 257.9,238.1 279.6,227.2 301.3,216.6 323.1,206.4 344.8,196.5 366.5,187.0 388.3,177.8 410.0,168.9 431.7,160.2 453.5,151.9 475.2,143.8 496.9,135.9 518.7,128.3 540.4,121.0 562.1,113.8 583.9,106.9 605.6,100.2 627.3,93.7 649.1,87.4 670.8,81.3 692.5,75.3 714.3,69.6 736.0,64.0' fill='none' stroke='var(--s2)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='2 3'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>потеряно магнитной энергии</text>
+<line x1='315.2' x2='341.2' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='347.2' y='51' font-size='12.5'>∫ J²/σ по свободным рёбрам</text>
+<line x1='546.4' x2='572.4' y1='47' y2='47' stroke='var(--s2)' stroke-width='2.5' stroke-dasharray='2 3'/>
+<text x='578.4' y='51' font-size='12.5'>jouleHeating() по ячейкам</text>
+</svg>

@@ -23,7 +23,9 @@ public:
 
 private:
     // Position control (the vertical field under feedback): its state.
-    float bv_ = 0, shift_ = 0, controlTime_ = 0;
+    float bv_ = 0, shift_ = 0;
+    double controlTime_ = 0; // the gas clock at the last control step [s]
+    float shiftIntegral_ = 0; // time integral of the shift [m s] (the PID's I part)
 };
 
 } // namespace rf

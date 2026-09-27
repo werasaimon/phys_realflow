@@ -11,12 +11,14 @@
 #include "scene/Magnets.h"
 #include "scene/Simulation.h"
 
+#include <algorithm>
+
 namespace rf {
 
 namespace {
 
-bool hasLiquid(const SceneGraph& g) {
-    for (const Entity& e : g.entities)
+bool hasLiquid(const std::vector<Entity>& entities) {
+    for (const Entity& e : entities)
         if (e.visible && e.liquid.enabled) return true;
     return false;
 }
@@ -46,8 +48,8 @@ std::string leftOutMatter(const Entity& e, Matter used) {
     return out;
 }
 
-bool anyVisible(const SceneGraph& g, bool (*has)(const Entity&)) {
-    for (const Entity& e : g.entities)
+bool anyVisible(const std::vector<Entity>& entities, bool (*has)(const Entity&)) {
+    for (const Entity& e : entities)
         if (e.visible && has(e)) return true;
     return false;
 }
@@ -74,9 +76,9 @@ void GraphScene::configure(Simulation& sim) {
     // Fire: a flammable cloth takes heat from the gas, decomposes and burns (the fire sample); the
     // combustion model has to run for that. Cloth in the gas uses the coarser 2-radius spacing of
     // the samples: the grid cannot resolve finer folds anyway.
-    sim.grid.combustion.enabled = anyVisible(graph_, [](const Entity& e) { return e.flammable.enabled; });
-    if (anyVisible(graph_, [](const Entity& e) { return e.cloth.enabled; })) sim.particles.params.clothSpacing = 2.0f;
-    for (const Entity& e : graph_.entities)
+    sim.grid.combustion.enabled = anyVisible(flat_, [](const Entity& e) { return e.flammable.enabled; });
+    if (anyVisible(flat_, [](const Entity& e) { return e.cloth.enabled; })) sim.particles.params.clothSpacing = 2.0f;
+    for (const Entity& e : flat_)
         if (e.visible && e.heat.enabled) { // the first hot entity is the gas's heat source
             sim.grid.source.enabled = true;
             sim.grid.source.center = e.position;
@@ -91,7 +93,7 @@ void GraphScene::build(Simulation& sim) {
     const WorldSettings& w = graph_.world;
     const AABB box({-0.5f * w.size.x, 0.0f, -0.5f * w.size.z}, {0.5f * w.size.x, w.size.y, 0.5f * w.size.z});
     if (w.gas) sim.useGasBox({0.5f, 0.0f, 0.5f}); // floor at y = 0
-    else if (hasLiquid(graph_)) sim.useLiquidTank(box);
+    else if (hasLiquid(flat_)) sim.useLiquidTank(box);
     else sim.useRigidArena(box);
     magnetBody_.clear();
     magnetMoment_.clear();
@@ -101,8 +103,16 @@ void GraphScene::build(Simulation& sim) {
     meta_.clear();
     notes_.clear();
     maxMagnetForce_ = 0;
+    glueBody_.clear();
     sim.particles.emitter.enabled = false; // a liquid emitter switches it on in releaseFromEmitter()
-    for (int i = 0; i < int(graph_.entities.size()); ++i) buildEntity(sim, i);
+    // Every simulated entity (flat_: world poses, instances resolved, array copies); the rigid
+    // members of a glued group are built afterwards, together, as one body.
+    std::vector<uint32_t> glued;
+    for (int i = 0; i < int(flat_.size()); ++i) {
+        if (!gluedMember(i)) buildEntity(sim, i);
+        else if (std::find(glued.begin(), glued.end(), flatGlue_[size_t(i)]) == glued.end()) glued.push_back(flatGlue_[size_t(i)]);
+    }
+    for (uint32_t g : glued) buildGluedGroup(sim, g);
     if (sim.grid.magnetic.enabled) addMagnetFieldToGas(sim);
 }
 
@@ -129,7 +139,7 @@ bool GraphScene::shapeUsable(const Entity& e) {
 // floor); the rigid role without a collider falls back to the Auto collider (noted). Each role has its own add* function that builds its part fresh from the
 // entity's source (the shape or model, EntityShapes.cpp).
 void GraphScene::buildEntity(Simulation& sim, int index) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     std::vector<MetaObject>& meta = meta_[e.id];
     meta.clear();
     if (!e.visible || entityIsGeometryOnly(e) || !shapeUsable(e)) return;
@@ -169,7 +179,7 @@ void GraphScene::buildEntity(Simulation& sim, int index) {
 // still looks like a horse. A fixed body, a plane, and a magnet with no "made of" role do not move
 // (density 0). Returns the body index.
 int GraphScene::addRigid(Simulation& sim, int index) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     const bool fixed = !e.rigid.enabled || e.rigid.fixed || e.shape == ShapeKind::Plane;
     const Quaternion q = entityRotation(e);
     const float density = fixed ? 0.0f : e.rigid.density; // density 0: a static body
@@ -197,7 +207,7 @@ int GraphScene::addRigid(Simulation& sim, int index) {
 // Soft: the shape's surface mesh in the world, filled with particles held by shape matching.
 // Returns its particle group.
 int GraphScene::addSoft(Simulation& sim, int index) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
     return sim.particles.softBodyGroup(body);
 }
@@ -205,7 +215,7 @@ int GraphScene::addSoft(Simulation& sim, int index) {
 // Liquid: the shape's box (turned and moved as the entity) filled with water particles. Returns
 // its particle group.
 int GraphScene::addLiquid(Simulation& sim, int index) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     return sim.particles.addBlock(entityMesh(e, graph_.baseDirectory).bounds());
 }
 
@@ -213,7 +223,7 @@ int GraphScene::addLiquid(Simulation& sim, int index) {
 // moment is given in the entity's frame; the body's own frame may differ (a hull body lives in its
 // principal frame), so it is turned into the body frame once here.
 void GraphScene::addMagnet(Simulation& sim, int index, int body) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     if (body < 0) {
         notes_.push_back(e.name + ": магнит бывает только твёрдым телом");
         return;
@@ -233,7 +243,7 @@ void GraphScene::addMagnet(Simulation& sim, int index, int body) {
 // that is highest in the world after the turn - the rod of a curtain; for a level sheet, the -z edge.
 // Returns its particle group.
 int GraphScene::addCloth(Simulation& sim, int index) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     const Matrix3x3 R = entityRotation(e).toMatrix3x3();
     const float lift = e.shape == ShapeKind::Plane ? 0.0f : 0.5f * e.size.y;
     const Vector3 corner = e.position + R * Vector3(-0.5f * e.size.x, lift, -0.5f * e.size.z);
@@ -262,7 +272,7 @@ int GraphScene::addCloth(Simulation& sim, int index) {
 
 // Emitter: remembered with the body it rides on; releaseFromEmitter() runs it every frame.
 void GraphScene::addEmitter(Simulation& sim, int index, int body) {
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     EmitterRef ref;
     ref.entity = e.id;
     ref.body = body;
@@ -284,7 +294,7 @@ void GraphScene::addEmitter(Simulation& sim, int index, int body) {
 void GraphScene::releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool& liquidDone) const {
     const int index = indexOf(ref.entity);
     if (index < 0) return;
-    const Entity& e = graph_.entities[size_t(index)];
+    const Entity& e = flat_[size_t(index)];
     const EmitterRole& em = e.emitter;
     Vector3 centre = e.position, moving(0.0f);
     Matrix3x3 R = entityRotation(e).toMatrix3x3();
@@ -354,20 +364,47 @@ void GraphScene::afterStep(Simulation& sim) {
     if (!emitters_.empty() && graph_.world.gas) Probe::set("gas/smoke dm3", sim.grid.totalSmoke() * 1000.0f);
 }
 
+// The scene's visible lights, posed in the world, for the viewer's shading (the physics has no use
+// for them). None: the snapshot's list stays empty and the viewer keeps its default light.
+void describeLights(const SceneGraph& g, RenderSnapshot& s) {
+    s.lights.clear();
+    for (const Light& l : g.lights) {
+        if (!effectivelyVisible(g, l)) continue;
+        RenderSnapshot::LightInfo info;
+        Quaternion rotation;
+        worldPose(g, l, info.position, rotation);
+        info.kind = int(l.kind);
+        info.direction = lightDirection(g, l);
+        info.color = l.color;
+        info.intensity = l.intensity;
+        info.range = l.range;
+        info.coneDeg = l.coneDeg;
+        info.softnessDeg = l.softnessDeg;
+        info.shadows = l.shadows;
+        s.lights.push_back(info);
+    }
+}
+
+void GraphScene::setLightsAndCameras(const std::vector<Light>& lights, const std::vector<Camera>& cameras) {
+    graph_.lights = lights;
+    graph_.cameras = cameras;
+}
+
 void GraphScene::describe(const Simulation& sim, RenderSnapshot& s) const {
-    s.info.push_back({"Сущностей", format("%zu", graph_.entities.size())});
+    describeLights(graph_, s);
+    s.info.push_back({"Сущностей", format("%zu", flat_.size())});
     s.info.push_back({"Магнитов", format("%zu", magnetBody_.size())});
     if (!magnetBody_.empty()) s.info.push_back({"Наибольшая магнитная сила", format("%.4g Н", maxMagnetForce_)});
     if (!emitters_.empty()) s.info.push_back({"Излучателей", format("%zu", emitters_.size())});
     // Roles that need the gas, in a world without it: say so instead of doing nothing silently.
     bool needsGas = false;
-    for (const Entity& e : graph_.entities)
+    for (const Entity& e : flat_)
         needsGas |= e.visible && (e.heat.enabled || e.flammable.enabled || (e.emitter.enabled && (e.emitter.smoke > 0 || e.emitter.temperature > 0)));
     if (needsGas && !graph_.world.gas) s.info.push_back({"Дым, тепло, огонь", "нужен газ: включите «газ» в мире"});
     int liquidEmitters = 0;
     for (const EmitterRef& ref : emitters_) {
         const int index = indexOf(ref.entity);
-        liquidEmitters += index >= 0 && graph_.entities[size_t(index)].emitter.liquid > 0 ? 1 : 0;
+        liquidEmitters += index >= 0 && flat_[size_t(index)].emitter.liquid > 0 ? 1 : 0;
     }
     if (liquidEmitters > 1) s.info.push_back({"Струи жидкости", format("работает первая из %d (сопло одно)", liquidEmitters)});
     for (const std::string& note : notes_) s.info.push_back({"Роли", note});

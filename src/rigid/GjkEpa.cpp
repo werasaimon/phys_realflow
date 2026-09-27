@@ -5,6 +5,7 @@
 #include "rigid/GjkEpa.h"
 
 #include "core/Parallel.h"
+#include "math/ElementaryFunctions.h"
 
 #include <vector>
 
@@ -26,6 +27,17 @@ struct Simplex {
     float lam[4] = {1, 0, 0, 0};
     int n = 0;
 };
+
+// The research trace of the calling thread (setGjkTrace): a plain pointer, nothing to destroy at
+// thread exit (MinGW double-frees thread_local objects with destructors).
+thread_local GjkTrace* t_trace = nullptr;
+
+void traceSimplex(const Simplex& s) {
+    if (!t_trace) return;
+    std::vector<GjkTrace::Vertex> vs;
+    for (int i = 0; i < s.n; ++i) vs.push_back({s.v[i].w, s.v[i].a, s.v[i].b});
+    t_trace->simplices.push_back(std::move(vs));
+}
 
 // Closest point to the origin on segment / triangle, with barycentric weights.
 Vector3 closestSegment(const Vector3& a, const Vector3& b, float bary[2]) {
@@ -170,6 +182,8 @@ GjkResult gjk(const PosedShape& A, const PosedShape& B, float maxDistance) {
     s.v[0] = supportAB(A, B, d);
     s.n = 1;
     s.lam[0] = 1;
+    if (t_trace) t_trace->clear(); // the trace keeps the last run
+    traceSimplex(s);
     Vector3 v = s.v[0].w;
     bool inside = false;
     for (int iter = 0; iter < 64; ++iter) {
@@ -192,6 +206,7 @@ GjkResult gjk(const PosedShape& A, const PosedShape& B, float maxDistance) {
         Simplex prev = s;
         s.v[s.n++] = w;
         Vector3 vNew = solveSimplex(s, inside);
+        traceSimplex(s);
         if (inside) break;
         if (dot(vNew, vNew) >= dist2) { s = prev; break; } // no progress: keep the best simplex found
         v = vNew;
@@ -265,7 +280,7 @@ void inflateToTetrahedron(const PosedShape& A, const PosedShape& B, std::vector<
         Vector3 p0 = normalize(cross(line, axis)), p1 = cross(line, p0);
         for (int k = 0; k < 6; ++k) {
             float t = kPi / 3.0f * k;
-            SV w = supportAB(A, B, p0 * std::cos(t) + p1 * std::sin(t));
+            SV w = supportAB(A, B, p0 * rf::cos(t) + p1 * rf::sin(t));
             Vector3 rel = w.w - V[0].w;
             if (length(rel - line * dot(rel, line)) > eps) { V.push_back(w); break; }
         }
@@ -386,8 +401,18 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
     if (V.size() < 4) return PenetrationResult(); // touching with zero volume: no meaningful penetration
     buildInitialPolytope(S);
     expandPolytope(A, B, S);
+    if (t_trace) { // the research view: the final polytope (vertices added = expansions made)
+        t_trace->polytope.clear();
+        t_trace->faces.clear();
+        for (const SV& sv : V) t_trace->polytope.push_back({sv.w, sv.a, sv.b});
+        for (const EpaFace& f : S.faces)
+            if (f.d != kInf) t_trace->faces.insert(t_trace->faces.end(), {f.a, f.b, f.c});
+        t_trace->epaIterations = int(V.size()) - 4;
+    }
     return penetrationFromPolytope(S);
 }
+
+void setGjkTrace(GjkTrace* trace) { t_trace = trace; }
 
 bool penetration(const PosedShape& A, const PosedShape& B, PenetrationResult& out) {
     GjkResult g = gjk(A, B);

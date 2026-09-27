@@ -1,8 +1,10 @@
 #pragma once
 // Incompressible Navier-Stokes on a staggered (MAC) grid - "virtual wind tunnel" and gas/smoke.
 //  * semi-Lagrangian RK2 advection, optional MacCormack (2nd order) with limiter
-//  * implicit viscous diffusion (Jacobi), vorticity confinement, Boussinesq buoyancy
-//  * pressure projection: preconditioned conjugate gradient (Jacobi preconditioner)
+//  * implicit viscosity solved to a tolerance (conjugate gradient), no-slip on the wall itself
+//    (ghost values), incremental pressure correction (Viscosity.cpp); vorticity confinement,
+//    Boussinesq buoyancy
+//  * pressure projection: preconditioned conjugate gradient, multigrid V-cycle preconditioner (MGPCG)
 //  * obstacles voxelised from a triangle mesh via MeshBVH inside/outside queries
 //  * pressure force integration on the body -> drag / lift coefficients
 //  * moving solids (two-way coupling with rigid bodies): cells inside a body are solid and the
@@ -18,6 +20,7 @@
 
 #include "gas/Combustion.h"
 #include "gas/Field3.h"
+#include "gas/Multigrid.h"
 #include "plasma/MagneticField.h"
 #include "spatial/BVH.h"
 #include "math/Math.h"
@@ -41,6 +44,11 @@ struct GasParams {
     float cfl = 2.0f;
     int maxPressureIterations = 400;
     float pressureTolerance = 1e-4f;
+    // The implicit viscous step (Viscosity.cpp): conjugate gradient to this relative residual, at
+    // most this many iterations per velocity component.
+    float viscosityTolerance = 1e-6f;
+    int maxViscosityIterations = 1000;
+    PressurePreconditioner pressurePreconditioner = PressurePreconditioner::Multigrid; // of the PCG (Multigrid.h)
     bool maccormack = true;
     float vorticityConfinement = 0.0f;
     bool smokeRake = true;               // smoke streaks injected at the inflow
@@ -114,6 +122,14 @@ public:
     // A closed vessel (a tokamak's torus): when set, every cell outside it is wall - a perfect
     // conductor for the magnetic field. The gas lives inside. Set before reset().
     std::function<bool(const Vector3&)> vessel;
+
+    // Verification hooks (ExternalFields.cpp): the velocity (at the face centres) and the
+    // temperature set from a function of the world point, and a heat source term [K/s] of the
+    // point and the time, added every step after the conduction (fire on). For exact flows and
+    // manufactured solutions (verification/); no scene uses them.
+    void setVelocity(const std::function<Vector3(const Vector3&)>& velocity);
+    void setTemperature(const std::function<float(const Vector3&)>& temperature);
+    std::function<float(const Vector3& x, double t)> heatSource;
 
     // origin = lower corner of the domain in world space.
     void reset(const Vector3& origin, const MeshBVH* obstacle);
@@ -192,8 +208,17 @@ public:
     float lastDt() const { return lastDt_; }
     // Cell-centred velocity (average of the two face values per axis) [m/s].
     Vector3 cellVelocity(int i, int j, int k) const;
+    // The research layers of the gas on one slice of cells (GasDebugDraw.cpp): the grid, the
+    // velocity, -grad p / rho, div u, curl u and the current density - only the layers that are on.
+    // axis: the slice's normal (0 x, 1 y, 2 z); layer: the cell index along it.
+    void drawDebug(int axis, int layer) const;
+    // div u of cell (i, j, k) from its six faces [1/s]: what the pressure projection drives to zero.
+    float cellDivergence(int i, int j, int k) const;
     float maxVelocity() const { return maxVel_; }
-    float time() const { return time_; }
+    // Seconds simulated, summed in double: a float sum of 10^4 steps drifts by ~10^-4 s, enough to
+    // show in a manufactured solution's error (verification/Mms.cpp).
+    double time() const { return time_; }
+    int lastViscousIterations() const { return lastViscousIters_; } // the most any component needed
     bool hasObstacle() const { return solidCount_ > 0; }
     // Running length of the boundary layer on the static obstacle (its extent along x) [m]: the
     // length of the wall-function Reynolds number.
@@ -215,6 +240,14 @@ private:
     void applyVelocityBC();
     void addForces(float dt);
     void diffuse(float dt);
+    // The steps of diffuse() (Viscosity.cpp), for one velocity component c on its field F.
+    bool faceCells(int c, int i, int j, int k, size_t& before, size_t& after) const;
+    void markViscousUnknowns(int c, const Field3& F);
+    void buildViscousSystem(int c, const Field3& F, float a, float dt);
+    void addViscousNeighbour(int c, const Field3& F, const int at[3], int d, int s, float a, double& diag, double& b) const;
+    double oldPressureStep(int c, int i, int j, int k, float dt) const;
+    void viscousMatVec(const Field3& F, float a, const std::vector<double>& x, std::vector<double>& out) const;
+    int solveViscousPcg(Field3& F, float a);
     void project(float dt);
     void computeForces();
     void computeDiagnostics();
@@ -240,6 +273,8 @@ private:
     void removeMeanDivergence();
     void buildWeightedDiagonal(bool weighted);
     void solvePressurePcg(bool weighted);
+    bool solvePressureMultigridPcg(bool weighted); // MGPCG; false: it broke down, Jacobi takes over
+    void fillMultigridFaces(bool weighted);
     void applyPressureMatrix(const std::vector<double>& x, std::vector<double>& out, bool weighted) const;
     void subtractPressureGradient(bool weighted);
     double faceWeightU(int i, int j, int k, bool weighted) const;
@@ -269,6 +304,7 @@ private:
     std::vector<Radiator> radiators_; // hot cells of the last step (fire)
     void collectRadiators();
     void conductHeat(float dt);
+    void addHeatSource(float dt); // heatSource over one step (ExternalFields.cpp)
     std::vector<Vector3> liquidPos_, liquidVelIn_; // liquid particles (input)
     std::vector<Vector3> liquidVel_;               // per cell: mean velocity of its liquid particles
     int liquidCells_ = 0;
@@ -310,13 +346,21 @@ private:
     std::vector<char> regionOpen_;
     std::vector<double> regionMeanB_; // removed mean of -div per closed region (last projection)
     std::vector<double> q_, r_, z_, s_, As_, b_;
+    PressureMultigrid multigrid_; // the levels of the multigrid preconditioner (Multigrid.h)
+    // The viscous solve of one component (Viscosity.cpp), one value per face: 1 = unknown (between
+    // two gas cells), 0 = kept (a domain side, next to a solid); the matrix diagonal, the right-hand
+    // side, the old pressure's velocity step, and the conjugate gradient's vectors.
+    std::vector<uint8_t> viscKind_;
+    std::vector<double> viscDiag_, viscB_, viscG_, viscX_, viscR_, viscZ_, viscP_, viscAp_;
+    int lastViscousIters_ = 0;
     int solidCount_ = 0;
 
     Vector3 force_;
     float frontalArea_ = 0, planformArea_ = 0, refArea_ = 0;
     float cd_ = 0, cl_ = 0, cs_ = 0, cdAvg_ = 0, clAvg_ = 0;
     int lastIters_ = 0;
-    float lastResidual_ = 0, maxVel_ = 0, time_ = 0;
+    float lastResidual_ = 0, maxVel_ = 0;
+    double time_ = 0;
     float maxDivergence_ = 0, totalSmoke_ = 0, lastDt_ = 0;
 };
 

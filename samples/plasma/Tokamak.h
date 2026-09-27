@@ -35,6 +35,9 @@
 // column. The column shifts rigidly, the fluid outside flows around it (added mass with the wall
 // (b^2 + a^2) / (b^2 - a^2) of the displaced mass), so
 //   gamma^2 = (v_A,theta / a)^2 (1 - q_a) (q_a (b^2 + a^2) - 2 a^2) / b^2,  v_A,theta = B_theta(a) / sqrt(mu0 rho).
+// This already counts the gas around the column (the scene's "vacuum" is gas of the same density):
+// with a massless vacuum the kink would grow 1.63x faster (kinkGrowthRateWithOuterGas). The
+// measured kink grows at 0.4-0.6 of this gamma; what explains the gap is in docs/06-mhd-plasma.md.
 // Everything is scaled down (millitesla, metres, Alfven speeds of m/s): the equations are the
 // same, only the time runs 10^6 times slower than in a real machine.
 
@@ -55,7 +58,12 @@ public:
     float safetyFactorEdge = 0.7f; // q_a: sets the plasma current; 0.4 < q_a < 1 kinks with b = 2a
     bool verticalField = true;     // the equilibrium B_v (false: the wall's image currents alone hold the ring)
     bool positionControl = true;   // feedback on B_v holding the ring on the magnetic axis
-    float vacuumResistivity = 0.2f; // [m^2/s] of the fluid between the channel and the wall
+    // [m^2/s] of the fluid between the channel and the wall. A vacuum holds no field lines: the
+    // halo's magnetic Reynolds number Rm = a v_A,theta / eta must be << 1, so the field slips
+    // through it faster than the column moves. 2 m^2/s gives Rm = 0.06 at q_a = 0.7; the kink then
+    // grows as with 20 m^2/s (Rm = 0.006) to 1 %, while 0.2 (Rm = 0.6, the old value) held the
+    // lines and slowed it by a fifth (docs/06-mhd-plasma.md, the tokamak section).
+    float vacuumResistivity = 2.0f;
     // The helical m = 1, n = 1 offset of the current channel at the start, as a fraction of a: the
     // seed of the kink (a perfectly symmetric start would stay symmetric to rounding for a while).
     float seedDisplacement = 0.02f;
@@ -65,15 +73,40 @@ public:
     float safetyFactor(float r) const;    // q(r): q_a inside the channel, q_a r^2 / a^2 outside
     float equilibriumShift() const;       // Delta [m]: where the ring sits in the shell without B_v
     float verticalFieldStrength() const;  // B_v [T] that centres the ring, upwards for a current along +phi
+    // B_v [T] that holds a ring with no shell at all (Shafranov 1966; Wesson, "Tokamaks", eq. 3.9.2):
+    //   B_v = mu0 I_p / (4 pi R0) [ln(8 R0 / a) + beta_p + l_i / 2 - 3/2]
+    // - the most the vertical field ever needs; the position control's integral stays below it.
+    float freeRingVerticalField() const;
     float internalInductance() const { return 0.5f; } // l_i of the constant profile
     float wallLimit() const;              // 2 a^2 / (a^2 + b^2): below it the wall holds the kink
     bool kinkUnstable() const { return safetyFactorEdge > wallLimit() && safetyFactorEdge < 1.0f; }
     float kinkGrowthRate(float density) const; // gamma [1/s] of the ideal m = 1 kink, 0 when stable
+    // The same kink with the gap between the column and the wall filled with gas of density
+    // outerDensityRatio x `density` (the column's). The column shifts rigidly and pushes that gas
+    // around it: 2D potential flow between coaxial cylinders adds the mass per unit length
+    //   m_added = rho_out pi a^2 (b^2 + a^2) / (b^2 - a^2)   (Lamb, "Hydrodynamics", 1932;
+    //   Brennen 1982, "A review of added mass and fluid inertial forces", NCEL CR 82.010),
+    // while the energy principle's delta W (Tokamak.h, the head) does not change, so
+    //   gamma^2 = gamma_vac^2 / (1 + (rho_out / rho_in) (b^2 + a^2) / (b^2 - a^2)),
+    //   gamma_vac^2 = 2 (v_A,theta / a)^2 (1 - q_a) (q_a (b^2 + a^2) - 2 a^2) / (b^2 - a^2),
+    // gamma_vac being the textbook kink with a massless vacuum (ratio 0). Ratio 1 - the same gas
+    // everywhere, as in the scene - is kinkGrowthRate: the added mass is already in it (5/3 of
+    // the column's at b = 2a, 2.67x the inertia, gamma 0.61 gamma_vac). Assumptions: the long
+    // wavelength limit (n = 1 along the torus, k a = a / R0 << 1), a rigid m = 1 shift of the
+    // constant-current column, incompressible flow. At k a = 0.3 (this device) the 3D flow
+    // around the helix (Bessel I1, K1) adds only 1.44 instead of 1.67 column masses: gamma is
+    // 4.5 % higher than this long-wavelength value.
+    float kinkGrowthRateWithOuterGas(float density, float outerDensityRatio) const;
     bool inside(const Vector3& x) const;  // inside the vessel
 
-    // Position control: the gains of the PD law B_v = B_v(equilibrium) + gain shift + damping rate,
-    // the control's stiffness 4x the shell's, critically damped (gas of `density`).
-    void controlGains(float density, float& gain, float& damping) const;
+    // Position control: the gains of the PID law
+    //   B_v = B_v(equilibrium) + gain shift + damping rate + integral * (time integral of the shift),
+    // the control's stiffness 4x the shell's, critically damped (gas of `density`), the integral
+    // part four times slower than the loop. The integral removes the offset a PD law leaves when
+    // B_v(equilibrium) is off: that formula is the large-aspect-ratio one, and here R0 / b = 1.67
+    // (as the radial position control of real machines: Ariola & Pironti, "Magnetic Control of
+    // Tokamak Plasmas", 2nd ed. 2016, ch. 5).
+    void controlGains(float density, float& gain, float& damping, float& integral) const;
 
     // Vector potentials [T m] of the fields: the coils (toroidal + vertical, current-free: the
     // background B0 of MagneticField) and the plasma current (the evolving B1 at the start).
@@ -98,10 +131,19 @@ public:
     // centroid displacement from the magnetic axis [m] - the seed for a symmetric ring, growing
     // when the column winds into a helix.
     float kinkAmplitude(const MagneticField& m, float dx) const;
+    // The same n = 1 amplitude for the plasma itself: the centroid of the tracer (the gas's smoke
+    // field, carried by the flow; gridOrigin and dx of the gas grid). The current can lag the
+    // moving plasma (it diffuses where the resistivity ramps up), so the two differ; the plasma's
+    // is the displacement xi of the energy principle.
+    float plasmaKinkAmplitude(const Field3& tracer, const Vector3& gridOrigin, float dx) const;
 
 private:
     // Centroid (dR, dy) of the toroidal current in N poloidal planes around the torus.
     void currentCentroids(const MagneticField& m, float dx, std::vector<Vector2>& out) const;
+    // Centroid (dR, dy) of the tracer in the same planes.
+    void tracerCentroids(const Field3& tracer, const Vector3& gridOrigin, float dx, std::vector<Vector2>& out) const;
+    // The n = 1 Fourier amplitude of the centroids' displacement dR + i dy around the torus.
+    static float helicalAmplitude(const std::vector<Vector2>& centroids);
     // The current channel's centre in the poloidal plane at toroidal angle phi (with the seed).
     void channelCentre(float phi, float& R, float& y) const;
     float channelRadius(const Vector3& x) const; // r from the (seeded) channel centre

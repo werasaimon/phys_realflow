@@ -2,6 +2,7 @@
 // a triangle mesh with its BVH, the closest point, signed distance and inside test the solvers
 // use for static geometry. See BVH.h.
 #include "spatial/BVH.h"
+#include "math/ElementaryFunctions.h"
 
 #include <algorithm>
 #include <numeric>
@@ -93,10 +94,23 @@ void BVH::subdivide(int nodeIdx, const std::vector<AABB>& boxes, const std::vect
         float leafCost = count * nodeBox.surfaceArea();
         if (bestCost >= leafCost && count <= 16) return;
         float scale = kBins / cExt[bestAxis];
-        auto it = std::partition(prims_.begin() + first, prims_.begin() + first + count, [&](uint32_t p) {
-            return binOf(centroids[p][bestAxis], bestAxis, scale) < bestSplit;
-        });
-        mid = int(it - prims_.begin());
+        auto goesLeft = [&](uint32_t p) { return binOf(centroids[p][bestAxis], bestAxis, scale) < bestSplit; };
+        // Hoare's split, written out: from the front skip the primitives that go left, from the
+        // back those that go right, swap the two found, repeat. These are exactly the steps of
+        // libstdc++'s std::partition, but std::partition may take other steps in another standard
+        // library - and a different order of primitives is a different tree and a different order
+        // of contacts on another compiler.
+        int lo = first, hi = first + count;
+        while (true) {
+            while (lo != hi && goesLeft(prims_[size_t(lo)])) ++lo;
+            if (lo == hi) break;
+            --hi;
+            while (lo != hi && !goesLeft(prims_[size_t(hi)])) --hi;
+            if (lo == hi) break;
+            std::swap(prims_[size_t(lo)], prims_[size_t(hi)]);
+            ++lo;
+        }
+        mid = lo;
         if (mid == first || mid == first + count) mid = first + count / 2;
     }
 
@@ -147,7 +161,7 @@ void MeshBVH::build(const TriMesh& mesh) {
         for (int c = 0; c < 3; ++c) {
             Vector3 e1 = normalize(pos_[tri[(c + 1) % 3]] - pos_[tri[c]]);
             Vector3 e2 = normalize(pos_[tri[(c + 2) % 3]] - pos_[tri[c]]);
-            vertexN_[tri[c]] += faceN_[t] * std::acos(clampv(dot(e1, e2), -1.0f, 1.0f));
+            vertexN_[tri[c]] += faceN_[t] * rf::acos(clampv(dot(e1, e2), -1.0f, 1.0f));
             edgeSum[ekey(tri[c], tri[(c + 1) % 3])] += faceN_[t];
             boxes[t].expand(pos_[tri[c]]);
         }

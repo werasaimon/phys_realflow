@@ -4,6 +4,7 @@
 #include "rigid/NarrowPhase.h"
 
 #include "core/Parallel.h"
+#include "math/ElementaryFunctions.h"
 
 namespace rf {
 
@@ -328,9 +329,15 @@ bool NarrowPhase::boxSeparatingAxes(const PosedShape& A, const PosedShape& B, Bo
         float sep = std::fabs(dist) - (rA + rB);
         if (sep > margin) return false; // separating axis found
         Vector3 axis = dist < 0 ? -L : L;
-        // Face axes are preferred: another axis must be clearly better (stable manifolds).
-        const float tol = 0.95f, abs = 0.005f * scale;
-        bool better = best.sep == -kInf || sep > tol * best.sep + abs;
+        // Face axes are preferred: another axis must be clearly better (stable manifolds) - by 5 %
+        // of the separation plus a small absolute margin, both ADDED to the best one (as Box2D's
+        // b2CollidePolygons adds its tolerance, 0.1 linearSlop; Gregorius, GDC 2013). Written as
+        // 0.95 * best.sep the bar dropped below best.sep for a gap (sep > 0): two parallel boxes
+        // within the speculative margin then took an edge x edge axis - the same vertical as the
+        // face - and one contact point at the end of an edge, a metre away from a falling cube,
+        // which spun it before the touch (a flat drop landed turned 90 degrees).
+        const float relTol = 0.05f, abs = 0.005f * scale;
+        bool better = best.sep == -kInf || sep > best.sep + relTol * std::fabs(best.sep) + abs;
         if (kind == 0 && best.sep != -kInf) better = sep > best.sep;
         if (better) best = {sep, axis, kind, i, j};
         if (kind == 2 && sep > bestEdge.sep) bestEdge = {sep, axis, kind, i, j};
@@ -542,7 +549,7 @@ void NarrowPhase::perturbationManifold(const PosedShape& A, const PosedShape& B,
     const float mergeDist = 0.05f * radius;
     for (int k = 0; k < 4; ++k) {
         float t = 0.5f * kPi * k;
-        Vector3 axis = u * std::cos(t) + v * std::sin(t);
+        Vector3 axis = u * rf::cos(t) + v * rf::sin(t);
         Matrix3x3 Q = Quaternion::fromAxisAngle(axis, angle).toMatrix3x3();
         PosedShape Pp = P;
         Pp.R = Q * P.R; // rotation about the shape's own centre

@@ -1,5 +1,5 @@
 // GasSolver: the grid, its setup, the time step and the forces on the gas. The other parts live
-// in Advection.cpp, PressureSolver.cpp, MovingSolids.cpp and Heat.cpp.
+// in Advection.cpp, Viscosity.cpp, PressureSolver.cpp, MovingSolids.cpp and Heat.cpp.
 #include "gas/GasSolver.h"
 #include "gas/GasSolverInternal.h"
 
@@ -347,40 +347,7 @@ void GasSolver::addForces(float dt) {
     }
 }
 
-void GasSolver::diffuse(float dt) {
-    const float a = params.kinematicViscosity * dt / (dx_ * dx_);
-    if (a < 1e-3f) return; // negligible next to the numerical diffusion of advection
-    const int iters = 20;
-    Field3* comps[3] = {&u_, &v_, &w_};
-    for (int c = 0; c < 3; ++c) {
-        Field3& F = *comps[c];
-        t1_ = F; // right-hand side (value before diffusion)
-        for (int it = 0; it < iters; ++it) {
-            t2_ = F;
-            const int sx = F.nx, sy = F.ny, sz = F.nz;
-            parallelFor(int(sz), [&](int k_) {
-                int k = k_;
-                for (int j = 0; j < sy; ++j)
-                    for (int i = 0; i < sx; ++i) {
-                        // boundary-normal faces are fixed by the boundary conditions
-                        if ((c == 0 && (i == 0 || i == sx - 1)) || (c == 1 && (j == 0 || j == sy - 1)) ||
-                            (c == 2 && (k == 0 || k == sz - 1)))
-                            continue;
-                        size_t id = F.idx(i, j, k);
-                        float cur = t2_.d[id];
-                        auto nb = [&](int a2, int b2, int c2) {
-                            if (a2 < 0 || b2 < 0 || c2 < 0 || a2 >= sx || b2 >= sy || c2 >= sz) return cur;
-                            return t2_.at(a2, b2, c2);
-                        };
-                        float sum = nb(i - 1, j, k) + nb(i + 1, j, k) + nb(i, j - 1, k) + nb(i, j + 1, k) +
-                                    nb(i, j, k - 1) + nb(i, j, k + 1);
-                        F.d[id] = (t1_.d[id] + a * sum) / (1.0f + 6.0f * a);
-                    }
-            }, 1);
-            applyVelocityBC(); // keeps solid faces at zero (no-slip)
-        }
-    }
-}
+// diffuse(): the implicit viscous step lives in Viscosity.cpp.
 
 void GasSolver::injectSources() {
     if (params.smokeRake && params.bc[0] == BoundaryType::Inflow) {
@@ -520,6 +487,7 @@ void GasSolver::burn(float dt) {
         const float cellHeatCapacity = params.fluidDensity * combustion.specificHeat * dx_ * dx_ * dx_;
         heatReleaseRate_ = float(burnt * combustion.heatRelease * cellHeatCapacity / dt);
         conductHeat(dt);
+        addHeatSource(dt); // verification only: a manufactured solution's source term
         collectRadiators();
     } else if (heatReleaseRate_ != 0 || !radiators_.empty()) {
         std::fill(expansion_.begin(), expansion_.end(), 0.0f);

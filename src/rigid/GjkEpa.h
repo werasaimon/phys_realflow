@@ -50,4 +50,19 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
 // Convenience: GJK, then EPA when the shapes overlap. Returns false when they are separated.
 bool penetration(const PosedShape& A, const PosedShape& B, PenetrationResult& out);
 
+// A record of one GJK (+ EPA) run, for the research view of a watched pair: the simplex after
+// every GJK iteration (each vertex a point w = a - b of the Minkowski difference with the support
+// points a on A and b on B that made it) and the final EPA polytope. Recording happens only on the
+// thread that set a trace, and only for the runs between setGjkTrace(&t) and setGjkTrace(nullptr):
+// the hot path pays one pointer test.
+struct GjkTrace {
+    struct Vertex { Vector3 w, a, b; };
+    std::vector<std::vector<Vertex>> simplices; // one per GJK iteration (the last run only)
+    std::vector<Vertex> polytope;               // the EPA polytope's vertices (the last run)
+    std::vector<int> faces;                     // its final faces, three indices each
+    int epaIterations = 0;
+    void clear() { simplices.clear(); polytope.clear(); faces.clear(); epaIterations = 0; }
+};
+void setGjkTrace(GjkTrace* trace);
+
 } // namespace rf

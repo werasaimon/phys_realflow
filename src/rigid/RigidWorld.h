@@ -40,6 +40,10 @@ struct RigidParams {
     int manifoldIterations = 4; // local relaxation of each manifold's normal impulses (block solve)
     float baumgarte = 0.2f;
     float restitutionThreshold = 1.0f; // approach speed (m/s) below which a touch does not bounce (Box2D: 1 m/s)
+    // Restitution of the world's walls and static mesh. A pair bounces with the larger of its two
+    // coefficients (Box2D's b2MixRestitution), so 0 lets the body's own e decide; a wall of 0.1
+    // made every e = 0 body bounce back at a tenth of its impact speed.
+    float wallRestitution = 0.0f;
     float slop = 0.004f;
     float contactMargin = 0.01f; // speculative contact distance [m]
     float linearDamping = 0.02f;
@@ -190,9 +194,24 @@ public:
     struct DebugContact {
         int a, b;
         Vector3 position, normal;
-        float depth, impulse;
+        float depth, impulse;      // impulse: the point's accumulated normal impulse of the last step, N s
+        float frictionImpulse = 0; // the friction impulse of the whole contact patch (manifold), N s
     };
     std::vector<DebugContact> debugContacts() const;
+    float lastStepDt() const { return lastDt_; }
+
+    // The research view of the watched pair (Probe::watchPair), filled while its layers are on:
+    // what GJK and EPA found for it in the last step.
+    struct WatchReport {
+        bool valid = false;         // the pair exists and was looked at
+        bool intersect = false;
+        float distance = 0;         // separated: the closest distance
+        float depth = 0;            // overlapping: the EPA penetration depth
+        Vector3 normal{0.0f};       // overlapping: from B towards A
+        int gjkIterations = 0;      // simplices recorded
+        int epaFaces = 0;           // faces of the final polytope
+    };
+    const WatchReport& watchReport() const { return watchReport_; }
 
 private:
     struct SolverPoint {
@@ -285,7 +304,15 @@ private:
     void prepareManifold(Manifold& m, float dt);
     void solveManifold(Manifold& m);
     void applyRestitution();
+    // Debug drawing by layer (RigidDebugDraw.cpp), after the solve, only for the layers that are on.
     void drawDebug() const;
+    void drawContacts() const;
+    void drawBodyFrames() const;
+    void drawIslands() const;
+    void drawTrees() const;
+    void drawJoints() const;
+    void drawWatchedPair() const;
+    mutable WatchReport watchReport_;
     // The steps of step(), in order (RigidWorld.cpp).
     void beginStep();
     void integrateVelocities(float dt);

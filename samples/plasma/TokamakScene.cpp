@@ -60,10 +60,11 @@ void TokamakScene::build(Simulation& sim) {
     bv_ = t.verticalFieldStrength();
     shift_ = 0;
     controlTime_ = 0;
+    shiftIntegral_ = 0;
 }
 
 void TokamakScene::afterStep(Simulation& sim) {
-    // Radial position control, as the vertical-field coils of a real machine: a PD law on the
+    // Radial position control, as the vertical-field coils of a real machine: a PID law on the
     // measured outward shift of the ring (the n = 0 part of its current centroid) around the
     // vertical field of the equilibrium in the shell (Tokamak.h). Without it the ring, never
     // quite in the equilibrium of the formulas on a grid, swings in and out for seconds, and the
@@ -71,15 +72,30 @@ void TokamakScene::afterStep(Simulation& sim) {
     const Tokamak& t = tokamak;
     if (!t.positionControl || !t.verticalField) return;
     GasSolver& grid = sim.grid;
+
+    // 1. Measure: where the ring is and how fast it moves.
     const float shift = t.measuredShift(grid.magnetic, grid.dx());
-    const float dt = grid.time() - controlTime_;
+    const float dt = float(grid.time() - controlTime_);
     const float rate = controlTime_ > 0 && dt > 1e-5f ? (shift - shift_) / dt : 0.0f;
     shift_ = shift;
     controlTime_ = grid.time();
-    float gain, damping;
-    t.controlGains(grid.params.fluidDensity, gain, damping);
-    const float bv = t.verticalFieldStrength() + gain * shift + damping * rate;
-    if (std::fabs(bv - bv_) < 0.002f * std::fabs(t.verticalFieldStrength())) return; // unchanged: keep the field
+
+    // 2. Integrate the shift, clamped so the integral's part of B_v never exceeds the free ring's
+    //    vertical field (anti-windup: a ring thrown far by the kink must not wind it up). The ring
+    //    needs ~0.3 mT on the grid, near the free ring's 0.33 mT and four times the shell formula's
+    //    0.08 mT (R0 / b = 1.67 is far from the large aspect ratio that formula assumes); with a
+    //    PD law, or with the integral clamped at the formula's value, it sat 16-20 mm out, its edge
+    //    in the resistive vacuum.
+    float gain, damping, integral;
+    t.controlGains(grid.params.fluidDensity, gain, damping, integral);
+    const float limit = std::fabs(t.freeRingVerticalField()) / std::max(integral, 1e-12f);
+    shiftIntegral_ = clampv(shiftIntegral_ + shift * dt, -limit, limit);
+
+    // 3. The PID law: the equilibrium's field plus the three corrections.
+    const float bv = t.verticalFieldStrength() + gain * shift + damping * rate + integral * shiftIntegral_;
+
+    // 4. Rebuild the coils' field only when it changed noticeably (it is a whole-grid update).
+    if (std::fabs(bv - bv_) < 0.002f * std::fabs(t.verticalFieldStrength())) return;
     bv_ = bv;
     const Tokamak tc = t;
     grid.magnetic.setBackgroundFromPotential([tc, bv](const Vector3& x) { return tc.coilPotential(x, bv); });

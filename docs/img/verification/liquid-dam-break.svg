@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="400" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Обрушение плотины: фронт Z при T = 2: сходимость (эталон запечатан)</text>
+<line x1="140.0" y1="50.0" x2="140.0" y2="330.0" stroke="#e5e4df"/><text x="140.0" y="348.0" text-anchor="middle" fill="#52514e">0.005</text>
+<line x1="245.2" y1="50.0" x2="245.2" y2="330.0" stroke="#e5e4df"/><text x="245.2" y="348.0" text-anchor="middle" fill="#52514e">0.006</text>
+<line x1="334.2" y1="50.0" x2="334.2" y2="330.0" stroke="#e5e4df"/><text x="334.2" y="348.0" text-anchor="middle" fill="#52514e">0.007</text>
+<line x1="411.2" y1="50.0" x2="411.2" y2="330.0" stroke="#e5e4df"/><text x="411.2" y="348.0" text-anchor="middle" fill="#52514e">0.008</text>
+<line x1="479.2" y1="50.0" x2="479.2" y2="330.0" stroke="#e5e4df"/><text x="479.2" y="348.0" text-anchor="middle" fill="#52514e">0.009</text>
+<line x1="540.0" y1="50.0" x2="540.0" y2="330.0" stroke="#e5e4df"/><text x="540.0" y="348.0" text-anchor="middle" fill="#52514e">0.01</text>
+<line x1="80.0" y1="312.2" x2="600.0" y2="312.2" stroke="#e5e4df"/><text x="72.0" y="316.2" text-anchor="end" fill="#52514e">2.4</text>
+<line x1="80.0" y1="201.1" x2="600.0" y2="201.1" stroke="#e5e4df"/><text x="72.0" y="205.1" text-anchor="end" fill="#52514e">2.5</text>
+<line x1="80.0" y1="90.0" x2="600.0" y2="90.0" stroke="#e5e4df"/><text x="72.0" y="94.0" text-anchor="end" fill="#52514e">2.6</text>
+<text x="340.0" y="370.0" text-anchor="middle" fill="#52514e">радиус частицы, м (лог.)</text>
+<text transform="translate(18 190.0) rotate(-90)" text-anchor="middle" fill="#52514e">значение</text>
+<line x1="540.0" y1="290.0" x2="339.9" y2="198.0" stroke="#2a78d6" stroke-width="2"/>
+<line x1="339.9" y1="198.0" x2="140.0" y2="90.0" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="540.0" cy="290.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.01, значение 2.42</title></circle>
+<circle cx="339.9" cy="198.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.00707, значение 2.503</title></circle>
+<circle cx="140.0" cy="90.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.005, значение 2.6</title></circle>
+</svg>

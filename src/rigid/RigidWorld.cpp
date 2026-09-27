@@ -136,8 +136,10 @@ int RigidWorld::addCompound(std::shared_ptr<const CompoundShape> shape, const Ve
 
 std::vector<RigidWorld::DebugContact> RigidWorld::debugContacts() const {
     std::vector<DebugContact> out;
-    for (const Manifold& m : manifolds_)
-        for (const SolverPoint& p : m.points) out.push_back({m.a, m.b, p.position, p.normal, p.depth, p.jn});
+    for (const Manifold& m : manifolds_) {
+        const float friction = length(m.t1 * m.jt1 + m.t2 * m.jt2); // one friction for the whole patch
+        for (const SolverPoint& p : m.points) out.push_back({m.a, m.b, p.position, p.normal, p.depth, p.jn, friction});
+    }
     return out;
 }
 
@@ -505,16 +507,5 @@ void RigidWorld::reportStep() const {
     Probe::add("rigid/ccd hits", double(ccdHits_));
 }
 
-// Debug drawing, only while Probe::drawEnabled(): every contact point with its normal, and the
-// world bounds of every awake body (what the broad phase sees).
-void RigidWorld::drawDebug() const {
-    for (const Manifold& m : manifolds_)
-        for (const SolverPoint& p : m.points) {
-            Probe::point(p.position, Vector3(1.0f, 0.3f, 0.2f), 0.01f);
-            Probe::arrow(p.position, p.normal * 0.1f, Vector3(1.0f, 0.6f, 0.2f));
-        }
-    for (const RigidBody& b : bodies_)
-        if (!b.sleeping && b.invMass > 0) Probe::box(b.worldBounds(), Vector3(0.3f, 0.8f, 1.0f));
-}
 
 } // namespace rf

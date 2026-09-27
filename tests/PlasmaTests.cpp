@@ -6,6 +6,8 @@
 
 #include "samples/plasma/TokamakScene.h"
 
+#include <cstdlib>
+
 void testMagneticField() {
     // The walls are perfect conductors: the magnetic flux through them is frozen. The analytic
     // checks are therefore set up away from the walls the field crosses.
@@ -101,13 +103,31 @@ void testMagneticField() {
             prev = now;
         }
         const float measured = crossings > 1 ? 2 * (lastCross - firstCross) / float(crossings - 1) : 0;
+        // The wave's own energy: kinetic plus sum |B - B0|^2 / 2mu0, in double. The whole field's
+        // energy is ~4 million times the wave's, so "energy() - m0" is a tiny difference of two
+        // large sums: while energy() summed float squares it read 92.5 % with FMA contraction and
+        // 79.0 % without, for this same true 98.4 % (found 2026-09-27). Both are checked below: the
+        // wave-only measure against the physics, the whole-field one against it (energy()'s precision).
         const double energyKept = (kinetic() + m.energy() - m0) / k0;
-        std::printf("  torsional Alfven wave: v_A %.3f m/s, period %.4f s vs 2L/v_A %.4f s (%d zero crossings); energy kept %.1f %%\n",
-                    vA, measured, period, crossings, 100 * energyKept);
+        auto waveMagnetic = [&] {
+            double e = 0;
+            for (int k = 0; k < nz; ++k)
+                for (int j = 0; j < ny; ++j)
+                    for (int i = 0; i < nx; ++i) {
+                        const Vector3 b = m.cellField(i, j, k) - m.applied;
+                        e += double(b.x) * b.x + double(b.y) * b.y + double(b.z) * b.z;
+                    }
+            return e * double(dx) * dx * dx / (2.0 * MagneticField::kMu0);
+        };
+        const double waveKept = (kinetic() + waveMagnetic()) / k0;
+        std::printf("  torsional Alfven wave: v_A %.3f m/s, period %.4f s vs 2L/v_A %.4f s (%d zero crossings); "
+                    "energy kept %.2f %% (whole-field measure %.2f %%; wave %.3e J in a field of %.3e J)\n",
+                    vA, measured, period, crossings, 100 * waveKept, 100 * energyKept, k0, m0);
         CHECK(std::fabs(measured / period - 1) < 0.02f, "Alfven period %f vs %f", measured, period);
-        // The staggered interpolations of B and J make the scheme slightly dissipative (~10 % over two
-        // periods here); what must never happen is energy growth (an instability).
-        CHECK(energyKept > 0.8 && energyKept < 1.01, "ideal MHD energy: no growth, little loss (%f)", energyKept);
+        // The staggered interpolations of B and J make the scheme slightly dissipative (1.6 % over
+        // 2.2 periods here); what must never happen is energy growth (an instability).
+        CHECK(waveKept > 0.97 && waveKept < 1.001, "ideal MHD energy: no growth, little loss (%f)", waveKept);
+        CHECK(std::fabs(energyKept - waveKept) < 0.005, "energy() lost the wave in rounding: %f vs %f", energyKept, waveKept);
     }
 
     // 3. div B stays zero (to rounding) while a vortex winds up the field lines of an ideal
@@ -155,6 +175,76 @@ void testMagnetosphere() {
     CHECK(g.magnetic.maxDivergence() < 1e-5f && std::isfinite(g.magnetic.energy()), "field broken");
 }
 
+namespace {
+
+using Series = std::vector<std::pair<float, float>>; // (time [s], kink amplitude [m])
+
+// The kink's growth rate [1/s]: the least-squares log slope over the samples between 1.5 x the
+// seed (the first sample) and half way to the wall (gap = b - a); 0 with fewer than two.
+float growthRate(const Series& series, float gap) {
+    const float seed = series.front().second;
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    int n = 0;
+    for (auto [time, amp] : series)
+        if (amp > 1.5f * seed && amp < 0.5f * gap) { sx += time; sy += std::log(amp); sxx += time * time; sxy += time * std::log(amp); ++n; }
+    return n >= 2 ? float((n * sxy - sx * sy) / (n * sxx - sx * sx)) : 0.0f;
+}
+
+// The kink theory at the current that actually flows: the mean measured current over the samples
+// the growth rate was fitted on (the channel loses some of it), turned into an effective q_a.
+float theoryAtMeasuredCurrent(const Tokamak& t, const Series& amplitude, const Series& current, float gap, float density) {
+    const float seed = amplitude.front().second;
+    double sum = 0;
+    int n = 0;
+    for (size_t i = 0; i < amplitude.size(); ++i)
+        if (amplitude[i].second > 1.5f * seed && amplitude[i].second < 0.5f * gap) { sum += current[i].second; ++n; }
+    if (n == 0) return 0.0f;
+    Tokamak actual = t;
+    actual.safetyFactorEdge = t.safetyFactorEdge * t.plasmaCurrent() / float(sum / n);
+    return actual.kinkGrowthRate(density);
+}
+
+// One kink run at q_a: the amplitude of the plasma itself (the n = 1 displacement of the tracer's
+// centroid, the xi of the energy principle) is checked; that of the current centroid is printed
+// beside it (the current lags the moving plasma where the resistivity ramps up to the halo's).
+void checkKink(Simulation& sim, TokamakScene& ts, float qa, bool unstable, float seconds) {
+    ts.tokamak.safetyFactorEdge = qa;
+    sim.reset(); // build() reads the scene's tokamak again
+    const Tokamak& t = ts.tokamak;
+    const MagneticField& m = sim.grid.magnetic;
+    const float dx = sim.grid.dx(), a = t.minorRadius, gap = t.vesselRadius - a, rho = sim.grid.params.fluidDensity;
+    auto plasma = [&] { return t.plasmaKinkAmplitude(sim.grid.smoke(), sim.grid.origin(), dx); };
+    Series xi = {{0.0f, plasma()}}, centroid = {{0.0f, t.kinkAmplitude(m, dx)}}, current = {{0.0f, t.measuredCurrent(m, dx)}};
+    float worstShift = 0;
+    while (sim.time() < seconds) {
+        sim.stepFrame();
+        worstShift = std::max(worstShift, std::fabs(t.measuredShift(m, dx)));
+        if (sim.time() < xi.back().first + 0.2f - 1e-4f) continue;
+        xi.push_back({float(sim.time()), plasma()});
+        centroid.push_back({float(sim.time()), t.kinkAmplitude(m, dx)});
+        current.push_back({float(sim.time()), t.measuredCurrent(m, dx)});
+    }
+    const float seed = xi.front().second, last = xi.back().second, gamma = growthRate(xi, gap);
+    const float g0 = t.kinkGrowthRate(rho), gI = theoryAtMeasuredCurrent(t, xi, current, gap, rho);
+    std::printf("  q_a = %.2f (%s), grid %d: plasma displacement", qa, unstable ? "unstable" : "stable", sim.grid.nx());
+    for (auto [time, amp] : xi) std::printf(" %.1f", amp * 1000);
+    std::printf(" mm at 0.2 s steps (a = %.0f mm); growth rate %.2f 1/s (current centroid %.2f); theory %.2f at the set current, "
+                "%.2f at the measured one (%.2f with a massless vacuum); I_p %.0f of %.0f A, ring shift %.1f mm (worst %.1f), "
+                "div B %.1e\n",
+                a * 1000, gamma, growthRate(centroid, gap), g0, gI, t.kinkGrowthRateWithOuterGas(rho, 0.0f),
+                t.measuredCurrent(m, dx), t.plasmaCurrent(), t.measuredShift(m, dx) * 1000, worstShift * 1000, m.maxDivergence());
+    CHECK(std::isfinite(last) && m.maxDivergence() < 1e-4f, "tokamak field broken at q_a = %f", qa);
+    CHECK(std::fabs(t.measuredShift(m, dx)) < 0.1f * gap, "position control lost the ring: shift %f m", t.measuredShift(m, dx));
+    if (unstable) {
+        CHECK(last > 0.2f * a && last > 5.0f * seed, "q_a = %.2f must kink: %f -> %f m", qa, seed, last);
+        CHECK(gamma > 0.5f * g0 && gamma < 2.0f * g0, "kink growth rate %f vs theory %f", gamma, g0);
+    } else {
+        CHECK(last < 2.5f * seed && last < 0.06f * a, "q_a = %.2f must keep the m = 1 shape: %f -> %f m", qa, seed, last);
+    }
+}
+
+} // namespace
+
 void testTokamak() {
     // 1) The fields on the grid follow the formulas: the coils' B_phi = B0 R0 / R; the plasma
     //    current by Ampere's law around the channel (the loop potential is exact, so the torus
@@ -195,46 +285,10 @@ void testTokamak() {
 
     // 2) The m = 1, n = 1 kink of the constant-current column with a conducting wall at b = 2a
     //    (Tokamak.h): unstable for 2a^2/(a^2+b^2) = 0.4 < q_a < 1, held by the line tension above
-    //    (Kruskal-Shafranov) and by the wall below. The amplitude is the n = 1 harmonic of the
-    //    current centroid's displacement around the torus; it starts at the 2 % seed. Its growth
-    //    rate is compared with gamma of the energy principle. (Higher m are other modes with
-    //    their own windows; the centroid does not see them.)
-    sim.grid.params.resolutionX = 44; // dx = 3.2 cm: enough for the m = 1 mode, 2.5x faster
-    struct Run { float qa; bool unstable; float seconds; };
-    const Run runs[3] = {{0.7f, true, 1.6f}, {1.5f, false, 1.0f}, {0.25f, false, 1.0f}};
-    for (const Run& r : runs) {
-        ts->tokamak.safetyFactorEdge = r.qa;
-        sim.reset(); // build() reads the scene's tokamak again
-        const Tokamak& t = ts->tokamak;
-        const MagneticField& m = sim.grid.magnetic;
-        const float dx = sim.grid.dx(), a = t.minorRadius, gap = t.vesselRadius - a;
-        std::vector<std::pair<float, float>> series = {{0.0f, t.kinkAmplitude(m, dx)}};
-        while (sim.time() < r.seconds) {
-            sim.stepFrame();
-            if (sim.time() >= series.back().first + 0.2f - 1e-4f) series.push_back({sim.time(), t.kinkAmplitude(m, dx)});
-        }
-        const float seed = series.front().second, last = series.back().second;
-        // Growth rate: the log slope over the samples between 1.5 x seed and half way to the wall.
-        double sx = 0, sy = 0, sxx = 0, sxy = 0;
-        int n = 0;
-        for (auto [time, amp] : series)
-            if (amp > 1.5f * seed && amp < 0.5f * gap) { sx += time; sy += std::log(amp); sxx += time * time; sxy += time * std::log(amp); ++n; }
-        const float gamma = n >= 2 ? float((n * sxy - sx * sy) / (n * sxx - sx * sx)) : 0.0f;
-        std::printf("  q_a = %.2f (%s): kink amplitude", r.qa, r.unstable ? "unstable" : "stable");
-        for (auto [time, amp] : series) std::printf(" %.1f", amp * 1000);
-        std::printf(" mm at 0.2 s steps (a = %.0f mm); growth rate %.2f 1/s (theory %.2f), I_p %.0f of %.0f A, ring shift %.1f mm, "
-                    "max speed %.2f m/s, div B %.1e\n",
-                    a * 1000, gamma, t.kinkGrowthRate(sim.grid.params.fluidDensity), t.measuredCurrent(m, dx), t.plasmaCurrent(),
-                    t.measuredShift(m, dx) * 1000, sim.grid.maxVelocity(), m.maxDivergence());
-        CHECK(std::isfinite(last) && m.maxDivergence() < 1e-4f, "tokamak field broken at q_a = %f", r.qa);
-        CHECK(std::fabs(t.measuredShift(m, dx)) < 0.1f * (t.vesselRadius - a), "position control lost the ring: shift %f m",
-              t.measuredShift(m, dx));
-        if (r.unstable) {
-            CHECK(last > 0.2f * a && last > 5.0f * seed, "q_a = %.2f must kink: %f -> %f m", r.qa, seed, last);
-            const float g0 = t.kinkGrowthRate(sim.grid.params.fluidDensity);
-            CHECK(gamma > 0.5f * g0 && gamma < 2.0f * g0, "kink growth rate %f vs theory %f", gamma, g0);
-        } else {
-            CHECK(last < 2.5f * seed && last < 0.06f * a, "q_a = %.2f must keep the m = 1 shape: %f -> %f m", r.qa, seed, last);
-        }
-    }
+    //    (Kruskal-Shafranov) and by the wall below. RF_TOKAMAK_RES sets the grid (default 44).
+    const char* res = std::getenv("RF_TOKAMAK_RES");
+    sim.grid.params.resolutionX = res ? std::atoi(res) : 44; // dx = 3.2 cm: enough for the m = 1 mode
+    checkKink(sim, *ts, 0.7f, true, 1.6f);
+    checkKink(sim, *ts, 1.5f, false, 1.0f);
+    checkKink(sim, *ts, 0.25f, false, 1.0f);
 }

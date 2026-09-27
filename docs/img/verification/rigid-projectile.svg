@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="400" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Полёт тела: порядок интегратора по dt (p = 1.00)</text>
+<line x1="134.1" y1="50.0" x2="134.1" y2="330.0" stroke="#e5e4df"/><text x="134.1" y="348.0" text-anchor="middle" fill="#52514e">0.001</text>
+<line x1="234.1" y1="50.0" x2="234.1" y2="330.0" stroke="#e5e4df"/><text x="234.1" y="348.0" text-anchor="middle" fill="#52514e">0.002</text>
+<line x1="366.3" y1="50.0" x2="366.3" y2="330.0" stroke="#e5e4df"/><text x="366.3" y="348.0" text-anchor="middle" fill="#52514e">0.005</text>
+<line x1="466.3" y1="50.0" x2="466.3" y2="330.0" stroke="#e5e4df"/><text x="466.3" y="348.0" text-anchor="middle" fill="#52514e">0.01</text>
+<line x1="566.3" y1="50.0" x2="566.3" y2="330.0" stroke="#e5e4df"/><text x="566.3" y="348.0" text-anchor="middle" fill="#52514e">0.02</text>
+<line x1="80.0" y1="314.7" x2="600.0" y2="314.7" stroke="#e5e4df"/><text x="72.0" y="318.7" text-anchor="end" fill="#52514e">0.001</text>
+<line x1="80.0" y1="275.3" x2="600.0" y2="275.3" stroke="#e5e4df"/><text x="72.0" y="279.3" text-anchor="end" fill="#52514e">0.002</text>
+<line x1="80.0" y1="223.2" x2="600.0" y2="223.2" stroke="#e5e4df"/><text x="72.0" y="227.2" text-anchor="end" fill="#52514e">0.005</text>
+<line x1="80.0" y1="183.8" x2="600.0" y2="183.8" stroke="#e5e4df"/><text x="72.0" y="187.8" text-anchor="end" fill="#52514e">0.01</text>
+<line x1="80.0" y1="144.4" x2="600.0" y2="144.4" stroke="#e5e4df"/><text x="72.0" y="148.4" text-anchor="end" fill="#52514e">0.02</text>
+<line x1="80.0" y1="92.4" x2="600.0" y2="92.4" stroke="#e5e4df"/><text x="72.0" y="96.4" text-anchor="end" fill="#52514e">0.05</text>
+<line x1="80.0" y1="53.0" x2="600.0" y2="53.0" stroke="#e5e4df"/><text x="72.0" y="57.0" text-anchor="end" fill="#52514e">0.1</text>
+<text x="340.0" y="370.0" text-anchor="middle" fill="#52514e">dt, с (лог.)</text>
+<text transform="translate(18 190.0) rotate(-90)" text-anchor="middle" fill="#52514e">ошибка (лог.)</text>
+<line x1="140.0" y1="234.6" x2="540.0" y2="77.1" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="540.0" cy="77.1" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.01667, ошибка 0.0654</title></circle>
+<circle cx="440.0" cy="116.5" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.008333, ошибка 0.0327</title></circle>
+<circle cx="340.0" cy="155.9" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.004167, ошибка 0.01635</title></circle>
+<circle cx="240.0" cy="195.3" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.002083, ошибка 0.008172</title></circle>
+<circle cx="140.0" cy="234.5" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.001042, ошибка 0.004103</title></circle>
+<polygon points="140.0,294.1 240.0,294.1 240.0,254.7" fill="none" stroke="#52514e" stroke-dasharray="4 3"/>
+<text x="246.0" y="278.4" fill="#52514e">теория p = 1</text>
+</svg>

@@ -57,6 +57,7 @@ inline void run(const char* name, const std::function<void()>& fn) {
     fn();
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("[%s] %s (%.0f ms)\n", g_failures == before ? " OK " : "FAIL", name, ms);
+    std::fflush(stdout); // piped output is block-buffered: a crash would lose the last tests' lines
     g_results.push_back({name, ms, g_failures - before});
 }
 

@@ -1,0 +1,38 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Вихрь Тейлора–Грина: вязкость и численная диссипация</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Вихрь Тейлора–Грина: вязкость и численная диссипация</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>время, с</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>энергия, мДж</text>
+<text x='84' y='416' class='cap'>32 ячейки, ν = 0,01 м²/с. Тест «action: viscous dissipation…» (RF_PLOT_DIR=… rf_tests, tests/ActionTests.cpp)</text>
+<line x1='84' x2='736' y1='344.0' y2='344.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='348.0' text-anchor='end' class='tick'>0</text>
+<line x1='84' x2='736' y1='243.8' y2='243.8' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='247.8' text-anchor='end' class='tick'>5</text>
+<line x1='84' x2='736' y1='143.5' y2='143.5' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='147.5' text-anchor='end' class='tick'>10</text>
+<line x1='84.0' x2='84.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='84.0' y='364' text-anchor='middle' class='tick'>0</text>
+<line x1='214.4' x2='214.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='214.4' y='364' text-anchor='middle' class='tick'>0,2</text>
+<line x1='344.8' x2='344.8' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='344.8' y='364' text-anchor='middle' class='tick'>0,4</text>
+<line x1='475.2' x2='475.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='475.2' y='364' text-anchor='middle' class='tick'>0,6</text>
+<line x1='605.6' x2='605.6' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='605.6' y='364' text-anchor='middle' class='tick'>0,8</text>
+<line x1='736.0' x2='736.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='736.0' y='364' text-anchor='middle' class='tick'>1</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='84.0,344.0 94.2,338.4 104.4,332.8 114.6,327.3 124.8,321.9 134.9,316.4 145.1,311.1 155.3,305.7 165.5,300.4 175.7,295.2 185.9,290.0 196.1,284.9 206.2,279.8 216.4,274.7 226.6,269.7 236.8,264.7 247.0,259.7 257.2,254.8 267.4,250.0 277.6,245.2 287.8,240.4 297.9,235.6 308.1,230.9 318.3,226.3 328.5,221.7 338.7,217.1 348.9,212.5 359.1,208.0 369.2,203.5 379.4,199.1 389.6,194.7 399.8,190.3 410.0,186.0 420.2,181.7 430.4,177.4 440.6,173.2 450.8,169.0 460.9,164.8 471.1,160.7 481.3,156.6 491.5,152.5 501.7,148.5 511.9,144.5 522.1,140.5 532.2,136.6 542.4,132.7 552.6,128.8 562.8,125.0 573.0,121.2 583.2,117.4 593.4,113.6 603.6,109.9 613.8,106.2 623.9,102.5 634.1,98.9 644.3,95.3 654.5,91.7 664.7,88.1 674.9,84.6 685.1,81.1 695.2,77.6 705.4,74.2 715.6,70.8 725.8,67.4 736.0,64.0' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<polyline points='84.0,344.0 94.2,339.3 104.4,334.7 114.6,330.0 124.8,325.5 134.9,320.9 145.1,316.4 155.3,311.9 165.5,307.4 175.7,303.0 185.9,298.6 196.1,294.3 206.2,290.0 216.4,285.7 226.6,281.4 236.8,277.2 247.0,273.0 257.2,268.8 267.4,264.6 277.6,260.5 287.8,256.5 297.9,252.4 308.1,248.4 318.3,244.4 328.5,240.4 338.7,236.5 348.9,232.6 359.1,228.7 369.2,224.8 379.4,221.0 389.6,217.2 399.8,213.4 410.0,209.7 420.2,206.0 430.4,202.3 440.6,198.6 450.8,194.9 460.9,191.3 471.1,187.7 481.3,184.2 491.5,180.6 501.7,177.1 511.9,173.6 522.1,170.2 532.2,166.7 542.4,163.3 552.6,159.9 562.8,156.5 573.0,153.2 583.2,149.9 593.4,146.6 603.6,143.3 613.8,140.0 623.9,136.8 634.1,133.6 644.3,130.4 654.5,127.2 664.7,124.1 674.9,121.0 685.1,117.9 695.2,114.8 705.4,111.7 715.6,108.7 725.8,105.7 736.0,102.7' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<polyline points='84.0,344.0 94.2,339.3 104.4,334.6 114.6,330.0 124.8,325.3 134.9,320.8 145.1,316.2 155.3,311.6 165.5,307.1 175.7,302.7 185.9,298.2 196.1,293.8 206.2,289.4 216.4,285.0 226.6,280.7 236.8,276.3 247.0,272.1 257.2,267.8 267.4,263.6 277.6,259.3 287.8,255.2 297.9,251.0 308.1,246.9 318.3,242.7 328.5,238.7 338.7,234.6 348.9,230.6 359.1,226.6 369.2,222.6 379.4,218.6 389.6,214.7 399.8,210.8 410.0,206.9 420.2,203.0 430.4,199.2 440.6,195.4 450.8,191.6 460.9,187.8 471.1,184.0 481.3,180.3 491.5,176.6 501.7,172.9 511.9,169.3 522.1,165.7 532.2,162.0 542.4,158.5 552.6,154.9 562.8,151.3 573.0,147.8 583.2,144.3 593.4,140.8 603.6,137.4 613.8,133.9 623.9,130.5 634.1,127.1 644.3,123.8 654.5,120.4 664.7,117.1 674.9,113.8 685.1,110.5 695.2,107.2 705.4,103.9 715.6,100.7 725.8,97.5 736.0,94.3' fill='none' stroke='var(--s2)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='2 3'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>потеряно решателем</text>
+<line x1='257.6' x2='283.6' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='289.6' y='51' font-size='12.5'>∫ 2νρ|S|² dV dt</text>
+<line x1='409.6' x2='435.6' y1='47' y2='47' stroke='var(--s2)' stroke-width='2.5' stroke-dasharray='2 3'/>
+<text x='441.6' y='51' font-size='12.5'>точно: K₀(1 − e^(−4νπ²t))</text>
+</svg>

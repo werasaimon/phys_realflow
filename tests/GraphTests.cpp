@@ -601,3 +601,61 @@ void testGraphColliderOnly() {
     CHECK(rise > 0.5f, "the ball did not bounce off the obstacle (rose at %f m/s)", rise);
     CHECK(std::fabs(sim.rigid.bodies()[size_t(b)].pos.y - 0.45f) < 0.01f, "the ball rests at y %f, not on the obstacle", sim.rigid.bodies()[size_t(b)].pos.y);
 }
+
+// Lights and cameras: the text file keeps them exactly, a spot turned 90 degrees about x shines
+// along -z (its -y axis turned), a camera's frame is orthonormal and looks along its -z, and the
+// snapshot carries the visible lights (the hidden one stays out) posed in the world.
+void testGraphLightsCameras() {
+    SceneGraph g;
+    Light sun;
+    sun.id = 1, sun.name = "Солнце", sun.kind = LightKind::Sun, sun.intensity = 1.5f, sun.shadows = true;
+    sun.rotationDeg = {-50, 30, 0};
+    Light spot;
+    spot.id = 2, spot.name = "Прожектор", spot.kind = LightKind::Spot, spot.coneDeg = 35, spot.softnessDeg = 7.5f;
+    spot.position = {0, 2, 0}, spot.rotationDeg = {90, 0, 0};
+    Light hidden;
+    hidden.id = 3, hidden.name = "Лампа", hidden.visible = false, hidden.range = 3.25f;
+    Camera cam;
+    cam.id = 4, cam.name = "Камера 1", cam.fovDeg = 42, cam.nearClip = 0.1f, cam.farClip = 80, cam.active = true;
+    cam.position = {1, 2, 3}, cam.rotationDeg = {-20, 35, 10};
+    g.lights = {sun, spot, hidden};
+    g.cameras = {cam};
+
+    const std::string text = g.save();
+    SceneGraph back;
+    std::string error;
+    CHECK(back.load(text, error), "lights and cameras do not load: %s", error.c_str());
+    CHECK(back.save() == text, "save -> load -> save changed the lights / cameras:\n%s\n---\n%s", text.c_str(), back.save().c_str());
+    CHECK(back.lights.size() == 3 && back.cameras.size() == 1 && back.lights[1].kind == LightKind::Spot &&
+              back.lights[1].softnessDeg == 7.5f && back.lights[0].shadows && back.cameras[0].active && back.cameras[0].fovDeg == 42,
+          "light / camera fields not restored");
+    CHECK(findObject(back, 4) == &back.cameras[0] && nextId(back) == 5, "cameras must be found by id and counted in nextId");
+
+    const Vector3 d = lightDirection(g, spot);
+    Vector3 eye, forward, up;
+    cameraFrame(g, cam, eye, forward, up);
+    const float ortho = std::fabs(dot(forward, up)), unit = std::fabs(length(forward) - 1) + std::fabs(length(up) - 1);
+    std::printf("  lights: spot turned 90 deg about x shines (%.3f %.3f %.3f); camera forward.up %.1e, |f|,|u| off by %.1e\n",
+                d.x, d.y, d.z, ortho, unit);
+    CHECK(length(d - Vector3(0, 0, -1)) < 1e-5f, "the spot's direction is (%f %f %f), expected (0 0 -1)", d.x, d.y, d.z);
+    CHECK(ortho < 1e-5f && unit < 1e-5f && length(eye - cam.position) < 1e-6f, "the camera frame is not orthonormal");
+    Camera straight;
+    cameraFrame(g, straight, eye, forward, up);
+    CHECK(length(forward - Vector3(0, 0, -1)) < 1e-6f && length(up - Vector3(0, 1, 0)) < 1e-6f, "an unturned camera looks along -z");
+
+    Simulation sim;
+    sim.load(std::make_unique<GraphScene>(g));
+    RenderSnapshot s;
+    sim.fillSnapshot(s);
+    CHECK(s.lights.size() == 2 && s.lights[1].kind == int(LightKind::Spot) && length(s.lights[1].direction - d) < 1e-5f &&
+              length(s.lights[1].position - spot.position) < 1e-6f,
+          "the snapshot must carry the two visible lights posed in the world (got %zu)", s.lights.size());
+    // A light edited while the scene runs: the next snapshot shows it, the bodies do not notice.
+    auto* scene = dynamic_cast<GraphScene*>(sim.scene());
+    CHECK(scene != nullptr, "the simulation must hold the graph scene");
+    if (!scene) return;
+    scene->setLightsAndCameras({sun}, {});
+    sim.fillSnapshot(s);
+    CHECK(s.lights.size() == 1 && s.lights[0].kind == int(LightKind::Sun) && scene->graph().cameras.empty(),
+          "lights set between frames must reach the next snapshot (got %zu)", s.lights.size());
+}

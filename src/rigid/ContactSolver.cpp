@@ -26,7 +26,7 @@ void RigidWorld::addManifold(std::vector<Manifold>& out, int a, int b, ContactMa
     m.friction = std::sqrt(A.friction * fb); // kinetic (sliding) coefficient
     float fsb = b >= 0 ? bodies_[b].staticFriction : 0.8f;
     m.staticFriction = std::max(std::sqrt(A.staticFriction * fsb), m.friction);
-    m.restitution = std::max(A.restitution, b >= 0 ? bodies_[b].restitution : 0.1f);
+    m.restitution = std::max(A.restitution, b >= 0 ? bodies_[b].restitution : params.wallRestitution); // the bouncier wins
     Matrix3x3 Rt = A.rotation().transposed();
     for (const ContactPoint& c : cm.points) {
         SolverPoint p;
@@ -437,7 +437,9 @@ void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cel
     m.jt1 = dot(old.friction, m.t1);
     m.jt2 = dot(old.friction, m.t2);
     m.jtwist = old.twist;
-    m.jroll = old.roll;
+    // A locked manifold solves the lock instead of the rolling resistance (solveFriction), so only an
+    // unlocked one takes its rolling impulse back: whatever is warm started must be solved again.
+    if (!m.locked) m.jroll = old.roll;
     if (m.locked && old.locked) m.jlock = old.lock;
     Vector3 J = m.t1 * m.jt1 + m.t2 * m.jt2;
     applyImpulse(m.a, J, m.center);
@@ -680,7 +682,12 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
     old = m.jtwist;
     m.jtwist = clampv(old - m.massTwist * dot(wRel, m.normal), -maxTwist, maxTwist);
     applyPairAngularImpulse(m, m.normal * (m.jtwist - old));
-    if (m.locked && total > 0) {
+    // The lock runs even with no load (total = 0): its limit is then 0, and the clamp takes back
+    // the impulse the warm start put in. The accumulated impulse is what is clamped (Catto 2005,
+    // "Iterative Dynamics with Temporal Coherence"), so a bound that collapses removes the warm
+    // start with it. Skipped at total = 0, last step's lock stayed in as a free angular kick: a
+    // cube bouncing flat got a spin on every bounce until it tumbled.
+    if (m.locked) {
         // Angular constraint on SO(3) at velocity level: the relative angular velocity of a resting
         // face contact is driven to zero on all three axes (angular part of a fixed joint). It is
         // breakable - limited by the friction moment the patch can carry - and released in
@@ -696,7 +703,9 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
         applyPairAngularImpulse(m, jl - oldL);
         return;
     }
-    // Rolling resistance: damps the remaining relative rotation (tilting / rolling).
+    // Rolling resistance: damps the remaining relative rotation (tilting / rolling). Still skipped
+    // with no load: running it there too (the same clamp as the lock) made the 200 m/s cube of the
+    // CCD test go through its thin mesh plate - that path is not understood yet, so it stays.
     if (params.rollingResistance > 0 && total > 0) {
         wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
         Vector3 wRoll = wRel - m.normal * dot(wRel, m.normal);

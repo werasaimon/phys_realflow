@@ -242,6 +242,13 @@ private:
     void predictPositions(float dt);
     void solveIteration(int it, bool solids, float dt);
     void finishStep(float dt);
+    // The research layers of the particles (ParticleDebugDraw.cpp): neighbours of the particle at
+    // the probe point, density error, soft-body clusters, cloth tension. Only the layers that are on.
+    void drawDebug(float dt) const;
+    void drawNeighbours() const;
+    void drawDensityError() const;
+    void drawSoftClusters() const;
+    void drawClothTension(float dt) const;
 
     const MeshBVH* mesh_ = nullptr;
     RigidWorld* rigid_ = nullptr;

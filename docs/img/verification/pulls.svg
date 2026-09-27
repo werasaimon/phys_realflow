@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 376" width="640" height="376" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="376" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Пулы z = E / u_val, полосы 1, 2, 3 σ</text>
+<rect x="402.5" y="44.0" width="145.0" height="282.0" fill="#f0efec"><title>± 3 σ</title></rect>
+<rect x="426.7" y="44.0" width="96.7" height="282.0" fill="#e5e4df"><title>± 2 σ</title></rect>
+<rect x="450.8" y="44.0" width="48.3" height="282.0" fill="#d9d8d2"><title>± 1 σ</title></rect>
+<text x="330.0" y="344.0" text-anchor="middle" fill="#52514e">-6 σ</text>
+<text x="378.3" y="344.0" text-anchor="middle" fill="#52514e">-4 σ</text>
+<text x="426.7" y="344.0" text-anchor="middle" fill="#52514e">-2 σ</text>
+<text x="475.0" y="344.0" text-anchor="middle" fill="#52514e">0 σ</text>
+<text x="523.3" y="344.0" text-anchor="middle" fill="#52514e">2 σ</text>
+<text x="571.7" y="344.0" text-anchor="middle" fill="#52514e">4 σ</text>
+<text x="620.0" y="344.0" text-anchor="middle" fill="#52514e">6 σ</text>
+<line x1="475.0" y1="44.0" x2="475.0" y2="326.0" stroke="#52514e" />
+<text x="318" y="68.0" text-anchor="end" fill="#0b0b0b" font-size="12">Полёт тела: порядок интегратора по dt</text>
+<circle cx="439.4" cy="64.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>rigid-projectile: z = -1.471</title></circle>
+<text x="318" y="94.0" text-anchor="end" fill="#0b0b0b" font-size="12">Брусок на склоне: угол срыва</text>
+<circle cx="620.0" cy="90.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>rigid-incline-stick: z = 7.588</title></circle>
+<text x="610.0" y="82.0" text-anchor="end" fill="#52514e" font-size="11">7.588 σ</text>
+<text x="318" y="120.0" text-anchor="end" fill="#0b0b0b" font-size="12">Теплопроводность: построенное решение (MMS)</text>
+<circle cx="396.9" cy="116.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-mms-heat: z = -3.233</title></circle>
+<text x="318" y="146.0" text-anchor="end" fill="#0b0b0b" font-size="12">Вихрь Тейлора–Грина: затухание</text>
+<circle cx="366.3" cy="142.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-taylor-green: z = -4.497</title></circle>
+<text x="318" y="172.0" text-anchor="end" fill="#0b0b0b" font-size="12">Течение Пуазейля между пластинами</text>
+<circle cx="399.4" cy="168.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-poiseuille: z = -3.127</title></circle>
+<text x="318" y="198.0" text-anchor="end" fill="#0b0b0b" font-size="12">Течение Куэтта–Пуазейля: подвижная пластина</text>
+<circle cx="412.8" cy="194.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-couette: z = -2.572</title></circle>
+<text x="318" y="224.0" text-anchor="end" fill="#0b0b0b" font-size="12">Ткань между двумя опорами: провис</text>
+<circle cx="330.0" cy="220.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>cloth-elastic-catenary: z = -88.14</title></circle>
+<text x="340.0" y="212.0" text-anchor="start" fill="#52514e" font-size="11">-88.14 σ</text>
+<text x="318" y="250.0" text-anchor="end" fill="#0b0b0b" font-size="12">Маятник 10°: период и сходимость по dt</text>
+<circle cx="482.8" cy="246.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>rigid-pendulum-dt: z = 0.3209</title></circle>
+<text x="318" y="276.0" text-anchor="end" fill="#0b0b0b" font-size="12">Остывание пятна тепла: GCI пика</text>
+<circle cx="451.7" cy="272.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-heat-spot: z = -0.9629</title></circle>
+<text x="318" y="302.0" text-anchor="end" fill="#0b0b0b" font-size="12">Перенос MacCormack: порядок</text>
+<circle cx="370.4" cy="298.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-advection: z = -4.326</title></circle>
+<text x="318" y="328.0" text-anchor="end" fill="#0b0b0b" font-size="12">Цилиндр, Re = 100: число Струхаля</text>
+<circle cx="447.0" cy="324.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>gas-cylinder-strouhal: z = -1.157</title></circle>
+</svg>

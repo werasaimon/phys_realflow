@@ -1,9 +1,11 @@
 // Pressure projection of GasSolver: the Poisson equation div(w grad p) = div u* / dt on the
-// MAC grid, solved by the preconditioned conjugate gradient (Jacobi), with the face weights of
-// the Boris correction and the mean divergence removed per closed region (Bridson, ch. 5).
+// MAC grid, solved by the preconditioned conjugate gradient - with a multigrid V-cycle as the
+// preconditioner (MGPCG, Multigrid.h) or the plain Jacobi one - with the face weights of the
+// Boris correction and the mean divergence removed per closed region (Bridson, ch. 5).
 #include "gas/GasSolver.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <chrono>
 
@@ -29,7 +31,12 @@ void GasSolver::project(float dt) {
     const bool weighted = magnetic.enabled && magnetic.speedLimit > 0;
     if (weighted) magnetic.borisWeights(weightU_, weightV_, weightW_, params.fluidDensity);
     buildWeightedDiagonal(weighted);
-    solvePressurePcg(weighted);
+    if (params.pressurePreconditioner != PressurePreconditioner::Multigrid) {
+        solvePressurePcg(weighted);
+    } else if (!solvePressureMultigridPcg(weighted)) {
+        Probe::add("gas/multigrid fallbacks", 1); // counted, so a test or the panel sees it happen
+        solvePressurePcg(weighted);
+    }
     subtractPressureGradient(weighted);
     const float toP = 1.0f / toQ;
     parallelFor(int(long(n)), [&](int c_) {
@@ -207,6 +214,88 @@ void GasSolver::solvePressurePcg(bool weighted) {
     }
     lastIters_ = it;
     lastResidual_ = bnorm > 0 ? float(rnorm / bnorm) : 0.0f;
+}
+
+// The finest level of the multigrid: the weight of every face of the pressure equation - w between
+// two gas cells, w on an open (outflow) side of the domain, 0 at a wall or next to a solid - the
+// same faces applyPressureMatrix() and buildWeightedDiagonal() use, so both see one matrix.
+void GasSolver::fillMultigridFaces(bool weighted) {
+    multigrid_.resize(nx_, ny_, nz_);
+    const int NX = nx_, NY = ny_, NZ = nz_;
+    const BoundaryType* bc = params.bc;
+    auto gas = [&](int i, int j, int k) { return !solid_[cidx(i, j, k)] && diag_[cidx(i, j, k)] != 0; };
+    // A face between cell a (before it) and cell b (after it); index -1 or n: outside the domain.
+    auto open = [&](bool aInside, bool bInside, bool aGas, bool bGas, BoundaryType before, BoundaryType after) {
+        if (!aInside) return bGas && before == BoundaryType::Outflow;
+        if (!bInside) return aGas && after == BoundaryType::Outflow;
+        return aGas && bGas;
+    };
+    parallelFor(NZ + 1, [&](int k) {
+        for (int j = 0; j <= NY; ++j)
+            for (int i = 0; i <= NX; ++i) {
+                if (j < NY && k < NZ) {
+                    const bool o = open(i > 0, i < NX, i > 0 && gas(i - 1, j, k), i < NX && gas(i, j, k), bc[0], bc[1]);
+                    multigrid_.faceX(i, j, k) = o ? float(faceWeightU(i, j, k, weighted)) : 0.0f;
+                }
+                if (i < NX && k < NZ) {
+                    const bool o = open(j > 0, j < NY, j > 0 && gas(i, j - 1, k), j < NY && gas(i, j, k), bc[2], bc[3]);
+                    multigrid_.faceY(i, j, k) = o ? float(faceWeightV(i, j, k, weighted)) : 0.0f;
+                }
+                if (i < NX && j < NY) {
+                    const bool o = open(k > 0, k < NZ, k > 0 && gas(i, j, k - 1), k < NZ && gas(i, j, k), bc[4], bc[5]);
+                    multigrid_.faceZ(i, j, k) = o ? float(faceWeightW(i, j, k, weighted)) : 0.0f;
+                }
+            }
+    }, 1);
+}
+
+// The same conjugate gradient with one V-cycle of Multigrid.h as the preconditioner, z = V(r) in
+// place of z = r / diag (MGPCG: McAdams, Sifakis, Teran 2010). Same stopping rule, same warm start.
+// CG needs a positive definite preconditioner: if a curvature s.As or r.z comes out not positive,
+// it was not for this matrix, and false hands the rest of the solve to the Jacobi PCG.
+bool GasSolver::solvePressureMultigridPcg(bool weighted) {
+    const int n = int(size_t(nx_) * ny_ * nz_);
+    fillMultigridFaces(weighted);
+    multigrid_.build();
+    applyPressureMatrix(q_, As_, weighted);
+    parallelFor(n, [&](int c) { r_[size_t(c)] = b_[size_t(c)] - As_[size_t(c)]; }, 4096);
+    const double bnorm = std::sqrt(dotProduct(b_, b_));
+    const double tol = std::max(1e-12, double(params.pressureTolerance) * bnorm);
+    double rnorm = std::sqrt(dotProduct(r_, r_)), rz = 0;
+    int it = 0;
+    if (rnorm > tol) {
+        multigrid_.apply(r_, z_);
+        parallelFor(n, [&](int c) { s_[size_t(c)] = z_[size_t(c)]; }, 4096);
+        rz = dotProduct(r_, z_);
+        if (!(rz > 0)) return false;
+    }
+    while (it < params.maxPressureIterations && rnorm > tol) {
+        applyPressureMatrix(s_, As_, weighted);
+        const double sAs = dotProduct(s_, As_);
+        if (!(sAs > 0)) return false;
+        const double alpha = rz / sAs;
+        const double rr = parallelSum<double>(n, [&](int c0, int c1) {
+            double sum = 0;
+            for (int c = c0; c < c1; ++c) {
+                q_[size_t(c)] += alpha * s_[size_t(c)];
+                r_[size_t(c)] -= alpha * As_[size_t(c)];
+                sum += r_[size_t(c)] * r_[size_t(c)];
+            }
+            return sum;
+        }, 4096);
+        rnorm = std::sqrt(rr);
+        ++it;
+        if (rnorm <= tol) break;
+        multigrid_.apply(r_, z_);
+        const double rzNew = dotProduct(r_, z_);
+        if (!(rzNew > 0)) return false;
+        const double beta = rzNew / rz;
+        rz = rzNew;
+        parallelFor(n, [&](int c) { s_[size_t(c)] = z_[size_t(c)] + beta * s_[size_t(c)]; }, 4096);
+    }
+    lastIters_ = it;
+    lastResidual_ = bnorm > 0 ? float(rnorm / bnorm) : 0.0f;
+    return true;
 }
 
 // Velocity update: u -= w grad q on every face between two fluid cells (q already includes

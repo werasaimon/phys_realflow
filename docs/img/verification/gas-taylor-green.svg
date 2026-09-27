@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="400" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Вихрь Тейлора–Грина: затухание (p = 0.95)</text>
+<line x1="187.5" y1="50.0" x2="187.5" y2="330.0" stroke="#e5e4df"/><text x="187.5" y="348.0" text-anchor="middle" fill="#52514e">0.01</text>
+<line x1="320.8" y1="50.0" x2="320.8" y2="330.0" stroke="#e5e4df"/><text x="320.8" y="348.0" text-anchor="middle" fill="#52514e">0.02</text>
+<line x1="497.1" y1="50.0" x2="497.1" y2="330.0" stroke="#e5e4df"/><text x="497.1" y="348.0" text-anchor="middle" fill="#52514e">0.05</text>
+<line x1="80.0" y1="299.9" x2="600.0" y2="299.9" stroke="#e5e4df"/><text x="72.0" y="303.9" text-anchor="end" fill="#52514e">0.002</text>
+<line x1="80.0" y1="234.8" x2="600.0" y2="234.8" stroke="#e5e4df"/><text x="72.0" y="238.8" text-anchor="end" fill="#52514e">0.005</text>
+<line x1="80.0" y1="185.6" x2="600.0" y2="185.6" stroke="#e5e4df"/><text x="72.0" y="189.6" text-anchor="end" fill="#52514e">0.01</text>
+<line x1="80.0" y1="136.4" x2="600.0" y2="136.4" stroke="#e5e4df"/><text x="72.0" y="140.4" text-anchor="end" fill="#52514e">0.02</text>
+<line x1="80.0" y1="71.4" x2="600.0" y2="71.4" stroke="#e5e4df"/><text x="72.0" y="75.4" text-anchor="end" fill="#52514e">0.05</text>
+<text x="340.0" y="370.0" text-anchor="middle" fill="#52514e">dx, м (лог.)</text>
+<text transform="translate(18 190.0) rotate(-90)" text-anchor="middle" fill="#52514e">ошибка (лог.)</text>
+<line x1="140.0" y1="216.7" x2="540.0" y2="76.2" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="540.0" cy="77.1" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.0625, ошибка 0.04613</title></circle>
+<circle cx="406.7" cy="122.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.03125, ошибка 0.0245</title></circle>
+<circle cx="273.3" cy="169.2" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.01562, ошибка 0.0126</title></circle>
+<circle cx="140.0" cy="217.4" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.007812, ошибка 0.006388</title></circle>
+<polygon points="140.0,292.0 273.3,292.0 273.3,242.8" fill="none" stroke="#52514e" stroke-dasharray="4 3"/>
+<text x="279.3" y="271.4" fill="#52514e">теория p = 1</text>
+</svg>

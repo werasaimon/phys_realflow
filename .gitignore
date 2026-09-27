@@ -21,3 +21,7 @@ compile_commands.json
 
 # Local results (screenshots, exported data)
 *.csv
+
+# Python caches and editors' temporary files
+__pycache__/
+*.tmp.*

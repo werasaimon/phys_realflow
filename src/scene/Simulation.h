@@ -177,6 +177,27 @@ struct RenderSnapshot {
     // Everything the engine reported to the Probe this frame: every channel by name (values,
     // counters, timers) and the debug drawing. The plots take any channel from here.
     Probe::Snapshot probe;
+    // Every contact point of the rigid bodies in the last step, for the research panel: filled
+    // only while the ContactPoints layer is on (Probe::layerOn), empty otherwise.
+    struct ContactInfo {
+        Vector3 position, normal;   // normal: from body A to body B
+        float depth = 0;            // penetration [m]
+        float normalImpulse = 0;    // accumulated normal impulse of the point [N s]
+        float frictionImpulse = 0;  // friction impulse of the whole contact patch [N s]
+        int bodyA = -1, bodyB = -1; // indices into RigidWorld::bodies()
+    };
+    std::vector<ContactInfo> contacts;
+
+    // The scene's lights (SceneGraph::lights, posed in the world) for the viewer's shading; empty:
+    // the scene has none, the viewer uses its own default light. Physics ignores them.
+    struct LightInfo {
+        int kind = 1;               // LightKind: 0 Sun, 1 Point, 2 Spot
+        Vector3 position, direction; // direction: where the light shines (Sun, Spot)
+        Vector3 color{1.0f};
+        float intensity = 1, range = 5, coneDeg = 40, softnessDeg = 10;
+        bool shadows = false;
+    };
+    std::vector<LightInfo> lights;
 
     // Current settings, for synchronising the UI
     uint64_t paramsVersion = 0;
@@ -241,7 +262,7 @@ public:
     Vector3 gravity() const { return rigid.params.gravity; }
     void stepFrame();
 
-    float time() const { return time_; }
+    double time() const { return time_; } // [s], summed in double (a float sum drifts, GasSolver::time)
     uint64_t frame() const { return frame_; }
     void touchParams() { ++paramsVersion_; }
     void fillSnapshot(RenderSnapshot& s) const;
@@ -286,6 +307,10 @@ private:
     void fillJointsAndGrab(RenderSnapshot& s) const;
     void extractSlice(RenderSnapshot& s) const;
     void extractVectors(RenderSnapshot& s) const;
+    // The research layers drawn from the view settings (the gas slice, the field lines B) once a
+    // frame, and the contact list of the snapshot.
+    void drawResearchLayers() const;
+    void fillContacts(RenderSnapshot& s) const;
     int sliceLayer() const;
     void updateSurfaceLoads();
 
@@ -295,7 +320,7 @@ private:
     MeshBVH obstacleBVH_;
     uint64_t obstacleVersion_ = 1;
     uint64_t paramsVersion_ = 1;
-    float time_ = 0;
+    double time_ = 0;
     uint64_t frame_ = 0;
     float lastStepMs_ = 0;
     float lastGridDt_ = 0;
@@ -303,6 +328,7 @@ private:
     std::vector<Vector3> softGasImpulse_;                  // gas -> soft bodies (their centre of mass)
     float gasForceMax_ = 0;
     SurfaceLoads surfaceLoads_;
+    mutable uint64_t researchDrawnFrame_ = 0; // Probe::frameIndex() when drawResearchLayers() last drew
 };
 
 } // namespace rf

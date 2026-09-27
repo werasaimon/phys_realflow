@@ -14,7 +14,7 @@ ROOT = next((a for a in sys.argv[1:] if not a.startswith('--')), '.')
 LIMIT = 60
 if '--limit' in sys.argv:
     LIMIT = int(sys.argv[sys.argv.index('--limit') + 1])
-DIRS = ('src', 'samples')
+DIRS = ('src', 'samples', 'verification')
 DEFINITION = re.compile(r'^[A-Za-z_][A-Za-z0-9_:<>,\s\*&]*\s\*?&?[A-Za-z_][A-Za-z0-9_:]*\s*\([^;]*\)\s*(const)?\s*(noexcept)?\s*\{\s*$')
 
 

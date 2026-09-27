@@ -33,7 +33,10 @@ public:
     static constexpr float kMu0 = 1.25663706e-6f; // vacuum permeability [T m / A]
 
     bool enabled = false;
-    Vector3 applied{0.0f};           // [T] uniform field at the start (of coils around the vessel)
+    // [T] uniform field of coils around the vessel. It is part of the fixed background B0, not of
+    // the evolving B1: a weak wave on a strong field then keeps its own float precision (a 0.01 T
+    // field stored in one float with a 3e-5 T wave left the wave three significant digits).
+    Vector3 applied{0.0f};
     float conductivity = 1e6f;       // sigma [S/m]: resistivity eta = 1 / (mu0 sigma) [m^2/s]
     // Dissipation of the centred advection of B on an edge: eta_num = max(f |u| dx, |u|^2 h) with
     // this factor f and the substep h. The second term is twice the Lax-Wendroff amount
@@ -72,7 +75,9 @@ public:
     void induce(const Field3& u, const Field3& v, const Field3& w, float density, float dt);
     // Lorentz force J x B: velocity change of the inner faces (solid[c] cells skipped).
     void applyLorentzForce(Field3& u, Field3& v, Field3& w, const std::vector<uint8_t>& solid, float density, float dt);
-    // Joule heating J^2 / sigma of every cell over dt [J/m^3].
+    // Joule heating J^2 / sigma of every cell over dt [J/m^3]: the heat of the free edges (a wall's
+    // edges do no work), a quarter of each edge's to each of its four cells - the exact partner of
+    // the field energy the resistive step removes.
     void jouleHeating(std::vector<float>& heat, float dt);
     // Boris correction: 1 / (1 + v_A^2 / c^2) on every face (x, y, z faces as u, v, w) - the factor
     // by which the field's inertia slows every acceleration there (the pressure's too: see
@@ -120,6 +125,7 @@ private:
     float etaMax_ = 0;
     Field3 tbx_, tby_, tbz_;         // total B = B0 + B1, refreshed before it is used
     void updateTotal();
+    void initBackground(); // B0 = the uniform `applied` field on every face
     void addCurl(const std::function<Vector3(const Vector3&)>& A, Field3& fx, Field3& fy, Field3& fz) const;
     std::vector<uint8_t> conductor_; // per cell, empty = none
     std::vector<uint8_t> fixedEx_, fixedEy_, fixedEz_; // edges on a conductor: E = 0

@@ -6,6 +6,10 @@
 #include "Tests.h"
 
 #include "core/Probe.h"
+#include "scene/SceneGraph.h"
+
+#include <cmath>
+#include <memory>
 
 void testRigid() {
     RigidWorld w;
@@ -1001,6 +1005,202 @@ static void capsuleOnFloor(bool lying, Vector3& pos, Vector3& axis, float& speed
     axis = b.rotation() * Vector3(0, 1, 0);
     speed = length(b.vel);
     contacts = int(w.contactCount());
+}
+
+// --- Dead landing (restitution 0) ----------------------------------------------------------------
+// A body with e = 0 must stop at the touch: whatever upward speed it has after the hit and however
+// high it rises above its resting height are the defect. Each case is stepped at 600 Hz for 1.5 s.
+struct DeadLanding {
+    float impact = 0;  // downward speed just before the touch [m/s]
+    float rebound = 0; // the largest upward speed after the touch [m/s]
+    float rise = 0;    // how far the body went up again after its lowest point since the touch [m]
+    float settle = 0;  // where it rests at the end, above its resting height [m]
+};
+
+// "Rise" is counted from the lowest point reached after the touch, not from the resting height: a
+// speculative contact stops the fall slop (1 - baumgarte) = 3.2 mm above the support and the body
+// then sinks the rest of the way softly - that is a landing, not a bounce.
+DeadLanding measureDeadLanding(RigidWorld& w, int body, float restY) {
+    DeadLanding out;
+    bool landed = false;
+    float lastVy = 0, lowest = 1e9f;
+    for (int s = 0; s < 900; ++s) {
+        w.step(1.0f / 600.0f);
+        const RigidBody& b = w.bodies()[size_t(body)];
+        if (!landed && lastVy < -1.0f && b.vel.y > 0.5f * lastVy) {
+            landed = true;
+            out.impact = -lastVy;
+        }
+        lastVy = b.vel.y;
+        if (!landed) continue;
+        out.rebound = std::max(out.rebound, b.vel.y);
+        lowest = std::min(lowest, b.pos.y);
+        out.rise = std::max(out.rise, b.pos.y - lowest);
+    }
+    out.settle = w.bodies()[size_t(body)].pos.y - restY;
+    return out;
+}
+
+// A sphere or a box (radius / half size 0.1 m) dropped from `height` onto the world's floor, or
+// onto a static slab with restitution 0 when onSlab; the body itself has restitution e.
+DeadLanding dropDead(bool sphere, float height, bool onSlab, float e = 0) {
+    RigidWorld w;
+    w.setDomain(AABB({-5, 0, -5}, {5, 10, 5}));
+    float floorY = 0;
+    if (onSlab) {
+        const int slab = w.addBox({0, 0.25f, 0}, {2, 0.25f, 2}, Quaternion(), 0, Vector3(1));
+        w.bodies()[size_t(slab)].restitution = 0;
+        floorY = 0.5f;
+    }
+    const float r = 0.1f;
+    const Vector3 at(0, floorY + height + r, 0);
+    const int b = sphere ? w.addSphere(at, r, 1000, Vector3(1)) : w.addBox(at, Vector3(r), Quaternion(), 1000, Vector3(1));
+    w.bodies()[size_t(b)].restitution = e;
+    return measureDeadLanding(w, b, floorY + r);
+}
+
+// A box dropped from 1 m onto a resting column of three boxes, all with e = 0.
+DeadLanding dropDeadOnStack() {
+    RigidWorld w;
+    w.setDomain(AABB({-5, 0, -5}, {5, 10, 5}));
+    const float h = 0.1f;
+    for (int i = 0; i < 3; ++i) {
+        const int b = w.addBox({0, h + 2 * h * i, 0}, Vector3(h), Quaternion(), 1000, Vector3(1));
+        w.bodies()[size_t(b)].restitution = 0;
+    }
+    for (int s = 0; s < 600; ++s) w.step(1.0f / 600.0f); // the column settles
+    const int top = w.addBox({0, 6 * h + 1.0f + h, 0}, Vector3(h), Quaternion(), 1000, Vector3(1));
+    w.bodies()[size_t(top)].restitution = 0;
+    return measureDeadLanding(w, top, 6 * h + h);
+}
+
+void testDeadLanding() {
+    struct Case { const char* name; DeadLanding d; };
+    const Case cases[] = {
+        {"sphere 1 m, floor", dropDead(true, 1, false)},  {"sphere 5 m, floor", dropDead(true, 5, false)},
+        {"box 1 m, floor", dropDead(false, 1, false)},    {"box 5 m, floor", dropDead(false, 5, false)},
+        {"sphere 5 m, static slab", dropDead(true, 5, true)}, {"box 5 m, static slab", dropDead(false, 5, true)},
+        {"box 1 m onto a stack", dropDeadOnStack()},
+    };
+    for (const Case& c : cases) {
+        std::printf("  e = 0, %-24s hit %5.2f m/s, rebound %.4f m/s, rise %.2f mm, rests %.2f mm above\n", c.name, c.d.impact,
+                    c.d.rebound, c.d.rise * 1000, c.d.settle * 1000);
+        CHECK(c.d.impact > 3.0f, "%s: the fall was not measured (hit %f m/s)", c.name, c.d.impact);
+        CHECK(c.d.rebound < 0.05f, "%s: rebound %f m/s with e = 0", c.name, c.d.rebound);
+        CHECK(c.d.rise < 0.001f, "%s: rose %f m after the touch with e = 0", c.name, c.d.rise);
+    }
+    // The control: the same floor still bounces a body that asks for it (e = 0.5: half the speed).
+    const DeadLanding half = dropDead(true, 1, false, 0.5f);
+    std::printf("  e = 0.5, sphere 1 m, floor    hit %5.2f m/s, rebound %.4f m/s (expected %.4f)\n", half.impact, half.rebound, 0.5f * half.impact);
+    CHECK(std::fabs(half.rebound - 0.5f * half.impact) < 0.02f * half.impact, "e = 0.5 from the floor: rebound %f, expected %f",
+          half.rebound, 0.5f * half.impact);
+}
+
+// --- Flat landing -------------------------------------------------------------------------------
+// A cube dropped exactly flat meets the floor with a whole face at once: by symmetry it must land
+// without turning and without sliding. What it did turn and slide by is the defect.
+struct FlatLanding {
+    float turnDeg = 0;  // the whole rotation from the start orientation
+    float tiltDeg = 0;  // how far its up axis leans from the world's up
+    float yawDeg = 0;   // rotation about the vertical
+    float driftMm = 0;  // horizontal distance from where it was dropped
+    float spinMax = 0;  // the largest angular speed seen [rad/s]
+};
+
+FlatLanding flatLandingOf(const RigidBody& b, const Vector3& start, const Quaternion& startRot, float spinMax) {
+    FlatLanding out;
+    const Quaternion d = (b.rot * startRot.conjugate()).normalized();
+    const float kDeg = 180.0f / 3.14159265f;
+    out.turnDeg = 2.0f * std::acos(std::min(1.0f, std::fabs(d.w))) * kDeg;
+    const Vector3 up = d.rotate(Vector3(0, 1, 0)), side = d.rotate(Vector3(1, 0, 0));
+    out.tiltDeg = std::acos(std::max(-1.0f, std::min(1.0f, up.y))) * kDeg;
+    out.yawDeg = std::atan2(-side.z, side.x) * kDeg;
+    out.driftMm = length(Vector3(b.pos.x - start.x, 0, b.pos.z - start.z)) * 1000;
+    out.spinMax = spinMax;
+    return out;
+}
+
+// A 0.2 m cube with the editor's material (density 500, friction 0.5) dropped from `height` onto
+// the world's floor, or onto the editor's floor (a static plate 3 x 0.02 x 3 m) when onPlate,
+// tilted by tiltDeg about x (0: exactly flat); 4 s at 600 Hz.
+FlatLanding dropCube(float height, float e, bool onPlate, float tiltDeg) {
+    RigidWorld w;
+    w.setDomain(AABB({-2, 0, -2}, {2, 8, 2}));
+    float floorY = 0;
+    if (onPlate) {
+        w.addBox({0, 0.01f, 0}, {1.5f, 0.01f, 1.5f}, Quaternion(), 0, Vector3(1));
+        floorY = 0.02f;
+    }
+    const Vector3 start(0.3f, floorY + height + 0.1f, -0.2f);
+    const Quaternion rot = Quaternion::fromAxisAngle({1, 0, 0}, tiltDeg * 3.14159265f / 180.0f);
+    const int b = w.addBox(start, Vector3(0.1f), rot, 500, Vector3(1));
+    RigidBody& cube = w.bodies()[size_t(b)];
+    cube.friction = 0.5f;
+    cube.staticFriction = std::max(cube.staticFriction, 0.5f);
+    cube.restitution = e;
+    float spinMax = 0;
+    for (int s = 0; s < 2400; ++s) {
+        w.step(1.0f / 600.0f);
+        spinMax = std::max(spinMax, length(w.bodies()[size_t(b)].angVel));
+    }
+    return flatLandingOf(w.bodies()[size_t(b)], start, Quaternion(), spinMax); // absolute: flat means identity
+}
+
+// The same drop the editor way: a scene graph with the default floor plane and a box entity.
+FlatLanding dropCubeInEditorScene(float height, float e) {
+    SceneGraph g;
+    g.world.gravity = {0, -9.81f, 0};
+    g.world.size = {4, 8, 4}; // tall enough for the 5 m drop (a start above the world's lid hits the lid)
+    Entity floor;
+    floor.shape = ShapeKind::Plane;
+    floor.size = {3, 0.02f, 3};
+    floor.position = {0, 0.01f, 0};
+    floor.collider.enabled = true;
+    g.entities.push_back(floor);
+    Entity cube;
+    cube.shape = ShapeKind::Box;
+    cube.size = {0.2f, 0.2f, 0.2f};
+    cube.position = {0.3f, 0.02f + height + 0.1f, -0.2f};
+    cube.rigid.enabled = true;
+    cube.collider.enabled = true;
+    cube.rigid.restitution = e;
+    g.entities.push_back(cube);
+    Simulation sim;
+    sim.load(std::make_unique<GraphScene>(g));
+    int body = -1;
+    for (int i = 0; i < int(sim.rigid.bodies().size()); ++i)
+        if (sim.rigid.bodies()[size_t(i)].invMass > 0) body = i;
+    float spinMax = 0;
+    for (int f = 0; f < 240; ++f) {
+        sim.stepFrame();
+        spinMax = std::max(spinMax, length(sim.rigid.bodies()[size_t(body)].angVel));
+    }
+    return flatLandingOf(sim.rigid.bodies()[size_t(body)], cube.position, Quaternion(), spinMax);
+}
+
+void printFlatLanding(const char* name, const FlatLanding& f) {
+    std::printf("  %-34s turned %6.2f deg (tilt %6.2f, yaw %6.2f), drift %7.2f mm, spin up to %.3f rad/s\n", name, f.turnDeg,
+                f.tiltDeg, f.yawDeg, f.driftMm, f.spinMax);
+}
+
+void testFlatLanding() {
+    struct Case { const char* name; FlatLanding f; };
+    const Case flat[] = {
+        {"1 m, e 0, world floor", dropCube(1, 0, false, 0)},   {"5 m, e 0, world floor", dropCube(5, 0, false, 0)},
+        {"1 m, e 0.5, world floor", dropCube(1, 0.5f, false, 0)}, {"5 m, e 0.5, world floor", dropCube(5, 0.5f, false, 0)},
+        {"1 m, e 0, editor plate", dropCube(1, 0, true, 0)},   {"5 m, e 0.5, editor plate", dropCube(5, 0.5f, true, 0)},
+        {"1 m, e 0.2, editor scene", dropCubeInEditorScene(1, 0.2f)}, {"5 m, e 0.5, editor scene", dropCubeInEditorScene(5, 0.5f)},
+    };
+    for (const Case& c : flat) {
+        printFlatLanding(c.name, c.f);
+        CHECK(c.f.turnDeg < 0.5f, "flat drop %s: turned %f deg", c.name, c.f.turnDeg);
+        CHECK(c.f.driftMm < 1.0f, "flat drop %s: drifted %f mm", c.name, c.f.driftMm);
+    }
+    // Tilted by 2 degrees: it lands on an edge and must still end up lying flat on a face.
+    const FlatLanding tilted = dropCube(1, 0.2f, true, 2);
+    printFlatLanding("1 m, e 0.2, plate, tilted 2 deg", tilted);
+    const float offFlat = std::fabs(std::remainder(tilted.tiltDeg, 90.0f)); // 0, 90 or 180: lying on a face
+    CHECK(offFlat < 0.5f, "a cube tilted 2 deg must end on a face: its up axis leans %f deg", tilted.tiltDeg);
 }
 
 void testCapsuleShape() {

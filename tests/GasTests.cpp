@@ -5,6 +5,8 @@
 #include "TestRunner.h"
 #include "Tests.h"
 
+#include "core/Probe.h"
+
 void testGasBodies() {
     // 1) Preset: bodies fall through the hot plume into the closed box - the gas stays
     //    divergence-free around the moving boundaries, the bodies come to rest on the floor.
@@ -617,5 +619,158 @@ void testGridConvergence() {
                     err[0], err[1], err[2], p1, p2, peak[0], peak[1], peak[2], pPeak, 100 * gci, dt[0], dt[1], dt[2]);
         CHECK(p2 > 0.8, "advection converges at order %.2f", p2);
         CHECK(peak[2] > 0.9, "the blob's peak after 0.5 m is %.3f of 1 on the fine grid", peak[2]);
+    }
+}
+
+namespace {
+
+// A cube of side 1 m with n cells per side: a sphere of radius 0.2 m in the middle, gas coming in
+// at 1 m/s through -x and leaving through +x, walls elsewhere. The first projection from rest is
+// the potential flow around the sphere - a full, cold-started pressure solve.
+struct PressureRun {
+    int iterations = 0;
+    double ms = 0;
+    GasSolver gas;
+};
+
+void firstProjection(PressureRun& run, int n, PressurePreconditioner pre, float tolerance) {
+    static MeshBVH sphere; // built once: the same obstacle for every grid
+    if (sphere.empty()) sphere.build(primitives::sphere(0.2f));
+    GasSolver& g = run.gas;
+    g.params.domainSize = {1, 1, 1};
+    g.params.resolutionX = n;
+    g.params.inflowSpeed = 1.0f;
+    g.params.smokeRake = false;
+    g.params.wallFriction = false;
+    g.params.pressureTolerance = tolerance;
+    g.params.maxPressureIterations = 5000;
+    g.params.pressurePreconditioner = pre;
+    g.reset({-0.5f, -0.5f, -0.5f}, &sphere);
+    g.step(0.5f / n);
+    run.ms = g.lastPressureMs(); // the projection alone (no magnetic field here)
+    run.iterations = g.lastPressureIterations();
+}
+
+// The largest difference of the cell velocities of two solvers on the same grid [m/s].
+float maxVelocityDifference(const GasSolver& a, const GasSolver& b) {
+    float worst = 0;
+    for (int k = 0; k < a.nz(); ++k)
+        for (int j = 0; j < a.ny(); ++j)
+            for (int i = 0; i < a.nx(); ++i)
+                worst = std::max(worst, length(a.cellVelocity(i, j, k) - b.cellVelocity(i, j, k)));
+    return worst;
+}
+
+} // namespace
+
+// The multigrid preconditioner (Multigrid.h, McAdams et al. 2010) against the Jacobi one on the
+// same equation: (1) with a tight tolerance both give the same flow; (2) the iteration count of the
+// multigrid PCG hardly grows with the grid, while the Jacobi PCG's grows about like n.
+void testMultigridPressure() {
+    Probe::beginFrame(); // counters to zero: "gas/multigrid fallbacks" must stay 0
+    {
+        PressureRun jacobi, multigrid;
+        firstProjection(jacobi, 48, PressurePreconditioner::Jacobi, 1e-7f);
+        firstProjection(multigrid, 48, PressurePreconditioner::Multigrid, 1e-7f);
+        const float diff = maxVelocityDifference(jacobi.gas, multigrid.gas);
+        std::printf("  48^3, tolerance 1e-7: Jacobi %d iterations, multigrid %d; the flows differ by at most %.1e m/s (inflow 1 m/s), "
+                    "max |div| %.1e / %.1e 1/s\n",
+                    jacobi.iterations, multigrid.iterations, diff, jacobi.gas.maxDivergence(), multigrid.gas.maxDivergence());
+        CHECK(diff < 1e-4f, "multigrid and Jacobi PCG give different flows: %e m/s", diff);
+    }
+    const int sizes[3] = {32, 64, 128};
+    int itJ[3] = {}, itM[3] = {};
+    double msJ[3] = {}, msM[3] = {};
+    for (int s = 0; s < 3; ++s) {
+        PressureRun jacobi, multigrid;
+        firstProjection(jacobi, sizes[s], PressurePreconditioner::Jacobi, 1e-4f);
+        firstProjection(multigrid, sizes[s], PressurePreconditioner::Multigrid, 1e-4f);
+        itJ[s] = jacobi.iterations;
+        itM[s] = multigrid.iterations;
+        msJ[s] = jacobi.ms;
+        msM[s] = multigrid.ms;
+        std::printf("  %3d^3 cold start to 1e-4, the projection: Jacobi PCG %4d iterations %7.1f ms | multigrid PCG %3d iterations %6.1f ms "
+                    "(%.1fx faster)\n",
+                    sizes[s], itJ[s], msJ[s], itM[s], msM[s], msJ[s] / std::max(msM[s], 1e-3));
+    }
+    const double fallbacks = Probe::snapshot().value("gas/multigrid fallbacks");
+    CHECK(fallbacks == 0, "the multigrid PCG broke down %.0f times and handed over to Jacobi", fallbacks);
+    CHECK(itM[2] <= 2 * itM[0] + 2, "multigrid iterations grow with the grid: %d on 32^3, %d on 128^3", itM[0], itM[2]);
+    CHECK(itM[2] * 5 < itJ[2], "multigrid should need far fewer iterations on 128^3: %d vs %d", itM[2], itJ[2]);
+}
+
+namespace {
+
+// The pressure's cost in a scene: frames timed after a warm-up, mean milliseconds of the pressure
+// solve and mean iterations per frame (a frame may hold several gas steps).
+struct SceneCost { double ms = 0, iterations = 0; };
+
+SceneCost timeScene(const std::function<void(PressurePreconditioner)>& load, const std::function<void()>& frame,
+                    const std::function<double()>& pressureMs, const std::function<int()>& iterations,
+                    PressurePreconditioner pre, int warmup, int frames) {
+    load(pre);
+    for (int f = 0; f < warmup; ++f) frame();
+    SceneCost c;
+    for (int f = 0; f < frames; ++f) {
+        frame();
+        c.ms += pressureMs();
+        c.iterations += iterations();
+    }
+    c.ms /= frames;
+    c.iterations /= frames;
+    return c;
+}
+
+double median3(double a, double b, double c) { return std::max(std::min(a, b), std::min(std::max(a, b), c)); }
+
+} // namespace
+
+// Speed of the two preconditioners on the scenes that use the gas: Jacobi then multigrid, three
+// rounds back to back (other programs share the processor), the median of each. Run on request:
+// RF_TEST=benchmark: gas pressure
+void testPressureBenchmark() {
+    struct Row { const char* name; int warmup, frames; std::function<void(PressurePreconditioner)> load; std::function<void()> frame; };
+    Simulation sim;
+    GasSolver box;
+    auto simLoad = [&](Preset p) {
+        return [&sim, p](PressurePreconditioner pre) { loadSample(sim, p); sim.grid.params.pressurePreconditioner = pre; };
+    };
+    auto simFrame = [&] { sim.stepFrame(); };
+    auto boxLoad = [&](PressurePreconditioner pre) {
+        box = GasSolver();
+        box.params.domainSize = {1, 1, 1};
+        box.params.resolutionX = 64;
+        for (BoundaryType& b : box.params.bc) b = BoundaryType::Wall;
+        box.params.smokeRake = false;
+        box.params.heatBuoyancy = 4.0f;
+        box.source.enabled = true;
+        box.source.center = {0.5f, 0.2f, 0.5f};
+        box.source.radius = 0.1f;
+        box.params.pressurePreconditioner = pre;
+        box.reset({0, 0, 0}, nullptr);
+    };
+    auto boxFrame = [&] { box.step(1.0f / 60); };
+    std::vector<Row> rows = {
+        {"smoke box 64^3, closed", 30, 60, boxLoad, boxFrame},
+        {"fire (burner and curtain)", 30, 60, simLoad(Preset::Fire), simFrame},
+        {"wind tunnel: sphere", 30, 60, simLoad(Preset::TunnelSphere), simFrame},
+        {"wind tunnel: cylinder", 30, 60, simLoad(Preset::TunnelCylinder), simFrame},
+        {"plasma: magnetosphere (Boris weights)", 30, 60, simLoad(Preset::Magnetosphere), simFrame},
+    };
+    std::printf("  %-40s %12s %12s %10s %10s %8s\n", "scene (grid)", "Jacobi ms", "multigrid ms", "Jacobi it", "MG it", "speedup");
+    for (Row& row : rows) {
+        const bool isBox = row.name[0] == 's';
+        auto pressureMs = [&] { return isBox ? double(box.lastPressureMs()) : Probe::snapshot().value("gas/pressure ms"); };
+        auto iterations = [&] { return isBox ? box.lastPressureIterations() : sim.grid.lastPressureIterations(); };
+        SceneCost j[3], m[3];
+        for (int round = 0; round < 3; ++round) {
+            j[round] = timeScene(row.load, row.frame, pressureMs, iterations, PressurePreconditioner::Jacobi, row.warmup, row.frames);
+            m[round] = timeScene(row.load, row.frame, pressureMs, iterations, PressurePreconditioner::Multigrid, row.warmup, row.frames);
+        }
+        const double jm = median3(j[0].ms, j[1].ms, j[2].ms), mm = median3(m[0].ms, m[1].ms, m[2].ms);
+        const GasSolver& g = isBox ? box : sim.grid;
+        char name[80];
+        std::snprintf(name, sizeof name, "%s %dx%dx%d", row.name, g.nx(), g.ny(), g.nz());
+        std::printf("  %-40s %12.2f %12.2f %10.0f %10.0f %7.1fx\n", name, jm, mm, j[1].iterations, m[1].iterations, jm / std::max(mm, 1e-6));
     }
 }

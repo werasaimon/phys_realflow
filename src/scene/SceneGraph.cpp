@@ -151,12 +151,59 @@ static void saveCollider(std::ostringstream& o, const ColliderRole& c) {
       << " offset " << vec(c.offset) << " rotation " << vec(c.rotationDeg) << "\n";
 }
 
+// The part every object has, for groups and arrays: a quoted name, its object line and its pose.
+static void saveObjectHead(std::ostringstream& o, const char* kind, const SceneObject& s) {
+    std::string name = s.name;
+    for (char& c : name)
+        if (c == '"') c = '\'';
+    o << kind << " \"" << name << "\"\n";
+    o << "  object id " << s.id << " visible " << (s.visible ? 1 : 0) << " locked " << (s.locked ? 1 : 0);
+    if (s.parent != 0) o << " parent " << s.parent;
+    o << "\n  pose position " << vec(s.position) << " rotation " << vec(s.rotationDeg) << " color " << vec(s.color) << "\n";
+}
+
+static void saveGroup(std::ostringstream& o, const Group& g) {
+    saveObjectHead(o, "group", g);
+    if (g.glued) o << "  glued\n";
+    o << "end\n";
+}
+
+static const char* kPatternNames[] = {"line", "grid", "circle"};
+
+static void saveArray(std::ostringstream& o, const ArrayObject& a) {
+    saveObjectHead(o, "array", a);
+    o << "  pattern " << kPatternNames[int(a.pattern)] << " template " << a.templateId << " count " << a.count[0] << " "
+      << a.count[1] << " " << a.count[2] << " step " << vec(a.step) << " radius " << num(a.radius) << " rotationStep "
+      << vec(a.rotationStepDeg) << " jitter " << num(a.jitter) << " seed " << a.seed << "\n";
+    o << "end\n";
+}
+
+static const char* kLightNames[] = {"sun", "point", "spot"};
+
+// Lights and cameras: only their own settings follow the object head (the physics ignores them).
+static void saveLight(std::ostringstream& o, const Light& l) {
+    saveObjectHead(o, "light", l);
+    o << "  kind " << kLightNames[int(l.kind)] << " intensity " << num(l.intensity) << " range " << num(l.range) << " cone "
+      << num(l.coneDeg) << " softness " << num(l.softnessDeg) << " shadows " << (l.shadows ? 1 : 0) << "\n";
+    o << "end\n";
+}
+
+static void saveCamera(std::ostringstream& o, const Camera& c) {
+    saveObjectHead(o, "camera", c);
+    o << "  lens fov " << num(c.fovDeg) << " near " << num(c.nearClip) << " far " << num(c.farClip) << " active "
+      << (c.active ? 1 : 0) << "\n";
+    o << "end\n";
+}
+
 static void saveEntity(std::ostringstream& o, const Entity& e) {
     std::string name = e.name;
     for (char& c : name)
         if (c == '"') c = '\''; // the name is written in double quotes
     o << "entity \"" << name << "\"\n";
-    o << "  object id " << e.id << " visible " << (e.visible ? 1 : 0) << " locked " << (e.locked ? 1 : 0) << "\n";
+    o << "  object id " << e.id << " visible " << (e.visible ? 1 : 0) << " locked " << (e.locked ? 1 : 0);
+    if (e.parent != 0) o << " parent " << e.parent;
+    if (e.instanceOf != 0) o << " instance " << e.instanceOf;
+    o << "\n";
     o << "  shape " << kShapeNames[int(e.shape)];
     if (e.shape == ShapeKind::Mesh) o << " file \"" << e.meshFile << "\"";
     o << " size " << vec(e.size) << " position " << vec(e.position)
@@ -180,6 +227,10 @@ std::string SceneGraph::save() const {
     o << "world gravity " << vec(world.gravity) << " size " << vec(world.size) << " gas " << (world.gas ? 1 : 0)
       << " magneticGas " << (world.magneticGas ? 1 : 0) << "\n";
     for (const Entity& e : entities) saveEntity(o, e);
+    for (const Group& g : groups) saveGroup(o, g);
+    for (const ArrayObject& a : arrays) saveArray(o, a);
+    for (const Light& l : lights) saveLight(o, l);
+    for (const Camera& c : cameras) saveCamera(o, c);
     return o.str();
 }
 
@@ -213,8 +264,11 @@ static bool readShape(LineReader& r, Entity& e, const std::string& shapeName, st
 
 // One "key value(s)" of a role line; false if the key is not one of that role's.
 static bool readRoleKey(const std::string& role, const std::string& k, LineReader& r, Entity& e) {
-    if (role == "object")
-        return k == "id" ? r.integer(e.id) : k == "visible" ? r.flag(e.visible) : k == "locked" ? r.flag(e.locked) : false;
+    if (role == "object") {
+        if (k == "instance") return r.integer(e.instanceOf);
+        return k == "id" ? r.integer(e.id) : k == "visible" ? r.flag(e.visible) : k == "locked" ? r.flag(e.locked)
+             : k == "parent" ? r.integer(e.parent) : false;
+    }
     if (role == "rigid")
         return k == "density" ? r.number(e.rigid.density) : k == "friction" ? r.number(e.rigid.friction)
              : k == "restitution" ? r.number(e.rigid.restitution) : k == "fixed" ? r.flag(e.rigid.fixed)
@@ -273,40 +327,126 @@ static bool readEntityLine(const std::vector<std::string>& w, Entity& e, std::st
     return readRole(what, r, e, bad);
 }
 
+// The object line and the pose line of a group or an array.
+static bool readObjectLine(const std::vector<std::string>& w, SceneObject& s, std::string& bad) {
+    LineReader r(w, 1);
+    while (!r.done()) {
+        const std::string k = r.key();
+        const bool ok = w[0] == "object" ? (k == "id" ? r.integer(s.id) : k == "visible" ? r.flag(s.visible)
+                                            : k == "locked" ? r.flag(s.locked) : k == "parent" ? r.integer(s.parent) : false)
+                                         : (k == "position" ? r.vector(s.position) : k == "rotation" ? r.vector(s.rotationDeg)
+                                            : k == "color" ? r.vector(s.color) : false);
+        if (!ok) return fail(bad, k);
+    }
+    return true;
+}
+
+static bool readGroupLine(const std::vector<std::string>& w, Group& g, std::string& bad) {
+    if (w[0] == "object" || w[0] == "pose") return readObjectLine(w, g, bad);
+    if (w[0] == "glued" && w.size() == 1) return g.glued = true;
+    return fail(bad, w[0]);
+}
+
+static bool readArrayLine(const std::vector<std::string>& w, ArrayObject& a, std::string& bad) {
+    if (w[0] == "object" || w[0] == "pose") return readObjectLine(w, a, bad);
+    if (w[0] != "pattern" || w.size() < 2) return fail(bad, w[0]);
+    bool known = false;
+    for (int p = 0; p < 3; ++p)
+        if (w[1] == kPatternNames[p]) a.pattern = ArrayPattern(p), known = true;
+    if (!known) return fail(bad, w[1]);
+    LineReader r(w, 2);
+    while (!r.done()) {
+        const std::string k = r.key();
+        const bool ok = k == "template" ? r.integer(a.templateId)
+                      : k == "count" ? r.integer(a.count[0]) && r.integer(a.count[1]) && r.integer(a.count[2])
+                      : k == "step" ? r.vector(a.step) : k == "radius" ? r.number(a.radius)
+                      : k == "rotationStep" ? r.vector(a.rotationStepDeg) : k == "jitter" ? r.number(a.jitter)
+                      : k == "seed" ? r.integer(a.seed) : false;
+        if (!ok) return fail(bad, k);
+    }
+    return true;
+}
+
+static bool readLightLine(const std::vector<std::string>& w, Light& l, std::string& bad) {
+    if (w[0] == "object" || w[0] == "pose") return readObjectLine(w, l, bad);
+    if (w[0] != "kind" || w.size() < 2) return fail(bad, w[0]);
+    bool known = false;
+    for (int k = 0; k < 3; ++k)
+        if (w[1] == kLightNames[k]) l.kind = LightKind(k), known = true;
+    if (!known) return fail(bad, w[1]);
+    LineReader r(w, 2);
+    while (!r.done()) {
+        const std::string k = r.key();
+        const bool ok = k == "intensity" ? r.number(l.intensity) : k == "range" ? r.number(l.range)
+                      : k == "cone" ? r.number(l.coneDeg) : k == "softness" ? r.number(l.softnessDeg)
+                      : k == "shadows" ? r.flag(l.shadows) : false;
+        if (!ok) return fail(bad, k);
+    }
+    return true;
+}
+
+static bool readCameraLine(const std::vector<std::string>& w, Camera& c, std::string& bad) {
+    if (w[0] == "object" || w[0] == "pose") return readObjectLine(w, c, bad);
+    if (w[0] != "lens") return fail(bad, w[0]);
+    LineReader r(w, 1);
+    while (!r.done()) {
+        const std::string k = r.key();
+        const bool ok = k == "fov" ? r.number(c.fovDeg) : k == "near" ? r.number(c.nearClip)
+                      : k == "far" ? r.number(c.farClip) : k == "active" ? r.flag(c.active) : false;
+        if (!ok) return fail(bad, k);
+    }
+    return true;
+}
+
+namespace {
+enum class Block { None, Entity, Group, Array, Light, Camera };
+}
+
+// One line of a scene file in the block it belongs to (or starting / ending one).
+static bool readLine(const std::vector<std::string>& w, SceneGraph& g, Block& block, std::string& bad) {
+    if (block == Block::None) {
+        const std::string name = w.size() > 1 ? w[1] : std::string();
+        if (w[0] == "world") {
+            LineReader r(w, 1);
+            return readWorld(r, g.world, bad);
+        }
+        if (w[0] == "entity") g.entities.emplace_back(), g.entities.back().name = name, block = Block::Entity;
+        else if (w[0] == "group") g.groups.emplace_back(), g.groups.back().name = name, block = Block::Group;
+        else if (w[0] == "array") g.arrays.emplace_back(), g.arrays.back().name = name, block = Block::Array;
+        else if (w[0] == "light") g.lights.emplace_back(), g.lights.back().name = name, block = Block::Light;
+        else if (w[0] == "camera") g.cameras.emplace_back(), g.cameras.back().name = name, block = Block::Camera;
+        else return fail(bad, w[0]);
+        return true;
+    }
+    if (w[0] == "end") {
+        // A file from before colliders were a role of their own: its rigid bodies collide as their
+        // geometry - the Auto collider, now written out.
+        if (block == Block::Entity && g.entities.back().rigid.enabled) g.entities.back().collider.enabled = true;
+        block = Block::None;
+        return true;
+    }
+    if (block == Block::Entity) return readEntityLine(w, g.entities.back(), bad);
+    if (block == Block::Group) return readGroupLine(w, g.groups.back(), bad);
+    if (block == Block::Light) return readLightLine(w, g.lights.back(), bad);
+    if (block == Block::Camera) return readCameraLine(w, g.cameras.back(), bad);
+    return readArrayLine(w, g.arrays.back(), bad);
+}
+
 bool SceneGraph::load(const std::string& text, std::string& error) {
     SceneGraph g;
     std::istringstream in(text);
     std::string line, bad;
-    bool inEntity = false;
+    Block block = Block::None;
     for (int number = 1; std::getline(in, line); ++number) {
         const std::vector<std::string> w = words(line);
         if (w.empty() || w[0][0] == '#') continue;
-        bool ok = true;
-        if (w[0] == "world" && !inEntity) {
-            LineReader r(w, 1);
-            ok = readWorld(r, g.world, bad);
-        } else if (w[0] == "entity" && !inEntity) {
-            g.entities.emplace_back();
-            g.entities.back().name = w.size() > 1 ? w[1] : std::string();
-            inEntity = true;
-        } else if (w[0] == "end" && inEntity) {
-            // A file from before colliders were a role of their own: its rigid bodies collide as
-            // their geometry - the Auto collider, now written out.
-            Entity& e = g.entities.back();
-            if (e.rigid.enabled && !e.collider.enabled) e.collider.enabled = true;
-            inEntity = false;
-        } else if (inEntity) {
-            ok = readEntityLine(w, g.entities.back(), bad);
-        } else {
-            ok = fail(bad, w[0]);
-        }
-        if (!ok) {
+        if (!readLine(w, g, block, bad)) {
             error = "line " + std::to_string(number) + ": cannot read '" + bad + "'";
             return false;
         }
     }
-    if (inEntity) {
-        error = "the last entity has no 'end'";
+    if (block != Block::None) {
+        error = "the last block has no 'end'";
         return false;
     }
     g.baseDirectory = baseDirectory; // where this graph's model files are: not in the text

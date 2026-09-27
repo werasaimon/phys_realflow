@@ -90,7 +90,7 @@ struct HeatRole {
 struct ClothRole {
     bool enabled = false;
     float areaDensity = 0.3f;   // kg/m^2 (cotton 0.2-0.3, canvas 1.5, silk 0.04)
-    float bendCompliance = 1e-3f; // 0 = stiff as card, larger = drapes more
+    float bendCompliance = 0.1f; // m/N, ClothMaterial's default (cotton); 1e-3 stiff as card, larger drapes more
     bool tearable = true;       // tears along the threads when pulled too hard
     int pinnedEdges = 0;        // bit mask: 1 -x edge, 2 +x edge, 4 -z edge, 8 +z edge, 16 the top row (rod)
 };
@@ -121,11 +121,63 @@ struct SceneObject {
     Vector3 color{0.8f, 0.8f, 0.8f};
     bool visible = true;        // hidden things take no part in the simulation either
     bool locked = false;        // the editor does not select or move it (a floor, a backdrop)
+    // Hierarchy: the id of the parent object (0: none). position / rotationDeg are then RELATIVE to
+    // the parent, and moving the parent moves the children (a group). worldPose() composes them.
+    uint32_t parent = 0;
+};
+
+// A group: an object with no geometry of its own that other objects hang under (Ctrl+G in the
+// editor). For physics its members stay separate bodies unless `glued`: then they are welded into
+// one rigid body (the group's members' colliders become one compound).
+struct Group : SceneObject {
+    bool glued = false;
+};
+
+// A light of the scene, the three kinds every 3D package has. It is for the viewer only (the
+// physics does not see it); the direction of Sun and Spot is the object's -y axis turned by its
+// rotation (a light "looks down" by default).
+enum class LightKind { Sun, Point, Spot };
+struct Light : SceneObject {
+    LightKind kind = LightKind::Point;
+    float intensity = 1.0f;     // relative brightness (1 = the default light of the viewer)
+    float range = 5.0f;         // Point / Spot: the distance where the light has faded out, m
+    float coneDeg = 40.0f;      // Spot: full cone angle
+    float softnessDeg = 10.0f;  // Spot: the soft edge of the cone
+    bool shadows = false;       // the viewer may cast shadows from it (Sun first)
+};
+
+// A camera of the scene: a viewpoint the viewer can look through, take screenshots and recordings
+// from. Looks along the object's -z axis turned by its rotation.
+struct Camera : SceneObject {
+    float fovDeg = 50.0f;       // vertical field of view
+    float nearClip = 0.05f, farClip = 200.0f; // m
+    bool active = false;        // the one the viewer looks through when "through the camera" is on
+};
+
+// An array: one object standing for many copies of a template entity laid out in a pattern, as the
+// Array modifier of Blender or copy-to-points of Houdini. The simulation expands it into one set of
+// meta-objects per copy; the editor changes the count or the spacing with one number. The copies
+// are placed relative to the array's own pose; the template itself is not simulated.
+enum class ArrayPattern { Line, Grid, Circle };
+struct ArrayObject : SceneObject {
+    uint32_t templateId = 0;          // the entity that is copied (usually hidden, as a template)
+    ArrayPattern pattern = ArrayPattern::Line;
+    int count[3] = {5, 1, 1};         // Line: count[0]; Grid: nx, ny, nz; Circle: count[0]
+    Vector3 step{0.3f, 0.3f, 0.3f};   // Line: step between copies (a vector); Grid: spacing per axis
+    float radius = 1.0f;              // Circle: the radius (copies around the array's y axis)
+    Vector3 rotationStepDeg{0.0f};    // each next copy turned by this much more (a spiral staircase)
+    float jitter = 0;                 // random offset of each copy, m (a fixed seed: the same every run)
+    uint32_t seed = 1;
 };
 
 // A shape in the scene with its roles: what it is made of and what else it does. With no role at
 // all it is geometry only: drawn, but no body, no collision, no part in the simulation.
 struct Entity : SceneObject {
+    // An instance shares the geometry and the roles of its master (the entity with this id): change
+    // the density, the collider or the shape of one and all change (as 3ds Max's Instance). Only the
+    // SceneObject part (name, pose, visibility...) stays its own. 0: an ordinary, independent entity.
+    // resolveInstance() gives the effective entity.
+    uint32_t instanceOf = 0;
     ShapeKind shape = ShapeKind::Box;
     // Full size: box edges; sphere/cylinder/cone: diameter (x) and height (y). A mesh keeps the
     // model's proportions: it is scaled uniformly so that its largest extent equals the largest
@@ -153,6 +205,10 @@ struct WorldSettings {
 struct SceneGraph {
     WorldSettings world;
     std::vector<Entity> entities;
+    std::vector<Group> groups;
+    std::vector<ArrayObject> arrays;
+    std::vector<Light> lights;
+    std::vector<Camera> cameras;
     // Not saved: the folder relative mesh files are found in (the scene file's own folder). load()
     // keeps it as it was.
     std::string baseDirectory;
@@ -161,6 +217,46 @@ struct SceneGraph {
     std::string save() const;
     bool load(const std::string& text, std::string& error);
 };
+
+// ---------------------------------------------------------------------------
+// Many objects at once (SceneHierarchy.cpp): hierarchy, instances, arrays. None of these call a
+// solver; GraphScene and an editor use them alike.
+// ---------------------------------------------------------------------------
+// The object with this id - an entity, a group or an array (null: none).
+const SceneObject* findObject(const SceneGraph& g, uint32_t id);
+// Any object's orientation from its rotationDeg (Ry Rx Rz), and back: Euler degrees of a rotation.
+Quaternion objectRotation(const SceneObject& o);
+Vector3 eulerDegrees(const Quaternion& q);
+// Where an object is in the world: its pose composed with its parents'. A missing parent or a
+// cycle in the parent links ends the chain there (that object counts as a root).
+void worldPose(const SceneGraph& g, const SceneObject& o, Vector3& position, Quaternion& rotation);
+// The inverse: sets o's relative pose so that its world pose is (position, rotation).
+void setWorldPose(const SceneGraph& g, SceneObject& o, const Vector3& position, const Quaternion& rotation);
+// Visible, and so are all its parents.
+bool effectivelyVisible(const SceneGraph& g, const SceneObject& o);
+// The nearest glued group above the object (0: none): its rigid members are one body.
+uint32_t gluedGroupOf(const SceneGraph& g, const SceneObject& o);
+// An instance as it acts: the geometry and roles of its root master (instanceOf followed to the end)
+// with its own SceneObject part (name, pose, visibility, id). Not an instance, or a missing master:
+// the entity itself.
+Entity resolveInstance(const SceneGraph& g, const Entity& e);
+// The copies an array stands for, posed in the WORLD (parent 0), each with the template's geometry
+// and roles, visible as the array is. Copy n of the array with id A has the id arrayCopyId(A, n):
+// stable across rebuilds as long as the array keeps its id (ids of arrays up to 32767, 65536 copies).
+std::vector<Entity> expandArray(const SceneGraph& g, const ArrayObject& a);
+uint32_t arrayCopyId(uint32_t arrayId, int copy);
+bool isArrayCopyId(uint32_t id);
+uint32_t arrayOfCopyId(uint32_t id);
+// Every entity the simulation builds, in the world: the graph's entities (instances resolved,
+// parents composed, visibility inherited) followed by the copies of every array.
+std::vector<Entity> worldEntities(const SceneGraph& g);
+// A fresh id: the largest over entities, groups and arrays, plus one.
+uint32_t nextId(const SceneGraph& g);
+
+// Lights and cameras in the world (their parents included). A light shines along its -y axis and a
+// camera looks along its -z axis, both turned by the object's world rotation; up is the camera's +y.
+Vector3 lightDirection(const SceneGraph& g, const Light& l);
+void cameraFrame(const SceneGraph& g, const Camera& c, Vector3& eye, Vector3& forward, Vector3& up);
 
 // ---------------------------------------------------------------------------
 // The shape of an entity as a mesh (EntityShapes.cpp) - the same mesh the solvers get, so a viewer
@@ -230,15 +326,28 @@ public:
     // The editor selects the entity the mouse clicked on through it.
     int entityOfBody(int body) const;
     uint32_t entityIdOfBody(int body) const;
+    // The object to select for a body: its entity, the array a copy belongs to, or the glued group
+    // whose members it is made of (0: none).
+    uint32_t objectIdOfBody(int body) const;
+    // The entities as the simulation built them: world poses, instances resolved, array copies.
+    const std::vector<Entity>& simulatedEntities() const { return flat_; }
 
     // One entity between frames, without reloading the scene. rebuildEntity replaces the entity of
     // updated.id: its meta-objects go, new ones are built from the source where the entity is NOW
     // (its body's or particles' live pose, unless `updated` moves it) and carry on its velocity.
     // Returns false when a role of it needs something only a reload can switch on (the gas).
     bool rebuildEntity(Simulation& sim, const Entity& updated);
+    // An instance master rebuilds its instances too (they share its roles), and arrays copying it.
+    // Inside a glued group the whole group's body is rebuilt. The graph keeps poses relative to the
+    // parents: a live world pose is written back relative.
     bool addEntity(Simulation& sim, const Entity& entity); // an id of 0 gets a new one
     void removeEntity(Simulation& sim, uint32_t id);
+    // An array changed (count, pattern, spacing...) or was added: its old copies go; the new ones are
+    // built, and a copy that existed before keeps where it is now and how it moves.
+    bool rebuildArray(Simulation& sim, const ArrayObject& array);
     const std::vector<MetaObject>& metaObjects(uint32_t id) const;
+    // Lights and cameras between frames: the physics never sees them, the next snapshot shows them.
+    void setLightsAndCameras(const std::vector<Light>& lights, const std::vector<Camera>& cameras);
 
 private:
     // An emitter and what carries it: the rigid body it rides on (-1: it stays where it was put) and
@@ -258,9 +367,17 @@ private:
     };
     void standOnParticles(Entity& next, const LiveState& live) const;
 
-    int indexOf(uint32_t id) const;
+    int indexOf(uint32_t id) const;         // in flat_
+    int authoredIndexOf(uint32_t id) const; // in graph_.entities
     bool shapeUsable(const Entity& e);
     void buildEntity(Simulation& sim, int index);
+    // Glued groups: every rigid member of the group becomes a part of one compound body.
+    bool gluedMember(int index) const;
+    void buildGluedGroup(Simulation& sim, uint32_t group);
+    void rebuildGluedGroup(Simulation& sim, uint32_t group);
+    // The graph entity of flat_[index] written with the flat (world) pose, relative to its parent.
+    void writeBackPose(int index);
+    bool rebuildOne(Simulation& sim, uint32_t id, bool keepLivePose);
     void destroyMetaObjects(Simulation& sim, uint32_t id);
     LiveState liveState(const Simulation& sim, int index) const;
     void carryVelocity(Simulation& sim, uint32_t id, const LiveState& live) const;
@@ -276,7 +393,10 @@ private:
     void releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool& liquidDone) const;
     void addMagnetFieldToGas(Simulation& sim) const;
 
-    SceneGraph graph_;
+    SceneGraph graph_;                  // as authored: poses relative to parents, instances, arrays
+    std::vector<Entity> flat_;          // as simulated: worldEntities(graph_), kept in step with it
+    std::vector<uint32_t> flatGlue_;    // flat_[i]'s glued group (0: none)
+    std::unordered_map<uint32_t, int> glueBody_; // glued group id -> its one body
     std::vector<int> magnetBody_;       // rigid body index of each magnet
     std::vector<Vector3> magnetMoment_; // its moment in the body frame
     std::vector<uint32_t> magnetEntity_; // the id of its entity
@@ -286,5 +406,9 @@ private:
     std::unordered_map<uint32_t, std::vector<MetaObject>> meta_; // entity id -> its meta-objects
     std::vector<std::string> notes_;    // roles that could not be honoured, shown in the readings
 };
+
+// The visible lights of a graph, posed in the world, into s.lights (GraphScene::describe, and an
+// editor drawing the graph without a simulation). None: the list stays empty (the viewer's default).
+void describeLights(const SceneGraph& g, RenderSnapshot& s);
 
 } // namespace rf

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="640" height="400" fill="#fcfcfb"/>
+<text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Ткань между двумя опорами: провис (p = 0.16)</text>
+<line x1="140.0" y1="50.0" x2="140.0" y2="330.0" stroke="#e5e4df"/><text x="140.0" y="348.0" text-anchor="middle" fill="#52514e">0.005</text>
+<line x1="273.3" y1="50.0" x2="273.3" y2="330.0" stroke="#e5e4df"/><text x="273.3" y="348.0" text-anchor="middle" fill="#52514e">0.01</text>
+<line x1="406.7" y1="50.0" x2="406.7" y2="330.0" stroke="#e5e4df"/><text x="406.7" y="348.0" text-anchor="middle" fill="#52514e">0.02</text>
+<line x1="582.9" y1="50.0" x2="582.9" y2="330.0" stroke="#e5e4df"/><text x="582.9" y="348.0" text-anchor="middle" fill="#52514e">0.05</text>
+<line x1="80.0" y1="325.4" x2="600.0" y2="325.4" stroke="#e5e4df"/><text x="72.0" y="329.4" text-anchor="end" fill="#52514e">0.005</text>
+<line x1="80.0" y1="226.0" x2="600.0" y2="226.0" stroke="#e5e4df"/><text x="72.0" y="230.0" text-anchor="end" fill="#52514e">0.01</text>
+<line x1="80.0" y1="126.6" x2="600.0" y2="126.6" stroke="#e5e4df"/><text x="72.0" y="130.6" text-anchor="end" fill="#52514e">0.02</text>
+<text x="340.0" y="370.0" text-anchor="middle" fill="#52514e">шаг частиц, м (лог.)</text>
+<text transform="translate(18 190.0) rotate(-90)" text-anchor="middle" fill="#52514e">ошибка (лог.)</text>
+<line x1="140.0" y1="139.9" x2="540.0" y2="91.3" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="540.0" cy="77.1" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.04, ошибка 0.02825</title></circle>
+<circle cx="406.7" cy="126.3" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.02, ошибка 0.02005</title></circle>
+<circle cx="273.3" cy="128.9" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.01, ошибка 0.01969</title></circle>
+<circle cx="140.0" cy="130.2" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>h = 0.005, ошибка 0.0195</title></circle>
+</svg>

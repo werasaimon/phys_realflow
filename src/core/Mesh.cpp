@@ -2,6 +2,7 @@
 // torus, wing (NACA), a height field, the teapot and the bunny; loading a mesh from a file, and
 // the geometry helpers (bounds, volume, orientation, subdivision). The class is in Mesh.h.
 #include "core/Mesh.h"
+#include "math/ElementaryFunctions.h"
 
 #include <algorithm>
 #include <map>
@@ -51,7 +52,7 @@ std::vector<Vector3> TriMesh::vertexNormals() const {
         for (int c = 0; c < 3; ++c) {
             Vector3 e1 = normalize(positions[t[(c + 1) % 3]] - positions[t[c]]);
             Vector3 e2 = normalize(positions[t[(c + 2) % 3]] - positions[t[c]]);
-            float ang = std::acos(clampv(dot(e1, e2), -1.0f, 1.0f));
+            float ang = rf::acos(clampv(dot(e1, e2), -1.0f, 1.0f));
             n[t[c]] += fn * ang;
         }
     }
@@ -173,7 +174,7 @@ TriMesh revolve(const std::vector<std::pair<float, float>>& profile, int seg) {
             for (int j = 0; j < seg; ++j) {
                 float th = 2.0f * kPi * j / seg;
                 ring[j] = uint32_t(m.positions.size());
-                m.positions.push_back({x, r * std::cos(th), r * std::sin(th)});
+                m.positions.push_back({x, r * rf::cos(th), r * rf::sin(th)});
             }
         }
         rings.push_back(std::move(ring));
@@ -194,7 +195,7 @@ TriMesh ellipsoid(const Vector3& radii, int seg, int rings) {
     std::vector<std::pair<float, float>> prof;
     for (int i = 0; i <= rings; ++i) {
         float t = kPi * i / rings;
-        prof.push_back({-std::cos(t), std::sin(t)});
+        prof.push_back({-rf::cos(t), rf::sin(t)});
     }
     TriMesh m = revolve(prof, seg);
     for (Vector3& p : m.positions) p = p * radii;
@@ -218,11 +219,11 @@ TriMesh capsule(float radius, float halfHeight, int seg, int rings) {
     std::vector<std::pair<float, float>> prof;
     for (int i = 0; i <= rings; ++i) {
         const float a = -0.5f * kPi + 0.5f * kPi * float(i) / float(rings);
-        prof.push_back({-halfHeight + radius * std::sin(a), radius * std::cos(a)});
+        prof.push_back({-halfHeight + radius * rf::sin(a), radius * rf::cos(a)});
     }
     for (int i = 0; i <= rings; ++i) {
         const float a = 0.5f * kPi * float(i) / float(rings);
-        prof.push_back({halfHeight + radius * std::sin(a), radius * std::cos(a)});
+        prof.push_back({halfHeight + radius * rf::sin(a), radius * rf::cos(a)});
     }
     TriMesh m = revolve(prof, seg);
     // Axis X -> Y.
@@ -239,7 +240,7 @@ static float nacaThickness(float xi, float t) {
 TriMesh streamlinedBody(float length, float thick, int seg, int stations) {
     std::vector<std::pair<float, float>> prof;
     for (int i = 0; i <= stations; ++i) {
-        float xi = 0.5f * (1.0f - std::cos(kPi * i / stations));
+        float xi = 0.5f * (1.0f - rf::cos(kPi * i / stations));
         float r = (i == 0 || i == stations) ? 0.0f : nacaThickness(xi, thick) * length;
         prof.push_back({xi * length - 0.5f * length, r});
     }
@@ -257,8 +258,8 @@ TriMesh torus(float major, float minor, int seg, int rings) {
         const float phi = 2.0f * kPi * i / seg; // around the axis
         for (int j = 0; j < rings; ++j) {
             const float th = 2.0f * kPi * j / rings; // around the tube
-            const float R = major + minor * std::cos(th);
-            m.positions.push_back({R * std::cos(phi), minor * std::sin(th), R * std::sin(phi)});
+            const float R = major + minor * rf::cos(th);
+            m.positions.push_back({R * rf::cos(phi), minor * rf::sin(th), R * rf::sin(phi)});
         }
     }
     auto id = [&](int i, int j) { return uint32_t((i % seg) * rings + (j % rings)); };
@@ -308,7 +309,7 @@ static void nacaProfile(const std::string& code, float chord, int n, std::vector
     }
     tC = std::max(tC, 0.01f);
     for (int i = 0; i <= n; ++i) {
-        float xi = 0.5f * (1.0f - std::cos(kPi * i / n));
+        float xi = 0.5f * (1.0f - rf::cos(kPi * i / n));
         float yt = (i == 0 || i == n) ? 0.0f : nacaThickness(xi, tC);
         float yc = 0, dyc = 0;
         if (mC > 0 && pC > 0) {
@@ -320,9 +321,9 @@ static void nacaProfile(const std::string& code, float chord, int n, std::vector
                 dyc = 2 * mC / ((1 - pC) * (1 - pC)) * (pC - xi);
             }
         }
-        float th = std::atan(dyc);
-        U[i] = Vector3(xi - yt * std::sin(th), yc + yt * std::cos(th), 0) * chord;
-        L[i] = Vector3(xi + yt * std::sin(th), yc - yt * std::cos(th), 0) * chord;
+        float th = rf::atan(dyc);
+        U[i] = Vector3(xi - yt * rf::sin(th), yc + yt * rf::cos(th), 0) * chord;
+        L[i] = Vector3(xi + yt * rf::sin(th), yc - yt * rf::cos(th), 0) * chord;
     }
 }
 
@@ -373,14 +374,14 @@ static TriMesh arcTube(const Vector3& centre, float R, float r, float a0, float 
     TriMesh m;
     auto ringCentre = [&](int i) {
         float a = a0 + (a1 - a0) * i / segs;
-        return centre + Vector3(R * std::cos(a), R * std::sin(a), 0);
+        return centre + Vector3(R * rf::cos(a), R * rf::sin(a), 0);
     };
     for (int i = 0; i <= segs; ++i) {
         float a = a0 + (a1 - a0) * i / segs;
-        Vector3 radial(std::cos(a), std::sin(a), 0), zAxis(0, 0, 1);
+        Vector3 radial(rf::cos(a), rf::sin(a), 0), zAxis(0, 0, 1);
         for (int k = 0; k < sides; ++k) {
             float t = 2 * kPi * k / sides;
-            m.positions.push_back(ringCentre(i) + (radial * std::cos(t) + zAxis * std::sin(t)) * r);
+            m.positions.push_back(ringCentre(i) + (radial * rf::cos(t) + zAxis * rf::sin(t)) * r);
         }
     }
     auto add = [&](uint32_t a, uint32_t b, uint32_t c, const Vector3& outward) {
@@ -402,7 +403,7 @@ static TriMesh arcTube(const Vector3& centre, float R, float r, float a0, float 
         uint32_t cIdx = uint32_t(m.positions.size());
         m.positions.push_back(ringCentre(i));
         float a = a0 + (a1 - a0) * i / segs;
-        Vector3 tangent(-std::sin(a), std::cos(a), 0);
+        Vector3 tangent(-rf::sin(a), rf::cos(a), 0);
         Vector3 outward = end == 0 ? -tangent * (a1 > a0 ? 1.0f : -1.0f) : tangent * (a1 > a0 ? 1.0f : -1.0f);
         for (int k = 0; k < sides; ++k) add(cIdx, i * sides + k, i * sides + (k + 1) % sides, outward);
     }
@@ -435,7 +436,7 @@ std::vector<TriMesh> teapotParts(float size) {
         std::vector<std::pair<float, float>> prof = {{0, 0}, {0, 0.10f}, {L, 0.05f}, {L, 0}};
         TriMesh sp = revolve(prof, 24);
         Vector3 d = normalize(b - a);
-        float ang = std::atan2(d.y, d.x);
+        float ang = rf::atan2(d.y, d.x);
         sp.transform(Quaternion::fromAxisAngle({0, 0, 1}, ang).toMatrix3x3(), Vector3(1.0f), a);
         parts.push_back(sp);
     }

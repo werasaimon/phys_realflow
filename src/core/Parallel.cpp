@@ -1,6 +1,7 @@
 // The thread pool of the SDK: a fixed set of spinning workers that split a loop between them
 // (parallelFor, parallelSum, parallelMax). Its own pool instead of OpenMP because MinGW's libgomp
-// costs 150-180 microseconds per region on Windows. The interface is in Parallel.h.
+// costs 150-180 microseconds per region on Windows. The interface, and the rule that makes the
+// results the same on any number of threads, are in Parallel.h.
 #include "core/Parallel.h"
 
 #include <cstdlib>
@@ -40,10 +41,23 @@ struct ThreadPool::Impl {
     std::atomic<uint64_t> ticket{0};
     std::atomic<bool> quit{false};
     std::atomic<int> sleeping{0};
+    std::atomic<int> active{0}; // threads that take part (setActiveThreads); 0 = all
     std::mutex sleepMutex;
     std::condition_variable cv;
     std::mutex runMutex;
     std::vector<std::thread> threads;
+
+    // May the calling thread take chunks? Workers numbered past the active count stay out.
+    bool mayWork() const {
+        const int a = active.load(std::memory_order_relaxed);
+        return a == 0 || tl_worker < a;
+    }
+
+    // Is a chunk of the current job still waiting to be taken?
+    bool pending() const {
+        const uint64_t t = ticket.load(std::memory_order_acquire);
+        return uint32_t(t) < slots[uint32_t(t >> 32) & 1].chunks;
+    }
 
     // Tries to execute one chunk of the current job. Returns false when there is nothing to do.
     bool tryWork() {
@@ -65,21 +79,17 @@ struct ThreadPool::Impl {
     void workerLoop() {
         using clock = std::chrono::steady_clock;
         while (!quit.load(std::memory_order_relaxed)) {
-            if (tryWork()) continue;
+            if (mayWork() && tryWork()) continue;
             // Idle: spin, then yield, then sleep.
             auto idleStart = clock::now();
             int spins = 0;
             while (!quit.load(std::memory_order_relaxed)) {
-                uint64_t t = ticket.load(std::memory_order_acquire);
-                if (uint32_t(t) < slots[uint32_t(t >> 32) & 1].chunks) break;
+                if (mayWork() && pending()) break;
                 if (++spins < 4000) { RF_PAUSE(); continue; }
                 if (clock::now() - idleStart < std::chrono::milliseconds(3)) { std::this_thread::yield(); continue; }
                 std::unique_lock<std::mutex> lk(sleepMutex);
                 sleeping.fetch_add(1);
-                cv.wait_for(lk, std::chrono::milliseconds(20), [&] {
-                    uint64_t t2 = ticket.load(std::memory_order_acquire);
-                    return quit.load() || uint32_t(t2) < slots[uint32_t(t2 >> 32) & 1].chunks;
-                });
+                cv.wait_for(lk, std::chrono::milliseconds(20), [&] { return quit.load() || (mayWork() && pending()); });
                 sleeping.fetch_sub(1);
                 idleStart = clock::now();
                 spins = 0;
@@ -112,10 +122,18 @@ ThreadPool::~ThreadPool() {
     delete impl_;
 }
 
+void ThreadPool::setActiveThreads(int n) { impl_->active.store(std::clamp(n, 0, threadCount()), std::memory_order_relaxed); }
+
+int ThreadPool::activeThreads() const {
+    const int a = impl_->active.load(std::memory_order_relaxed);
+    return a > 0 ? a : threadCount();
+}
+
 void ThreadPool::run(int chunks, ChunkFn fn, void* ctx) {
     if (chunks <= 0) return;
-    // Nested parallel calls from inside a job run serially (avoids deadlock on runMutex).
-    if (workers_ == 0 || chunks == 1 || tl_inPool) {
+    // Nested parallel calls from inside a job run serially (avoids deadlock on runMutex); so does
+    // everything when only the calling thread is active.
+    if (workers_ == 0 || chunks == 1 || tl_inPool || activeThreads() == 1) {
         for (int c = 0; c < chunks; ++c) fn(ctx, c);
         return;
     }

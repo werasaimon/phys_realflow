@@ -7,6 +7,7 @@
 // classes are declared in Joints.h; the world's add*Joint functions are at the end of this file.
 #include "rigid/Joints.h"
 #include "rigid/RigidWorld.h"
+#include "math/ElementaryFunctions.h"
 
 #include <algorithm>
 
@@ -204,7 +205,7 @@ float HingeJoint::angle(const std::vector<RigidBody>& bodies) const {
     const RigidBody& B = bodyOf(bodies, b);
     Vector3 axis = A.rot.rotate(localAxisA);
     Vector3 ra = A.rot.rotate(localRefA), rb = B.rot.rotate(localRefB);
-    return std::atan2(dot(cross(rb, ra), axis), dot(rb, ra));
+    return rf::atan2(dot(cross(rb, ra), axis), dot(rb, ra));
 }
 
 void HingeJoint::buildRows(const std::vector<RigidBody>& bodies, float h) {

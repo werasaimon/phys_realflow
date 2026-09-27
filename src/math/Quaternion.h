@@ -1,6 +1,7 @@
 #pragma once
 // Unit quaternion (float) for orientations: q = (w, x, y, z) = (cos(a/2), axis * sin(a/2)).
 
+#include "math/ElementaryFunctions.h"
 #include "math/Matrix3x3.h"
 
 namespace rf {
@@ -10,8 +11,8 @@ struct Quaternion {
 
     static Quaternion fromAxisAngle(const Vector3& axis, float angle) {
         Vector3 a = normalize(axis);
-        float s = std::sin(angle * 0.5f);
-        return {std::cos(angle * 0.5f), a.x * s, a.y * s, a.z * s};
+        float s = rf::sin(angle * 0.5f);
+        return {rf::cos(angle * 0.5f), a.x * s, a.y * s, a.z * s};
     }
     // Intrinsic rotations: yaw about Y, pitch about Z, roll about X (radians).
     static Quaternion fromEuler(float yaw, float pitch, float roll) {
@@ -72,7 +73,7 @@ struct Quaternion {
     }
     Vector3 rotate(const Vector3& v) const { return toMatrix3x3() * v; }
     // Rotation angle in [0, pi].
-    float angle() const { return 2.0f * std::atan2(std::sqrt(x * x + y * y + z * z), std::fabs(w)); }
+    float angle() const { return 2.0f * rf::atan2(std::sqrt(x * x + y * y + z * z), std::fabs(w)); }
 
     // Logarithm SO(3) -> so(3): rotation vector (axis * angle) of this unit quaternion, shortest arc.
     // theta = 2 atan2(|v|, w); for small |v| the factor theta/|v| = (2/w)(1 - |v|^2/(3 w^2) + ...)
@@ -86,7 +87,7 @@ struct Quaternion {
             f = 2.0f / q.w * (1.0f - r / 3.0f + r * r / 5.0f);
         } else {
             float s = std::sqrt(s2);
-            f = 2.0f * std::atan2(s, q.w) / s;
+            f = 2.0f * rf::atan2(s, q.w) / s;
         }
         return {q.x * f, q.y * f, q.z * f};
     }
@@ -101,8 +102,8 @@ struct Quaternion {
             c = 1.0f - t2 * (0.5f - t2 / 24.0f);           // 1 - th^2/2 + th^4/24
             sinc = 1.0f - t2 * (1.0f / 6.0f - t2 / 120.0f); // 1 - th^2/6 + th^4/120
         } else {
-            c = std::cos(th);
-            sinc = std::sin(th) / th;
+            c = rf::cos(th);
+            sinc = rf::sin(th) / th;
         }
         const float k = 0.5f * dt * sinc; // vector part = omega/|omega| * sin(th) = omega * dt/2 * sinc
         Quaternion e{c, omega.x * k, omega.y * k, omega.z * k};
@@ -120,8 +121,8 @@ inline Quaternion slerp(const Quaternion& a, Quaternion b, float t) {
         Quaternion r{a.w + (b.w - a.w) * t, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t};
         return r.normalized();
     }
-    float theta = std::acos(c);
-    float wa = std::sin((1 - t) * theta) / std::sin(theta), wb = std::sin(t * theta) / std::sin(theta);
+    float theta = rf::acos(c);
+    float wa = rf::sin((1 - t) * theta) / rf::sin(theta), wb = rf::sin(t * theta) / rf::sin(theta);
     return Quaternion{a.w * wa + b.w * wb, a.x * wa + b.x * wb, a.y * wa + b.y * wb, a.z * wa + b.z * wb}.normalized();
 }
 

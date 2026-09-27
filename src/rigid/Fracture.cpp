@@ -4,6 +4,7 @@
 // the end the polygons are fanned into triangles and the vertices welded, so each cell is a
 // closed convex triangle mesh that ConvexHullShape accepts.
 #include "rigid/Fracture.h"
+#include "math/ElementaryFunctions.h"
 
 #include <algorithm>
 #include <cmath>
@@ -77,7 +78,7 @@ Polygon buildCap(const std::vector<CutEdge>& cuts, const Vector3& n, float eps) 
     const Vector3 u = normalize(std::fabs(n.x) < 0.9f ? cross(n, Vector3(1, 0, 0)) : cross(n, Vector3(0, 1, 0)));
     const Vector3 v = cross(n, u); // u x v = n: counter-clockwise in (u, v) is seen from +n
     std::sort(pts.begin(), pts.end(), [&](const Vector3& a, const Vector3& b) {
-        return std::atan2(dot(a - centre, v), dot(a - centre, u)) < std::atan2(dot(b - centre, v), dot(b - centre, u));
+        return rf::atan2(dot(a - centre, v), dot(a - centre, u)) < rf::atan2(dot(b - centre, v), dot(b - centre, u));
     });
     cap.loop = std::move(pts);
     return cap;
@@ -199,7 +200,7 @@ std::vector<Vector3> impactSeeds(const TriMesh& hull, const Vector3& impact, int
         // A random direction (uniform on the sphere) and a distance crowded towards the impact.
         const float z = 2.0f * rnd.next() - 1.0f, phi = 2.0f * kPi * rnd.next();
         const float s = std::sqrt(std::max(0.0f, 1.0f - z * z));
-        const Vector3 dir(s * std::cos(phi), s * std::sin(phi), z);
+        const Vector3 dir(s * rf::cos(phi), s * rf::sin(phi), z);
         const float u = rnd.next();
         const Vector3 p = impact + dir * (radius * u * u);
         if (insideConvex(hull, p)) out.push_back(p);

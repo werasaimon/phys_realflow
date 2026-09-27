@@ -31,6 +31,8 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); 
 int main() {
     run("probe: channels, counters, timers, debug drawing", testProbe);
     run("math: vectors, matrices, quaternions, N x N solvers", testMath);
+    run("math: tensors - Einstein summation vs loops, raise / lower / trace, refusals", testTensorEinstein);
+    run("math: outer, Kronecker, QR, SVD, matrix exponential", testMatrixToolbox);
     run("primitives", testPrimitives);
     run("bvh", testBVH);
     run("mass properties", testMassProperties);
@@ -57,6 +59,8 @@ int main() {
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
+    // TODO(cloth): the exact-line thread solver (no false tears) is parked in C:/Users/PC/rf-parked
+    // until it is fast enough; its two tests come back with it.
     run("grid uniform flow", testGridUniform);
     run("grid sphere drag", testGridSphere);
     run("surface loads per triangle (Cp, Cf, forces)", testSurfaceLoads);
@@ -80,16 +84,28 @@ int main() {
     run("presets", testSimulationPresets);
     run("coherence: scene switches, one gravity, Coulomb friction, burnt cloth", testCoherence);
     run("determinism: two runs agree to the bit (rigid, particles, gas)", testDeterminism);
+    run("determinism: the same bits on 1, 2 and all threads", testDeterminismAcrossThreads);
+    run("determinism: golden hash of the rigid benchmark scene", testRigidGoldenHash);
+    run("determinism: rf::sin, cos, atan2 ... equal std:: to the bit (step 1 of 2)", testElementaryFunctionsAreStd);
+    // Minutes (three whole fire scenes): only on request (RF_TEST="determinism: the fire").
+    if (const char* only = std::getenv("RF_TEST"); only && std::strstr(only, "determinism: the fire"))
+        run("determinism: the fire burns the same threads on 1, 2 and all threads", testFireAcrossThreads);
     run("benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)", testCylinderStrouhal);
     run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
     run("Newton's cradle on the floor: the hit passes down the row", testNewtonCradle);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
+    run("gas: multigrid pressure matches PCG and converges in few iterations", testMultigridPressure);
+    // Minutes of timing: only on request (RF_TEST="benchmark: gas pressure").
+    if (const char* only = std::getenv("RF_TEST"); only && std::strstr(only, "benchmark: gas pressure"))
+        run("benchmark: gas pressure, Jacobi PCG vs multigrid PCG, ms per frame", testPressureBenchmark);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
     run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
     run("Voronoi fracture: cells fill the body, convex and watertight", testVoronoiFracture);
     run("particles vs many bodies: the world tree", testParticlesManyBodies);
     run("rigid: destroy one body, reuse its slot", testDestroyBody);
     run("rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts", testCapsuleShape);
+    run("rigid: restitution 0 - a dropped body stops at the touch", testDeadLanding);
+    run("rigid: a cube dropped flat lands without turning or sliding", testFlatLanding);
     run("particles: remove one group (soft body, liquid)", testRemoveParticleGroup);
     // relativity: geodesics in Kerr, light bending, the shadow of a black hole
     run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);
@@ -98,6 +114,10 @@ int main() {
     run("perihelion precession: 6 pi M / (a (1 - e^2))", testPerihelionPrecession);
     run("shadow of a Schwarzschild hole: 3 sqrt(3) M (ray tracer)", testShadow);
     run("horizon crossing: Eddington-Finkelstein vs Boyer-Lindquist", testHorizonPenetration);
+    run("curvature: flat space in spherical coordinates, the 2-sphere, loops vs einstein()", testCurvatureFlatAndSphere);
+    run("curvature: Schwarzschild, Kerr, Reissner-Nordstrom (Christoffels, Ricci, Kretschmann)", testCurvatureBlackHoles);
+    run("curvature: de Sitter, Friedmann, a wormhole's exotic matter", testCurvatureCosmology);
+    run("curvature: tides of a static observer, geodesics with Gamma vs Hamilton", testTidesAndGammaGeodesic);
     run("scene graph: save -> load -> save gives the same text", testSceneGraphRoundTrip);
     run("magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998)", testMagnetForce);
     run("magnets: two free magnets pull together, momentum conserved", testMagnetsAttract);
@@ -110,11 +130,41 @@ int main() {
     run("scene graph: the collider apart from the look (box collider slides, sphere collider rolls)", testGraphColliderApart);
     run("scene graph: a capsule fitted to a model, collider round trip, off-centre rebuild", testGraphColliderFit);
     run("scene graph: a collider alone is a static obstacle", testGraphColliderOnly);
+    run("scene graph: lights and cameras round trip, a spot's direction, a camera's frame", testGraphLightsCameras);
     run("meta-objects: water -> jelly -> water -> jelly in place, the rest untouched", testMetaWaterSoftCycle);
     run("meta-objects: a plane rigid -> cloth -> rigid, body slots reused", testMetaRigidToClothAndBack);
     run("meta-objects: a magnet role off and on without a reload", testMetaMagnetToggle);
     run("meta-objects: fifty changes leave no trace in memory", testMetaNoGrowth);
+    run("scene graph: groups, instances and arrays round trip; a child of a turned group", testHierarchyInstancesRoundTrip);
+    run("array: line, grid and circle copies where the pattern puts them, seeded jitter", testExpandArrayPatterns);
+    run("array: fifty cubes fall and sleep, the array grows to eighty during play", testArrayPileAndGrow);
+    run("array: ten instances of one master all get heavier with it", testInstancesShareRoles);
+    run("array: a glued group of three boxes falls and tumbles as one body", testGluedGroupTumbles);
+    run("debug layers: all off draws nothing and allocates nothing more (100 boxes)", testDebugLayersOff);
+    run("debug layers: one point per contact point, contacts in the snapshot", testDebugContactLayers);
+    run("debug layers: watched pair, GJK simplices, EPA depth == contact depth", testDebugWatchedPair);
+    run("debug layers: world AABB tree has 2 n - 1 nodes", testDebugWorldTree);
+    run("debug layers: one line per cloth thread", testDebugClothTension);
+    run("debug layers: gas slice (grid, u, -grad p / rho, div u, curl u) and field lines B", testDebugGasLayers);
+    run("debug layers: a layer stops at its cap with a label", testDebugLayerCap);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
+    run("action: friction takes mu m g per metre slid", testActionFriction);
+    run("action: a damped pendulum loses the damping's work, the joint none", testActionDampedPendulum);
+    run("action: viscous dissipation 2 nu |S|^2 of a Taylor-Green vortex", testActionViscousBalance);
+    run("action: magnetic energy turns into Joule heat J^2 / sigma", testActionJouleBalance);
+    run("action: a free spinning box keeps its energy and L (Noether)", testActionFreeRotation);
+    // the book "Язык природы" (docs/math/): each picture of the book is one of these runs
+    run("mathbook: float and double - what survives a long sum and a small difference", testMathBookRounding);
+    run("mathbook: vectors - a charge circles in a field, a push off centre spins a body", testMathBookVectors);
+    run("mathbook: the slope of the height is the speed; the step is first order", testMathBookDerivative);
+    run("mathbook: a pendulum by Euler, symplectic Euler and Runge-Kutta 4", testMathBookSchemes);
+    run("mathbook: a big linear system by Jacobi and CG; inertia eigenvalues", testMathBookLinearSystems);
+    run("mathbook: the tennis-racket flip in quaternions, engine vs Euler's equations", testMathBookFlip);
+    run("mathbook: div u before and after the pressure projection", testMathBookDivergence);
+    run("mathbook: the spread of an average falls as 1 / sqrt(N)", testMathBookSigma);
+#ifdef RF_WITH_VERIFY
+    run("verification: registry runs quick and writes a board", testVerificationSmoke);
+#endif
     std::printf(g_failures ? "\n%d FAILURE(S)\n" : "\nALL PASSED\n", g_failures);
     if (const char* junit = std::getenv("RF_JUNIT"); junit && *junit) writeJUnit(junit);
     return g_failures;

@@ -442,6 +442,7 @@ void ParticleSystem::finishStep(float dt) {
     for (size_t b = 0; b < bodyShift_.size(); ++b)
         if (length2(bodyShift_[b]) + length2(bodyTurn_[b]) > 0)
             rigid_->applyVelocityChange(int(b), bodyShift_[b] / dt, bodyTurn_[b] / dt);
+    if (Probe::drawEnabled()) drawDebug(dt); // the research layers (ParticleDebugDraw.cpp)
 }
 
 // ---------------------------------------------------------------------------
