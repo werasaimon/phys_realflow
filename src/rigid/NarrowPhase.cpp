@@ -22,6 +22,42 @@ public:
 };
 const PointShape kPoint;
 
+// The core of a capsule: its axis segment (0, -h, 0) .. (0, h, 0), for GJK/EPA; the radius is added
+// to the result as for a sphere's core point.
+class SegmentShape final : public ConvexShape {
+public:
+    explicit SegmentShape(float h) : h_(h) {}
+    ShapeType type() const override { return ShapeType::Capsule; }
+    Vector3 support(const Vector3& d) const override { return Vector3(0.0f, d.y >= 0 ? h_ : -h_, 0.0f); }
+    AABB localBounds() const override { return AABB(Vector3(0.0f, -h_, 0.0f), Vector3(0.0f, h_, 0.0f)); }
+    float volume() const override { return 0; }
+    Vector3 unitInertia() const override { return Vector3(0.0f); }
+    float signedDistance(const Vector3& p, Vector3& n) const override {
+        const Vector3 d = p - Vector3(0.0f, clampv(p.y, -h_, h_), 0.0f);
+        n = normalize(d);
+        return length(d);
+    }
+    float boundingRadius() const override { return h_; }
+
+private:
+    float h_;
+};
+
+// A posed capsule's axis segment in the world and its radius.
+void capsuleAxis(const PosedShape& s, Vector3& a, Vector3& b, float& r) {
+    const auto* c = static_cast<const CapsuleShape*>(s.shape);
+    const Vector3 up = s.R * Vector3(0.0f, c->halfHeight(), 0.0f);
+    a = s.p - up;
+    b = s.p + up;
+    r = c->radius();
+}
+
+Vector3 closestOnSegment(const Vector3& a, const Vector3& b, const Vector3& p) {
+    const Vector3 ab = b - a;
+    const float l2 = dot(ab, ab);
+    return l2 < 1e-12f ? a : a + ab * clampv(dot(p - a, ab) / l2, 0.0f, 1.0f);
+}
+
 float sphereRadius(const PosedShape& s) { return static_cast<const SphereShape*>(s.shape)->radius(); }
 
 void flipAppend(const ContactManifold& src, ContactManifold& dst) {
@@ -151,6 +187,12 @@ NarrowPhase::NarrowPhase() {
     table_[B][T] = &convexConvex;
     table_[H][H] = &convexConvex;
     table_[H][T] = &convexConvex;
+    const int C = int(ShapeType::Capsule);
+    table_[S][C] = &sphereCapsule;
+    table_[C][C] = &capsuleCapsule;
+    table_[C][B] = &capsuleConvex;
+    table_[C][H] = &capsuleConvex;
+    table_[C][T] = &capsuleConvex;
     // Reverse pairs are handled by swapping in collide().
 }
 
@@ -518,6 +560,112 @@ void NarrowPhase::perturbationManifold(const PosedShape& A, const PosedShape& B,
         for (const ContactPoint& c : pts) dup |= length(c.position - pos) < mergeDist;
         if (!dup) pts.push_back({pos, n, depth});
     }
+}
+
+// ---------------------------------------------------------------------------
+// Capsules: a core segment plus a radius
+// ---------------------------------------------------------------------------
+// Sphere against capsule: the sphere against the nearest point of the capsule's axis, as two spheres.
+bool NarrowPhase::sphereCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m) {
+    Vector3 a, b;
+    float rb;
+    capsuleAxis(B, a, b, rb);
+    const float ra = sphereRadius(A);
+    const Vector3 q = closestOnSegment(a, b, A.p);
+    const Vector3 d = A.p - q;
+    const float l = length(d), depth = ra + rb - l;
+    if (depth <= -margin) return false;
+    const Vector3 n = l > 1e-9f ? d / l : B.R * Vector3(1, 0, 0);
+    m.add(q + n * (rb - 0.5f * depth), n, depth);
+    return true;
+}
+
+// Capsule against capsule: the nearest points of the two axes; nearly parallel axes that overlap
+// touch along a line, so each axis's ends are also put against the other axis (two points).
+bool NarrowPhase::capsuleCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m) {
+    Vector3 a0, a1, b0, b1;
+    float ra, rb;
+    capsuleAxis(A, a0, a1, ra);
+    capsuleAxis(B, b0, b1, rb);
+    auto touch = [&](const Vector3& pa, const Vector3& pb) {
+        const Vector3 d = pa - pb;
+        const float l = length(d), depth = ra + rb - l;
+        if (depth <= -margin || l < 1e-9f) return false;
+        const Vector3 n = d / l;
+        m.add(pb + n * (rb - 0.5f * depth), n, depth);
+        return true;
+    };
+    const Vector3 ua = a1 - a0, ub = b1 - b0;
+    const float la = length(ua), lb = length(ub);
+    const bool parallel = la > 1e-6f && lb > 1e-6f && std::fabs(dot(ua, ub)) > 0.995f * la * lb;
+    if (!parallel) {
+        Vector3 c1, c2;
+        closestSegmentSegment(a0, a1, b0, b1, c1, c2);
+        return touch(c1, c2);
+    }
+    bool hit = false;
+    for (const Vector3& e : {a0, a1}) hit |= touch(e, closestOnSegment(b0, b1, e));
+    for (const Vector3& e : {b0, b1}) hit |= touch(closestOnSegment(a0, a1, e), e);
+    reduceManifold(m.points, 4);
+    return hit;
+}
+
+// Capsule against a box, hull or triangle: GJK between the core segment and B gives the normal and
+// the gap (EPA the depth when the segment itself is inside B); the capsule's surface is the radius
+// further out. Lying on a face it touches at both ends of its side (capsuleOnFace), else at one point.
+bool NarrowPhase::capsuleConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m) {
+    const auto* cap = static_cast<const CapsuleShape*>(A.shape);
+    const float r = cap->radius();
+    const SegmentShape segment(cap->halfHeight());
+    const PosedShape core{&segment, A.R, A.p};
+    GjkResult g = gjk(core, B, r + margin);
+    Vector3 n, deepest;
+    float gap;
+    if (!g.intersect) {
+        if (g.distance >= r + margin || g.distance < 1e-9f) return false;
+        n = (g.pointA - g.pointB) / g.distance;
+        gap = g.distance;
+        deepest = g.pointA;
+    } else {
+        PenetrationResult pr = epa(core, B, g);
+        if (!pr.valid) return false;
+        n = pr.normal;
+        gap = -pr.depth;
+        deepest = pr.pointA;
+    }
+    if (capsuleOnFace(A, B, n, m)) return true;
+    m.add(deepest - n * (0.5f * (r + gap)), n, r - gap); // midway between the two surfaces
+    return true;
+}
+
+// Both ends of the capsule's axis, clipped to B's face along n and measured from B's supporting
+// plane: the two contacts of a capsule lying on a table (one would let it rock about that point).
+bool NarrowPhase::capsuleOnFace(const PosedShape& A, const PosedShape& B, const Vector3& n, ContactManifold& m) {
+    Vector3 a0, a1;
+    float r;
+    capsuleAxis(A, a0, a1, r);
+    const Vector3 axis = a1 - a0;
+    const float l = length(axis);
+    if (l < 1e-6f || std::fabs(dot(axis, n)) > 0.17f * l) return false; // standing on a cap: one point
+    NarrowScratch& S = scratch();
+    std::vector<Vector3>&face = S.fb, &inc = S.inc, &clipped = S.cut;
+    face.clear();
+    B.feature(n, face); // B's face towards the capsule
+    if (face.size() < 3) return false;
+    Vector3 nr = normalize(cross(face[1] - face[0], face[2] - face[0]));
+    if (dot(nr, n) < 0) nr = -nr;
+    if (dot(nr, n) < 0.9f) return false; // no face faces the capsule
+    inc.assign({a0, a1});
+    clipIncidentFace(face, nr, inc, clipped);
+    const float plane = dot(n, B.support(n));
+    bool any = false;
+    for (const Vector3& x : inc) {
+        const float gap = dot(n, x) - plane; // the axis point's height above B's surface
+        if (r - gap <= -margin) continue;
+        m.add(x - n * (0.5f * (r + gap)), n, r - gap);
+        any = true;
+    }
+    return any;
 }
 
 } // namespace rf

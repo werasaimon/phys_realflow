@@ -158,8 +158,9 @@ GraphScene::LiveState GraphScene::liveState(const Simulation& sim, int index) co
     for (const MetaObject& m : metaObjects(e.id)) {
         if (m.kind == MetaObject::Kind::RigidBody && sim.rigid.isAlive(m.handle)) {
             const RigidBody& b = sim.rigid.bodies()[size_t(m.handle)];
-            s.position = b.pos;
-            s.rotationDeg = eulerDegrees(b.rot * m.bodyToEntity);
+            const Quaternion entityRot = b.rot * m.bodyToEntity;
+            s.position = b.pos - entityRot.rotate(m.bodyOffset); // the entity's centre, not the collider's
+            s.rotationDeg = eulerDegrees(entityRot);
             s.velocity = b.vel;
             s.angularVelocity = b.angVel;
             return s;

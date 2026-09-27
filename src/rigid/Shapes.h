@@ -12,7 +12,8 @@
 
 namespace rf {
 
-enum class ShapeType { Sphere, Box, ConvexHull, Triangle, Compound };
+// Capsule is last so that the values of the others (the narrow phase's table index) stay as they were.
+enum class ShapeType { Sphere, Box, ConvexHull, Triangle, Compound, Capsule };
 
 class ConvexShape {
 public:
@@ -203,6 +204,34 @@ private:
     AABB bounds_;
     float volume_ = 0, radius_ = 0;
     Vector3 inertia_;
+};
+
+// Capsule: every point within `radius` of the segment from (0, -halfHeight, 0) to (0, halfHeight, 0)
+// - a cylinder with two hemispherical caps, the usual collider of characters and long objects
+// (Box2D b2Capsule, PhysX PxCapsuleGeometry, Bullet btCapsuleShape; its axis here is y). Round
+// everywhere, so it rolls sideways but not end over end, and lies on 2 contacts.
+class CapsuleShape final : public ConvexShape {
+public:
+    CapsuleShape(float radius, float halfHeight);
+    ShapeType type() const override { return ShapeType::Capsule; }
+    Vector3 support(const Vector3& d) const override;
+    AABB localBounds() const override { return AABB(Vector3(-r_, -h_ - r_, -r_), Vector3(r_, h_ + r_, r_)); }
+    float volume() const override;
+    Vector3 unitInertia() const override;
+    float signedDistance(const Vector3& p, Vector3& n) const override;
+    bool contains(const Vector3& p) const override;
+    float boundingRadius() const override { return h_ + r_; }
+    // Lying across the direction: the whole side line supports (two points), else one point.
+    void supportFeature(const Vector3& dir, std::vector<Vector3>& out) const override;
+    bool raycast(const Vector3& o, const Vector3& d, float maxT, float& t, Vector3& normal) const override;
+    float radius() const { return r_; }
+    float halfHeight() const { return h_; }
+    // A triangle mesh of the surface, for drawing a capsule body.
+    const std::shared_ptr<const TriMesh>& mesh() const { return mesh_; }
+
+private:
+    float r_, h_;
+    std::shared_ptr<const TriMesh> mesh_;
 };
 
 // Mass properties of a closed triangle mesh with unit density (Eberly, "Polyhedral Mass Properties").

@@ -953,3 +953,79 @@ void testDestroyBody() {
     CHECK(w.bodies().size() == slots, "slots grew from %zu to %zu", slots, w.bodies().size());
     CHECK(perFrame <= perFrameBefore + 2, "a frame allocates %lld times after the cycles, %lld before", perFrame, perFrameBefore);
 }
+
+// ---------------------------------------------------------------------------
+// Capsule: mass properties, resting on its side, falling over from its end, raycasts
+// ---------------------------------------------------------------------------
+// The capsule's volume and inertia against a direct count: a fine grid of points, those inside it
+// (CapsuleShape::contains) summed - an independent check of the closed formula.
+static void checkCapsuleMass(const CapsuleShape& c) {
+    const int n = 90;
+    const AABB b = c.localBounds();
+    const Vector3 cell = b.extent() / float(n);
+    double count = 0, xx = 0, yy = 0, zz = 0;
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k) {
+                const Vector3 p = b.lo + Vector3(i + 0.5f, j + 0.5f, k + 0.5f) * cell;
+                if (!c.contains(p)) continue;
+                count += 1;
+                xx += double(p.x) * p.x, yy += double(p.y) * p.y, zz += double(p.z) * p.z;
+            }
+    const double volume = count * cell.x * cell.y * cell.z;
+    const Vector3 I(float((yy + zz) / count), float((xx + zz) / count), float((xx + yy) / count)); // per unit mass
+    const Vector3 f = c.unitInertia();
+    std::printf("  capsule r 0.1 h 0.15: volume %.6f (grid %.6f), unit inertia side %.6f axis %.6f (grid %.6f %.6f)\n", c.volume(),
+                volume, f.x, f.y, I.x, I.y);
+    CHECK(std::fabs(volume / c.volume() - 1) < 0.01, "capsule volume %f vs grid %f", c.volume(), volume);
+    CHECK(std::fabs(I.x / f.x - 1) < 0.02f && std::fabs(I.y / f.y - 1) < 0.02f && std::fabs(I.z / f.z - 1) < 0.02f,
+          "capsule inertia (%f %f %f) vs grid (%f %f %f)", f.x, f.y, f.z, I.x, I.y, I.z);
+}
+
+// A capsule on a static box floor (top at y = 0): dropped lying, or standing on its end tilted by
+// 2 degrees. Returns its final pose; `contacts` is the contact count of the last step.
+static void capsuleOnFloor(bool lying, Vector3& pos, Vector3& axis, float& speed, int& contacts) {
+    RigidWorld w;
+    w.setDomain(AABB({-2, -1, -2}, {2, 2, 2}));
+    w.params.sleeping = false;
+    w.addBox({0, -0.1f, 0}, {1.5f, 0.1f, 1.5f}, Quaternion(), 0, Vector3(1));
+    const float r = 0.05f, h = 0.15f;
+    const Quaternion turn = Quaternion::fromAxisAngle({0, 0, 1}, lying ? 0.5f * kPi : degToRad(2.0f));
+    const Vector3 start = lying ? Vector3(0, r + 0.1f, 0) : Vector3(0, h + r + 0.002f, 0);
+    const int c = w.addBody(std::make_shared<CapsuleShape>(r, h), start, turn, 1000, Vector3(1));
+    const int frames = lying ? 120 : 360;
+    for (int f = 0; f < frames; ++f)
+        for (int k = 0; k < w.params.substeps; ++k) w.step(1.0f / 60 / w.params.substeps);
+    const RigidBody& b = w.bodies()[c];
+    pos = b.pos;
+    axis = b.rotation() * Vector3(0, 1, 0);
+    speed = length(b.vel);
+    contacts = int(w.contactCount());
+}
+
+void testCapsuleShape() {
+    const CapsuleShape capsule(0.1f, 0.15f);
+    checkCapsuleMass(capsule);
+    Vector3 pos, axis;
+    float speed;
+    int contacts;
+    capsuleOnFloor(true, pos, axis, speed, contacts);
+    std::printf("  lying capsule: centre y %.4f m (expected 0.0500), drift %.4f m, speed %.4f m/s, %d contacts\n", pos.y,
+                std::hypot(pos.x, pos.z), speed, contacts);
+    CHECK(std::fabs(pos.y - 0.05f) < 0.001f, "a lying capsule rests at y %f, expected 0.05", pos.y);
+    CHECK(std::hypot(pos.x, pos.z) < 0.01f && speed < 0.01f, "the lying capsule rolls away (drift %f, speed %f)", std::hypot(pos.x, pos.z), speed);
+    CHECK(contacts == 2, "a lying capsule touches at %d points, expected its two ends", contacts);
+    capsuleOnFloor(false, pos, axis, speed, contacts);
+    std::printf("  capsule stood on its end, tilted 2 deg: after 6 s axis y %.3f, centre y %.4f m, speed %.4f m/s\n", axis.y, pos.y, speed);
+    CHECK(std::fabs(axis.y) < 0.2f && std::fabs(pos.y - 0.05f) < 0.002f, "the capsule did not fall over (axis y %f, centre %f)", axis.y, pos.y);
+    // Rays: the side, the top cap on its axis, and the cap off its axis (0.03 m out: y = h + sqrt(r^2 - 0.03^2)).
+    const CapsuleShape c(0.05f, 0.15f);
+    float t;
+    Vector3 n;
+    const bool side = c.raycast({1, 0, 0}, {-1, 0, 0}, 10, t, n) && std::fabs(t - 0.95f) < 1e-5f && n.x > 0.999f;
+    const bool top = c.raycast({0, 1, 0}, {0, -1, 0}, 10, t, n) && std::fabs(t - 0.8f) < 1e-5f && n.y > 0.999f;
+    const float capY = 0.15f + std::sqrt(0.05f * 0.05f - 0.03f * 0.03f);
+    const bool offAxis = c.raycast({0.03f, 1, 0}, {0, -1, 0}, 10, t, n) && std::fabs(t - (1 - capY)) < 1e-5f;
+    std::printf("  capsule rays: side %d, top %d, cap off the axis %d (t %.5f, expected %.5f)\n", int(side), int(top), int(offAxis), t, 1 - capY);
+    CHECK(side && top && offAxis, "capsule raycasts: side %d top %d off-axis %d", int(side), int(top), int(offAxis));
+}

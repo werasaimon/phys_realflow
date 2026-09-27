@@ -51,6 +51,8 @@ TriMesh streamlinedBody(float length, float thicknessRatio, int segments = 48, i
 // NACA 4-digit wing, chord along +X starting at x=0, span along Z centered at 0.
 TriMesh nacaWing(const std::string& code, float chord, float span, int stations = 60);
 TriMesh cone(float radius, float length, int segments = 48); // apex pointing to -X
+// Capsule with its axis along Y: a side of length 2 halfHeight and two hemispherical caps.
+TriMesh capsule(float radius, float halfHeight, int segments = 24, int rings = 8);
 // Torus about the Y axis: a circle of radius `minor` in the (R, y) plane, centred at R = major,
 // swept around the axis.
 TriMesh torus(float major, float minor, int segments = 64, int rings = 24);

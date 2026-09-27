@@ -23,6 +23,7 @@ SceneGraph everyRoleGraph() {
     floor.shape = ShapeKind::Plane;
     floor.size = {3, 0.02f, 2};
     floor.rigid.enabled = true;
+    floor.collider.enabled = true; // the editor adds a collider with the rigid role
     floor.rigid.fixed = true;
     Entity magnet;
     magnet.name = "Magnet \"A\""; // quotes in a name become apostrophes
@@ -30,6 +31,7 @@ SceneGraph everyRoleGraph() {
     magnet.position = {0.1f, 0.5f, -0.2f};
     magnet.rotationDeg = {10, 20, 30};
     magnet.rigid.enabled = true;
+    magnet.collider.enabled = true; // the editor adds a collider with the rigid role
     magnet.rigid.density = 7800;
     magnet.rigid.velocity = {0.25f, 0, 0};
     magnet.magnet.enabled = true;
@@ -56,6 +58,7 @@ SceneGraph everyRoleGraph() {
     cone.shape = ShapeKind::Cone;
     cone.position = {0, 1, 0.3f};
     cone.rigid.enabled = true;
+    cone.collider.enabled = true; // the editor adds a collider with the rigid role
     Entity curtain; // a flammable cloth: no body, particles
     curtain.name = "Curtain";
     curtain.shape = ShapeKind::Plane;
@@ -71,6 +74,7 @@ SceneGraph everyRoleGraph() {
     smoker.name = "Smoker";
     smoker.position = {0.8f, 1.0f, -0.5f};
     smoker.rigid.enabled = true;
+    smoker.collider.enabled = true; // the editor adds a collider with the rigid role
     smoker.emitter.enabled = true;
     smoker.emitter.smoke = 2.5f;
     smoker.emitter.temperature = 50;
@@ -79,6 +83,7 @@ SceneGraph everyRoleGraph() {
     ghost.name = "Ghost";
     ghost.position = {0, 1.5f, 0};
     ghost.rigid.enabled = true;
+    ghost.collider.enabled = true; // the editor adds a collider with the rigid role
     ghost.visible = false;
     g.entities = {floor, magnet, jelly, pool, stove, cone, curtain, smoker, ghost};
     for (size_t i = 0; i < g.entities.size(); ++i) g.entities[i].id = uint32_t(100 + 7 * i);
@@ -149,6 +154,7 @@ void testMagnetsAttract() {
         e.size = Vector3(0.02f);
         e.position = {i ? 0.05f : -0.05f, 1.5f, 0};
         e.rigid.enabled = true;
+        e.collider.enabled = true; // the editor adds a collider with the rigid role
         e.rigid.density = 7800;
         e.magnet.enabled = true;
         e.magnet.moment = {0.5f, 0, 0};
@@ -259,6 +265,7 @@ void testGraphEmitterFollows() {
     box.size = Vector3(0.1f);
     box.position = {-1.0f, 0.75f, 0};
     box.rigid.enabled = true;
+    box.collider.enabled = true; // the editor adds a collider with the rigid role
     box.rigid.velocity = {2, 0, 0};
     box.emitter.enabled = true;
     box.emitter.smoke = 5;
@@ -355,6 +362,7 @@ static SceneGraph meshGraph(const std::string& file, int role) {
     floor.shape = ShapeKind::Plane;
     floor.size = {3, 0.02f, 3};
     floor.rigid.enabled = floor.rigid.fixed = true;
+    floor.collider.enabled = true; // the editor adds a collider with the rigid role
     g.entities.push_back(floor);
     Entity model;
     model.name = "Model";
@@ -362,7 +370,7 @@ static SceneGraph meshGraph(const std::string& file, int role) {
     model.meshFile = file;
     model.size = {0.3f, 0.3f, 0.3f};
     model.position = {0, 1, 0};
-    if (role == 0) model.rigid.enabled = true;
+    if (role == 0) model.rigid.enabled = model.collider.enabled = true;
     if (role == 1) model.soft.enabled = true;
     if (role == 2) model.cloth.enabled = true;
     g.entities.push_back(model);
@@ -427,6 +435,7 @@ void testGraphGeometryOnly() {
     ball.size = {0.1f, 0.1f, 0.1f};
     ball.position = {0, 1.5f, 0};
     ball.rigid.enabled = true;
+    ball.collider.enabled = true; // the editor adds a collider with the rigid role
     g.entities.push_back(ball);
     Simulation sim;
     sim.load(std::make_unique<GraphScene>(g));
@@ -441,4 +450,154 @@ void testGraphGeometryOnly() {
     CHECK(sim.rigid.bodies()[0].pos.y < 0.1f, "the ball stopped at y %f: it must fall through the block", sim.rigid.bodies()[0].pos.y);
     CHECK(mesh.triangles.size() == 12, "the block mesh has %zu triangles", mesh.triangles.size());
     CHECK(length(box.lo - Vector3(-0.2f, 0.3f, -0.2f)) < 1e-5f && length(box.hi - Vector3(0.2f, 0.7f, 0.2f)) < 1e-5f, "the block mesh is not in place");
+}
+
+// ---------------------------------------------------------------------------
+// Colliders apart from the geometry
+// ---------------------------------------------------------------------------
+// A floor and two bodies thrown along x at 1.5 m/s: a sphere that collides as a box (slides and
+// stops) and a box that collides as a sphere (rolls on).
+static SceneGraph lookVsColliderGraph() {
+    SceneGraph g;
+    g.world.size = {6, 2, 3};
+    Entity floor;
+    floor.name = "Floor";
+    floor.shape = ShapeKind::Plane;
+    floor.size = {6, 0.02f, 3};
+    floor.rigid.enabled = floor.rigid.fixed = floor.collider.enabled = true;
+    g.entities.push_back(floor);
+    Entity ball;
+    ball.name = "Sphere colliding as a box";
+    ball.shape = ShapeKind::Sphere;
+    ball.size = Vector3(0.2f);
+    ball.position = {-2, 0.12f, -0.5f};
+    ball.rigid.enabled = ball.collider.enabled = true;
+    ball.rigid.velocity = {1.5f, 0, 0};
+    ball.collider.kind = ColliderKind::Box;
+    g.entities.push_back(ball);
+    Entity block = ball;
+    block.name = "Box colliding as a sphere";
+    block.shape = ShapeKind::Box;
+    block.position = {-2, 0.12f, 0.5f};
+    block.collider.kind = ColliderKind::Sphere;
+    g.entities.push_back(block);
+    return g;
+}
+
+// The rigid body an entity made (-1: none).
+static int bodyOfEntity(const GraphScene& scene, uint32_t id) {
+    for (const MetaObject& m : scene.metaObjects(id))
+        if (m.kind == MetaObject::Kind::RigidBody) return m.handle;
+    return -1;
+}
+
+// What a body looks like and what it collides with are chosen apart: a sphere on a box collider
+// slides to a stop (no rolling), a box on a sphere collider rolls on; the viewer gets the sphere's
+// own mesh to draw, while the collider (for picking) is the box.
+void testGraphColliderApart() {
+    auto owned = std::make_unique<GraphScene>(lookVsColliderGraph());
+    GraphScene* scene = owned.get();
+    Simulation sim;
+    sim.load(std::move(owned));
+    const int ball = bodyOfEntity(*scene, scene->graph().entities[1].id), block = bodyOfEntity(*scene, scene->graph().entities[2].id);
+    RenderSnapshot snap;
+    sim.fillSnapshot(snap);
+    const RenderSnapshot::Body& drawn = snap.bodies[size_t(ball)];
+    const size_t sphereTriangles = entityLocalMesh(scene->graph().entities[1]).triangles.size();
+    for (int f = 0; f < 180; ++f) sim.stepFrame();
+    const float slid = sim.rigid.bodies()[ball].pos.x + 2, rolled = sim.rigid.bodies()[block].pos.x + 2;
+    std::printf("  a sphere on a box collider slid %.3f m (v^2 / 2 mu g = %.3f); a box on a sphere collider rolled %.3f m; "
+                "the sphere is drawn with %zu triangles, collides as shape type %d\n", slid, 1.5 * 1.5 / (2 * 0.5 * 9.81), rolled,
+                drawn.mesh ? drawn.mesh->triangles.size() : 0, drawn.collisionShape ? int(drawn.collisionShape->type()) : -1);
+    CHECK(ball >= 0 && block >= 0, "the two bodies were not made");
+    CHECK(drawn.mesh && drawn.mesh->triangles.size() == sphereTriangles && drawn.shape == ShapeType::ConvexHull,
+          "the sphere on a box collider is not drawn as the sphere");
+    CHECK(drawn.collisionShape && drawn.collisionShape->type() == ShapeType::Box, "the sphere's collider is not the box");
+    CHECK(slid > 0.1f && slid < 0.5f && length(sim.rigid.bodies()[ball].angVel) < 0.1f, "the box collider must slide to a stop (slid %f)", slid);
+    CHECK(rolled > 3 * slid, "the sphere collider must roll farther (rolled %f, slid %f)", rolled, slid);
+}
+
+// A tall model on a capsule collider fitted to it stays on the floor (its lowest collider point on
+// the floor's top); the collider fields survive save -> load -> save; a body whose collider sits off
+// the object's centre is rebuilt without the object jumping.
+void testGraphColliderFit() {
+    static const char* path = "rf_test_tall.obj"; // a box 0.2 x 0.8 x 0.2 m
+    std::FILE* f = std::fopen(path, "w");
+    CHECK(f != nullptr, "cannot write the test OBJ file");
+    std::fputs("v -0.1 -0.4 -0.1\nv 0.1 -0.4 -0.1\nv 0.1 0.4 -0.1\nv -0.1 0.4 -0.1\n"
+               "v -0.1 -0.4 0.1\nv 0.1 -0.4 0.1\nv 0.1 0.4 0.1\nv -0.1 0.4 0.1\n"
+               "f 1 3 2\nf 1 4 3\nf 5 6 7\nf 5 7 8\nf 1 2 6\nf 1 6 5\nf 4 8 7\nf 4 7 3\nf 1 5 8\nf 1 8 4\nf 2 3 7\nf 2 7 6\n", f);
+    std::fclose(f);
+    SceneGraph g = meshGraph(path, 0);
+    Entity& model = g.entities[1];
+    model.size = Vector3(0.4f); // scaled uniformly: 0.1 x 0.4 x 0.1 m
+    model.collider.kind = ColliderKind::Capsule;
+    Entity offset;
+    offset.name = "Box with its collider off-centre";
+    offset.position = {0.8f, 0.3f, 0};
+    offset.rigid.enabled = offset.collider.enabled = true;
+    offset.collider = {true, ColliderKind::Box, false, Vector3(0.2f), {0.3f, 0, 0}, {0, 30, 0}};
+    g.entities.push_back(offset);
+    auto owned = std::make_unique<GraphScene>(g);
+    GraphScene* scene = owned.get();
+    Simulation sim;
+    sim.load(std::move(owned));
+    for (int k = 0; k < 240; ++k) sim.stepFrame();
+    const RigidBody& capsule = sim.rigid.bodies()[size_t(bodyOfEntity(*scene, scene->graph().entities[1].id))];
+    const float lowest = capsule.worldBounds().lo.y;
+    const int moved = bodyOfEntity(*scene, scene->graph().entities[2].id);
+    const Vector3 before = sim.rigid.bodies()[size_t(moved)].pos;
+    scene->rebuildEntity(sim, scene->graph().entities[2]);
+    const Vector3 after = sim.rigid.bodies()[size_t(bodyOfEntity(*scene, scene->graph().entities[2].id))].pos;
+    std::string error;
+    SceneGraph back;
+    const std::string text = g.save();
+    const bool roundTrip = back.load(text, error) && back.save() == text && back.entities[2].collider.kind == ColliderKind::Box &&
+                           length(back.entities[2].collider.offset - Vector3(0.3f, 0, 0)) < 1e-7f && back.entities[1].collider.kind == ColliderKind::Capsule;
+    std::printf("  model on a fitted capsule: lowest collider point %.4f m (floor top 0.0100), speed %.4f m/s; off-centre collider "
+                "body before / after a rebuild (%.4f %.4f %.4f) / (%.4f %.4f %.4f); round trip %d\n", lowest, length(capsule.vel),
+                before.x, before.y, before.z, after.x, after.y, after.z, int(roundTrip));
+    CHECK(capsule.shape->type() == ShapeType::Capsule && std::fabs(lowest - 0.01f) < 0.005f && length(capsule.vel) < 0.05f,
+          "the model on its capsule does not rest on the floor (lowest %f)", lowest);
+    CHECK(length(after - before) < 1e-3f, "the off-centre collider's body jumped by %f m in a rebuild", length(after - before));
+    CHECK(roundTrip, "the collider fields do not round-trip: %s", error.c_str());
+    std::remove(path);
+}
+
+// A collider without the rigid role is a static obstacle: a ball dropped on it bounces off, and the
+// obstacle never moves.
+void testGraphColliderOnly() {
+    SceneGraph g;
+    g.world.size = {2, 2, 2};
+    Entity wall;
+    wall.name = "Collider only";
+    wall.size = {0.8f, 0.4f, 0.8f};
+    wall.position = {0, 0.2f, 0};
+    wall.collider.enabled = true;
+    g.entities.push_back(wall);
+    Entity ball;
+    ball.name = "Ball";
+    ball.shape = ShapeKind::Sphere;
+    ball.size = Vector3(0.1f);
+    ball.position = {0, 1.2f, 0};
+    ball.rigid.enabled = ball.collider.enabled = true;
+    ball.rigid.restitution = 0.6f;
+    g.entities.push_back(ball);
+    auto owned = std::make_unique<GraphScene>(g);
+    GraphScene* scene = owned.get();
+    Simulation sim;
+    sim.load(std::move(owned));
+    const int obstacle = bodyOfEntity(*scene, scene->graph().entities[0].id), b = bodyOfEntity(*scene, scene->graph().entities[1].id);
+    const Vector3 start = sim.rigid.bodies()[size_t(obstacle)].pos;
+    float rise = 0;
+    for (int k = 0; k < 150; ++k) {
+        sim.stepFrame();
+        rise = std::max(rise, sim.rigid.bodies()[size_t(b)].vel.y);
+    }
+    const RigidBody& o = sim.rigid.bodies()[size_t(obstacle)];
+    std::printf("  collider only: a static body (inverse mass %.1f) moved %.6f m; the ball bounced up at %.2f m/s, rests at y %.4f "
+                "(the obstacle's top 0.40 + 0.05)\n", o.invMass, length(o.pos - start), rise, sim.rigid.bodies()[size_t(b)].pos.y);
+    CHECK(obstacle >= 0 && o.invMass == 0 && length(o.pos - start) < 1e-6f, "the collider-only entity must be a static body");
+    CHECK(rise > 0.5f, "the ball did not bounce off the obstacle (rose at %f m/s)", rise);
+    CHECK(std::fabs(sim.rigid.bodies()[size_t(b)].pos.y - 0.45f) < 0.01f, "the ball rests at y %f, not on the obstacle", sim.rigid.bodies()[size_t(b)].pos.y);
 }

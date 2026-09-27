@@ -337,7 +337,10 @@ void Simulation::fillSettings(RenderSnapshot& s) const {
     s.gridNx = s.gridNy = s.gridNz = 0;
 }
 
-// Every rigid body with its pose, shape and colour; hulls and compounds carry their mesh.
+// Every rigid body with its pose, what it looks like and its colour. A body drawn as a mesh - a
+// hull, a compound, a capsule, or any body with its own visual mesh (a horse on a capsule collider)
+// - is reported as a mesh (ConvexHull, or Compound when the collider is one, whose parts the viewer
+// may show); collisionShape is always the collider, for picking.
 void Simulation::fillBodies(RenderSnapshot& s) const {
     for (const RigidBody& b : rigid.bodies()) {
         // A destroyed body keeps its slot so that the viewer's body indices stay the solver's
@@ -346,10 +349,14 @@ void Simulation::fillBodies(RenderSnapshot& s) const {
             s.bodies.push_back({ShapeType::Sphere, b.pos, b.rot, Vector3(0.0f), 0.0f, b.color, nullptr, true, nullptr, false});
             continue;
         }
+        ShapeType drawn = b.type();
         std::shared_ptr<const TriMesh> mesh;
         if (b.type() == ShapeType::ConvexHull) mesh = static_cast<const ConvexHullShape*>(b.shape.get())->mesh();
         else if (b.type() == ShapeType::Compound) mesh = static_cast<const CompoundShape*>(b.shape.get())->visualMesh();
-        s.bodies.push_back({b.type(), b.pos, b.rot, b.halfExtents(), b.radius(), b.color, mesh, b.sleeping, b.shape, b.invMass > 0});
+        else if (b.type() == ShapeType::Capsule) mesh = static_cast<const CapsuleShape*>(b.shape.get())->mesh();
+        if (b.visualMesh) mesh = b.visualMesh;
+        if (mesh && drawn != ShapeType::Compound) drawn = ShapeType::ConvexHull;
+        s.bodies.push_back({drawn, b.pos, b.rot, b.halfExtents(), b.radius(), b.color, mesh, b.sleeping, b.shape, b.invMass > 0});
     }
 }
 

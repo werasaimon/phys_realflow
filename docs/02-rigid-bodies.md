@@ -58,6 +58,7 @@ $$
 | `ConvexHullShape` | перебор вершин | вход — уже выпуклый меш; центр масс и главные оси вычисляются в конструкторе |
 | `TriangleShape` | лучшая из 3 вершин | треугольник статического меша (только для GJK/EPA) |
 | `CompoundShape` | лучшая из частей | невыпуклое тело из выпуклых частей |
+| `CapsuleShape` | $(0, \pm h, 0) + r\,\mathbf d/\lVert\mathbf d\rVert$ (знак по $d_y$) | ядро-отрезок плюс радиус; лёжа касается опоры двумя точками |
 
 **Массовые свойства** многогранника считаются точно (D. Eberly, *Polyhedral Mass Properties*): интегралы $\int 1,\ \int x,\ \int x^2,\ \int xy$ по объёму сводятся по теореме Гаусса к сумме по треугольникам ([Shapes.cpp:307](../src/rigid/Shapes.cpp#L307)). Затем `symmetricEigen` поворачивает вершины в главные оси ([Shapes.cpp:353](../src/rigid/Shapes.cpp#L353)), и тензор инерции становится диагональным:
 
@@ -72,6 +73,28 @@ $$
 $$
 \mathbf I = \sum_c \Big(\mathbf R_c \mathbf I_c \mathbf R_c^{\mathsf T} + m_c\big(|\mathbf d_c|^2\,\mathbb 1 - \mathbf d_c\mathbf d_c^{\mathsf T}\big)\Big), \qquad \mathbf d_c = \mathbf c_c - \mathbf c .
 $$
+
+### Капсула
+
+Капсула — все точки на расстоянии не больше $r$ от отрезка $(0, -h, 0)\ldots(0, h, 0)$: цилиндр высотой $H = 2h$ с двумя полусферами. Это обычный коллайдер персонажей и длинных предметов (`b2Capsule` в Box2D, `PxCapsuleGeometry` в PhysX, `btCapsuleShape` в Bullet): она катится вбок, но не переваливается с торца на торец и лежит на двух контактах. Объём $V = \pi r^2 H + \tfrac43\pi r^3$; момент инерции на единицу массы — цилиндр (доля массы $m_c$) плюс две полусферы (доля $m_s$), перенесённые к центру по теореме Штейнера через их центр масс в $3r/8$ от плоской грани:
+
+$$
+I_{ось} = m_c\,\tfrac{r^2}{2} + m_s\,\tfrac{2r^2}{5}, \qquad
+I_{бок} = m_c\Big(\tfrac{H^2}{12} + \tfrac{r^2}{4}\Big) + m_s\Big(\tfrac{2r^2}{5} + \tfrac{H^2}{4} + \tfrac{3Hr}{8}\Big).
+$$
+
+[src/rigid/Shapes.cpp:432](../src/rigid/Shapes.cpp#L432)
+```cpp
+Vector3 CapsuleShape::unitInertia() const {
+    const float H = 2.0f * h_, r2 = r_ * r_;
+    const float vc = kPi * r2 * H, vs = 4.0f / 3.0f * kPi * r2 * r_, v = vc + vs;
+    const float mc = vc / v, ms = vs / v; // mass shares of the cylinder and the two caps
+    const float axial = mc * r2 * 0.5f + ms * 0.4f * r2;
+    const float side = mc * (H * H / 12.0f + r2 * 0.25f) + ms * (0.4f * r2 + H * H * 0.25f + 3.0f * H * r_ / 8.0f);
+    return Vector3(side, axial, side);
+```
+
+Контакты капсулы строятся от её **ядра-отрезка**, как контакты сферы от её центра: сфера — капсула и капсула — капсула аналитически (ближайшие точки отрезков; для почти параллельных осей — оба конца каждой оси против другой), капсула — бокс, выпуклая оболочка, треугольник — GJK/EPA между отрезком и телом, а радиус прибавляется к результату. Лёжа на грани (ось поперёк нормали с точностью ~10°), капсула касается её двумя концами оси, обрезанными по грани: одна точка дала бы ей качаться. Стенки области дают капсуле две сферы на концах оси.
 
 ---
 
@@ -221,7 +244,7 @@ inline float satReference(const Vector3& ha, const Matrix3x3& Ra, const Vector3&
 
 GJK/EPA даёт нормаль и глубину, но только одну точку. Многообразие строится **отсечением опорных граней** обоих тел вдоль нормали (Jolt, `ManifoldBetweenTwoFaces`):
 
-[src/rigid/NarrowPhase.cpp:408](../src/rigid/NarrowPhase.cpp#L408)
+[src/rigid/NarrowPhase.cpp:450](../src/rigid/NarrowPhase.cpp#L450)
 ```cpp
 bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
     NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
@@ -270,7 +293,7 @@ $$
 
 Площадь четырёхугольника $\mathbf a, \mathbf x_{i_L}, \mathbf b, \mathbf x_{i_R}$ равна $\tfrac12\,(s_{i_L} - s_{i_R})$. Слагаемые независимы, поэтому лучшая точка слева и лучшая справа вместе дают **наибольшую площадь при заданной диагонали**. Диагональ $i_0 i_1$ соединяет самые далёкие друг от друга точки, и в тестах результат совпал с перебором всех четвёрок (рисунок ниже).
 
-[src/rigid/NarrowPhase.cpp:88](../src/rigid/NarrowPhase.cpp#L88)
+[src/rigid/NarrowPhase.cpp:124](../src/rigid/NarrowPhase.cpp#L124)
 ```cpp
     const float tie = 1e-4f * std::fabs(maxDepth) + 1e-6f; // equal up to rounding: a flat contact
     size_t i0 = 0;
@@ -403,7 +426,7 @@ $$
 m_{eff}^{-1} = w_A + (\mathbf r_A\times\mathbf n)^{\mathsf T}\mathbf I_A^{-1}(\mathbf r_A\times\mathbf n) + w_B + (\mathbf r_B\times\mathbf n)^{\mathsf T}\mathbf I_B^{-1}(\mathbf r_B\times\mathbf n).
 $$
 
-[src/rigid/ContactSolver.cpp:196](../src/rigid/ContactSolver.cpp#L196)
+[src/rigid/ContactSolver.cpp:203](../src/rigid/ContactSolver.cpp#L203)
 ```cpp
 static float effMass(const RigidBody& A, const RigidBody* B, const Vector3& ra, const Vector3& rb, const Vector3& dir) {
     float k = A.invMass + dot(cross(A.applyInvInertiaWorld(cross(ra, dir)), ra), dir);
@@ -463,14 +486,14 @@ Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
 
 Скорость подхода берётся **в момент касания**. Шаг интегрирует гравитацию в скорости до решения контактов, поэтому $v_n$ несёт лишние $g\,\Delta t$, и мяч с $e = 1$ набирал $2g\Delta t/|v_n| = 0.74\,\%$ энергии за отскок при 600 Гц (тест Нётер). Поправка: $v_n^{imp} = v_n - (\mathbf g_A - \mathbf g_B)\cdot\mathbf n\,\Delta t$, где гравитация вычитается только у динамических тел. Тем же тестом найдено, что реституция применялась лишь к контактам, зажатым CCD, — обычные удары были неупругими.
 
-[src/rigid/ContactSolver.cpp:273](../src/rigid/ContactSolver.cpp#L273)
+[src/rigid/ContactSolver.cpp:280](../src/rigid/ContactSolver.cpp#L280)
 ```cpp
         const float vnImpact = vn - dot(gRel, n) * dt;
 ```
 
 Как *применять* отскок — отдельный вопрос, и ответ дала стопка из 100 кубов. Если цель $-e\,v_n^{imp}$ стоит внутри итераций как неравенство на весь шаг (так делает Box2D v2), то в стопке нижний контакт всё время дожимает верхний куб до скорости отскока, пока на него садится следующий: каждый уровень отскакивает быстрее предыдущего, и стопка разлетается (кубы 100-этажной стопки, сброшенной с 1 см, достигали 40 м/с). Поэтому отскок — **отдельный проход после итераций** (как в Box2D v3): для манифолда, который нёс нагрузку ($j_n > 0$) и чья скорость подхода была ударной, нормальная задача решается ещё раз с целью $-e\,v_n^{imp}$ — в той же блочной форме, что и основное решение (точка за точкой первый угол получал бы весь импульс и закручивал пластину, ударенную плашмя: встречные пластины потом били друг друга на 30 м/с). Импульсы отскока **не остаются в $j_n$**: $j_n$ разогревает следующий шаг (warm start), а удар — событие одноразовое; повторное приложение его как постоянной нагрузки давало +15 % кинетической энергии стопки за подшаг (замерено по стадиям шага: до решения → после итераций → после реституции → после ударного прохода). Порядок в шаге: итерации → отскок → ударный проход: он односторонний с нулевыми аккумуляторами и разлёт отнять не может, зато снимает вдавливание нижнего куба стопки, которое отскок оставляет (с отскоком после него стопка из 200 кубов рушилась). Единственный двусторонний пересчёт внутри ударного прохода — пары одного уровня — для ударных пар пропускается: он видел разлёт и отбирал его (пуля 300 м/с вязла в ящике). Порог `restitutionThreshold` = 1 м/с, как в Box2D: медленнее — покой, не удар. Итог: стопка из 200 кубов после исправления стоит точнее, чем до него (смещение 7 мм вместо 6 см).
 
-[src/rigid/ContactSolver.cpp:540](../src/rigid/ContactSolver.cpp#L540)
+[src/rigid/ContactSolver.cpp:547](../src/rigid/ContactSolver.cpp#L547)
 ```cpp
 void RigidWorld::applyRestitution() {
     for (Manifold& m : manifolds_) {
@@ -501,7 +524,7 @@ $$
 
 где $\mathbf x$ — накопленные импульсы, $\mathbf w$ — итоговые скорости расхождения. Для $n \le 4$ точек можно **перебрать все активные множества** (подмножества точек, где $x_i > 0$): на активном множестве решить $\mathbf K_{aa}\mathbf x_a = -\mathbf b'_a$ (`solveSmall`), проверить $\mathbf x_a \ge 0$ и $\mathbf w \ge 0$ на остальных точках.
 
-[src/rigid/ContactSolver.cpp:459](../src/rigid/ContactSolver.cpp#L459)
+[src/rigid/ContactSolver.cpp:466](../src/rigid/ContactSolver.cpp#L466)
 ```cpp
 bool tryActiveSet(int mask) {
     int idx[4], k = 0;
@@ -541,7 +564,7 @@ $$
 \mu = \begin{cases} \mu_s, & |\mathbf v_t| < v_{stick}\\ \mu_k, & \text{иначе}\end{cases}
 $$
 
-[src/rigid/ContactSolver.cpp:660](../src/rigid/ContactSolver.cpp#L660)
+[src/rigid/ContactSolver.cpp:667](../src/rigid/ContactSolver.cpp#L667)
 ```cpp
 Vector3 vc = relativeVelocity(m, m.center);
 float slide = length(vc - m.normal * dot(vc, m.normal));
@@ -854,6 +877,7 @@ std::vector<TriMesh> voronoiCells(const TriMesh& hull, const std::vector<Vector3
 | Тест | Результат |
 |---|---|
 | `rigid: destroy one body` — стопка из 5 ящиков и катящийся мяч; мяч, затем верхний ящик удаляются на ходу; 100 циклов «добавить — удалить» | стопка сдвинулась на 0 м и $7.7\cdot10^{-8}$ м; новое тело занимает освободившийся слот и ложится на 0.1000 м; слотов 6 → 6, выделений за кадр 40 → 40 |
+| `rigid: a capsule` — капсула $r = 0.1$, $h = 0.15$ м; капсула $r = 0.05$, $h = 0.15$ м на статичном боксе: брошена лёжа; поставлена на торец с наклоном 2°; лучи | объём 0.013614 м³ против подсчёта по сетке 90³ 0.013639 (0.2 %), инерция на единицу массы: бок 0.018538 (сетка 0.018538), ось 0.004692 (0.004701); лёжа — центр на **0.0500 м** (ожидается $r$), **2 контакта**, увод 0.7 мм, скорость 0; с торца падает и ложится (ось y 0.000, центр 0.0500 м); лучи в бок, в торец и в торец мимо оси — точно до $10^{-5}$ |
 | `Voronoi fracture` — ящик 1 × 0.6 × 0.3 м на 40 равномерных затравок, шар r = 0.25 м на 25 ударных | 40 и 25 ячеек за 8 и 21 мс; сумма объёмов = объёму тела (ошибка 0 и 1.2·10⁻⁷), все ячейки водонепроницаемы и выпуклы, каждая затравка — в своей ячейке; 18 из 25 ударных затравок в 0.2 м от удара |
 | `Noether` — инварианты по симметриям: энергия (мяч, $e = 1$, 20 отскоков с 1 м), импульс и момент импульса (косой удар двух ящиков в невесомости), свободное вращение с неравными моментами инерции | энергия мяча дрейфует **0.37 %** за 20 отскоков (было: мяч останавливался — реституция применялась только при CCD; потом +0.74 % за отскок от гравитации шага); $|\mathbf P|$ 1.9·10⁻⁸, $|\mathbf L|$ 6.4·10⁻⁴; Джанибеков: 6 переворотов за 10 с, период 3.40 с $= 20.4/\sigma$, дрейф $|\mathbf L|$ 7.5·10⁻⁴, энергии 1.5·10⁻³ (было: переворотов нет — гироскопического члена не было) |
 | `stack of 100 boxes dropped from 1 cm` | верх на высоте 19.900 м (ожидается 19.900), смещение **3.2 мм** (было 1.7 см до переноса реституции в отдельный проход), скорости всех тел равны нулю — стопка спит |

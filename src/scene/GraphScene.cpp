@@ -125,7 +125,8 @@ bool GraphScene::shapeUsable(const Entity& e) {
 // One entity into the solvers: first what it is made of, then what it also does; everything made
 // is recorded as the entity's meta-objects, so it can be removed and built again alone. An entity
 // with no role at all is geometry only: no body, no collision - the editor just draws it; a hidden
-// one takes no part at all. Each role has its own add* function that builds its part fresh from the
+// one takes no part at all. A collider without the rigid role is a static obstacle (a wall, a
+// floor); the rigid role without a collider falls back to the Auto collider (noted). Each role has its own add* function that builds its part fresh from the
 // entity's source (the shape or model, EntityShapes.cpp).
 void GraphScene::buildEntity(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
@@ -141,13 +142,18 @@ void GraphScene::buildEntity(Simulation& sim, int index) {
     case Matter::Soft: meta.push_back({MetaObject::Kind::SoftBody, addSoft(sim, index), Quaternion()}); break;
     case Matter::Liquid: meta.push_back({MetaObject::Kind::Liquid, addLiquid(sim, index), Quaternion()}); break;
     case Matter::Cloth: meta.push_back({MetaObject::Kind::Cloth, addCloth(sim, index), Quaternion()}); break;
-    case Matter::None:
-        if (e.magnet.enabled) body = addRigid(sim, index); // a magnet with nothing else stays put
+    case Matter::None: // a collider alone is a static obstacle; a magnet with nothing else stays put too
+        if (e.collider.enabled || e.magnet.enabled) body = addRigid(sim, index);
         break;
     }
+    if (matter == Matter::Rigid && !e.collider.enabled) notes_.push_back(e.name + ": у твёрдого тела нет коллайдера — взят «Авто»");
+    if (e.collider.enabled && matter != Matter::Rigid && matter != Matter::None)
+        notes_.push_back(e.name + ": коллайдер нужен только твёрдому телу — не использован");
     if (body >= 0) { // the body and which entity it belongs to (the editor picks entities by body)
-        const Quaternion bodyToEntity = sim.rigid.bodies()[size_t(body)].rot.conjugate() * entityRotation(e);
-        meta.push_back({MetaObject::Kind::RigidBody, body, bodyToEntity});
+        const RigidBody& b = sim.rigid.bodies()[size_t(body)];
+        const Quaternion bodyToEntity = b.rot.conjugate() * entityRotation(e);
+        const Vector3 bodyOffset = entityRotation(e).conjugate().rotate(b.pos - e.position);
+        meta.push_back({MetaObject::Kind::RigidBody, body, bodyToEntity, bodyOffset});
         if (int(entityIdOfBody_.size()) <= body) entityIdOfBody_.resize(size_t(body) + 1, 0);
         entityIdOfBody_[size_t(body)] = e.id;
     }
@@ -156,23 +162,26 @@ void GraphScene::buildEntity(Simulation& sim, int index) {
     if (e.emitter.enabled) addEmitter(sim, index, body);
 }
 
-// Rigid: the shape as one body - a box or a sphere exactly, a model as its convex decomposition
-// (shared by every body of that model and size), any other shape as its convex hull. A fixed body,
-// a plane, and a magnet with no "made of" role do not move (density 0). Returns the body index.
+// Rigid: one body whose collider is chosen apart from its look (entityCollider: by default the
+// geometry itself - a box or a sphere exactly, a model's convex decomposition, the hull of anything
+// else; or a box / sphere / capsule / hull / decomposition at its own offset). The body is drawn
+// with the entity's geometry (RigidBody::visualMesh, in the body's frame), so a horse on a capsule
+// still looks like a horse. A fixed body, a plane, and a magnet with no "made of" role do not move
+// (density 0). Returns the body index.
 int GraphScene::addRigid(Simulation& sim, int index) {
     const Entity& e = graph_.entities[size_t(index)];
     const bool fixed = !e.rigid.enabled || e.rigid.fixed || e.shape == ShapeKind::Plane;
     const Quaternion q = entityRotation(e);
     const float density = fixed ? 0.0f : e.rigid.density; // density 0: a static body
-    int id;
-    switch (e.shape) {
-    case ShapeKind::Box: id = sim.rigid.addBox(e.position, e.size * 0.5f, q, density, e.color); break;
-    case ShapeKind::Plane: id = sim.rigid.addBox(e.position, Vector3(0.5f * e.size.x, 0.01f, 0.5f * e.size.z), q, 0.0f, e.color); break;
-    case ShapeKind::Sphere: id = sim.rigid.addSphere(e.position, 0.5f * e.size.x, density, e.color); break;
-    case ShapeKind::Mesh: id = sim.rigid.addCompound(entityCompound(e, graph_.baseDirectory), e.position, q, density, e.color); break;
-    default: id = sim.rigid.addConvex(entityLocalMesh(e), e.position, q, density, e.color); break;
-    }
+    const EntityCollider c = entityCollider(e, graph_.baseDirectory);
+    if (!c.shape) return -1;
+    const int id = sim.rigid.addBody(c.shape, e.position + q.rotate(c.position), (q * c.rotation).normalized(), density, e.color);
     RigidBody& b = sim.rigid.bodies()[id];
+    // The geometry from the entity's frame into the body's: v_body = R_c^T (v - p_c).
+    TriMesh look = entityLocalMesh(e, graph_.baseDirectory);
+    const Matrix3x3 toBody = c.rotation.toMatrix3x3().transposed();
+    for (Vector3& v : look.positions) v = toBody * (v - c.position);
+    b.visualMesh = std::make_shared<const TriMesh>(std::move(look));
     if (e.rigid.enabled) {
         b.friction = e.rigid.friction;
         b.staticFriction = std::max(b.staticFriction, e.rigid.friction);
@@ -257,8 +266,11 @@ void GraphScene::addEmitter(Simulation& sim, int index, int body) {
     EmitterRef ref;
     ref.entity = e.id;
     ref.body = body;
-    if (body >= 0) // entity frame = body frame * (body frame at the start)^T * entity frame at the start
-        ref.bodyToEntity = sim.rigid.bodies()[size_t(body)].rotation().transposed() * entityRotation(e).toMatrix3x3();
+    if (body >= 0) { // entity frame = body frame * (body frame at the start)^T * entity frame at the start
+        const RigidBody& b = sim.rigid.bodies()[size_t(body)];
+        ref.bodyToEntity = b.rotation().transposed() * entityRotation(e).toMatrix3x3();
+        ref.bodyOffset = entityRotation(e).conjugate().rotate(b.pos - e.position);
+    }
     emitters_.push_back(ref);
     meta_[e.id].push_back({MetaObject::Kind::Emitter, body, Quaternion()});
 }
@@ -279,10 +291,10 @@ void GraphScene::releaseFromEmitter(Simulation& sim, const EmitterRef& ref, bool
     float reach = 0.5f * maxComp(e.size);
     if (ref.body >= 0) {
         const RigidBody& b = sim.rigid.bodies()[ref.body];
-        centre = b.pos;
         moving = b.vel;
         R = b.rotation() * ref.bodyToEntity;
-        reach = b.boundingRadius();
+        centre = b.pos - R * ref.bodyOffset; // the entity's centre, not the collider's
+        reach = b.boundingRadius() + length(ref.bodyOffset);
     }
     const Vector3 release = R * em.velocity;
     Vector3 dir = length(release) > 1e-6f ? normalize(release) : length(moving) > 0.1f ? -normalize(moving) : Vector3(0, 1, 0);

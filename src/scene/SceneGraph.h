@@ -25,6 +25,7 @@
 namespace rf {
 
 class CompoundShape;
+class ConvexShape;
 
 // Mesh: a model read from an OBJ or STL file (Entity::meshFile).
 enum class ShapeKind { Box, Sphere, Cylinder, Cone, Plane, Mesh };
@@ -36,6 +37,28 @@ enum class ShapeKind { Box, Sphere, Cylinder, Cone, Plane, Mesh };
 // A rigid body that is a magnet and trails smoke is three roles on one entity; the solvers meet in
 // the Simulation's frame step (the gas pushes bodies and cloth, bodies are walls for the gas,
 // magnets pull each other, a flame heats the cloth it touches).
+// What a body collides with - its own component on the entity, apart from what the entity looks
+// like (Unity's Collider next to its MeshRenderer, Unreal's simple collision): a horse model may
+// collide as a capsule. The body is always DRAWN with its geometry; the collider is only for
+// contacts (the editor shows it as a thin wireframe). A collider alone makes a STATIC obstacle (a
+// wall, a floor); with the rigid role it is the collider of a moving body; a rigid role without
+// one falls back to Auto (with a note: the editor adds a collider together with the rigid role).
+// Auto: the geometry itself - a box for a box, a sphere for a sphere, a thin box for a plane, a
+// model's convex decomposition, the convex hull of anything else; offset and rotation are then
+// ignored. The other kinds sit at `offset` / `rotationDeg` in the object's frame: Box, Sphere and
+// Capsule sized by `size` or fitted to the geometry's extent along the collider's own axes;
+// ConvexHull the hull of the geometry, Decomposition its convex parts (a model; a primitive is
+// convex already and gets its hull). A body's mass is the collider's volume times the density, its
+// centre of mass the collider's.
+enum class ColliderKind { Auto, Box, Sphere, Capsule, ConvexHull, Decomposition };
+struct ColliderRole {
+    bool enabled = false;
+    ColliderKind kind = ColliderKind::Auto;
+    bool fitToGeometry = true;  // size from the geometry's extent (then `size` is ignored)
+    Vector3 size{0.2f};         // box: edges; sphere: diameter = x; capsule: diameter = x, full height = y
+    Vector3 offset{0.0f};       // collider centre relative to the object's centre, in the object's frame
+    Vector3 rotationDeg{0.0f};  // collider orientation relative to the object (capsule axis = y)
+};
 struct RigidRole {
     bool enabled = false;
     float density = 500;        // kg/m^3
@@ -110,6 +133,7 @@ struct Entity : SceneObject {
     Vector3 size{0.2f};
     std::string meshFile;       // ShapeKind::Mesh: the OBJ/STL file as written in the scene file
     RigidRole rigid;
+    ColliderRole collider;
     SoftRole soft;
     LiquidRole liquid;
     MagnetRole magnet;
@@ -155,6 +179,18 @@ bool entityIsGeometryOnly(const Entity& e);
 // and size and shared (decomposing takes seconds). Null for an unreadable file.
 std::shared_ptr<const CompoundShape> entityCompound(const Entity& e, const std::string& baseDirectory);
 
+// The collider of an entity (Entity::collider; Auto when it has none) as a shape, and where the shape's
+// own frame - its centre of mass and principal axes - sits in the entity's frame. The body is
+// created there: pos = entity position + entity rotation * position, rot = entity rotation * rotation.
+struct EntityCollider {
+    std::shared_ptr<const ConvexShape> shape; // null: the geometry could not be read
+    Vector3 position{0.0f};
+    Quaternion rotation;
+};
+EntityCollider entityCollider(const Entity& e, const std::string& baseDirectory = std::string());
+// The collider as a closed mesh posed in the world (every part merged), for an editor's wireframe.
+TriMesh colliderMesh(const Entity& e, const std::string& baseDirectory = std::string());
+
 // A meta-object: one physical incarnation a role of an entity created in the solvers. The entity
 // (the object) keeps its source and its roles; its meta-objects can be removed and built again from
 // the source one entity at a time, without touching the rest of the scene.
@@ -167,6 +203,9 @@ struct MetaObject {
     // RigidBody: the turn from the body's frame to the entity's frame (a hull body lives in its
     // principal frame), to read the entity's orientation back from the body.
     Quaternion bodyToEntity;
+    // RigidBody: where the body's centre sits in the entity's frame (a collider with an offset, a
+    // cone's centre of mass): the entity's position = body position - entity rotation * this.
+    Vector3 bodyOffset{0.0f};
 };
 
 // A Scene built from a SceneGraph: the editor's scenes run through the same Scene interface as the
@@ -209,6 +248,7 @@ private:
         uint32_t entity = 0; // the entity's id
         int body = -1;
         Matrix3x3 bodyToEntity = Matrix3x3::identity();
+        Vector3 bodyOffset{0.0f}; // the body's centre in the entity's frame (see MetaObject)
     };
     // Where an entity is and how it moves, read from its meta-objects (the live state).
     struct LiveState {

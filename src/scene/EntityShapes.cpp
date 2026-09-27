@@ -97,7 +97,7 @@ TriMesh entityMesh(const Entity& e, const std::string& baseDirectory) {
 }
 
 bool entityIsGeometryOnly(const Entity& e) {
-    return !e.rigid.enabled && !e.soft.enabled && !e.liquid.enabled && !e.cloth.enabled && !e.magnet.enabled &&
+    return !e.rigid.enabled && !e.collider.enabled && !e.soft.enabled && !e.liquid.enabled && !e.cloth.enabled && !e.magnet.enabled &&
            !e.emitter.enabled && !e.heat.enabled && !e.flammable.enabled;
 }
 
@@ -121,6 +121,117 @@ std::shared_ptr<const CompoundShape> entityCompound(const Entity& e, const std::
     auto shape = std::make_shared<const CompoundShape>(convexDecomposition({local}, params), local);
     std::lock_guard<std::mutex> lock(cacheMutex());
     return cache.emplace(id, shape).first->second;
+}
+
+// ---------------------------------------------------------------------------
+// The collider: what a rigid entity collides with, apart from what it looks like
+// ---------------------------------------------------------------------------
+namespace {
+
+Quaternion colliderTurn(const ColliderRole& c) {
+    const Vector3& d = c.rotationDeg; // the same order as entityRotation
+    return Quaternion::fromAxisAngle({0, 1, 0}, degToRad(d.y)) * Quaternion::fromAxisAngle({1, 0, 0}, degToRad(d.x)) *
+           Quaternion::fromAxisAngle({0, 0, 1}, degToRad(d.z));
+}
+
+// A shape whose own frame is at `centre` / `turn` in the collider's frame, the collider's frame at
+// offset / rotationDeg in the entity's frame.
+EntityCollider placed(std::shared_ptr<const ConvexShape> shape, const ColliderRole& c, const Vector3& centre, const Quaternion& turn) {
+    const Quaternion q = colliderTurn(c);
+    return {std::move(shape), c.offset + q.rotate(centre), (q * turn).normalized()};
+}
+
+// A convex shape made from a mesh keeps its centre of mass and principal axes: the mesh point x is
+// the shape point R^T (x - com).
+EntityCollider hullOf(const TriMesh& convexMesh, const ColliderRole& c) {
+    auto hull = std::make_shared<ConvexHullShape>(convexMesh);
+    const Vector3 com = hull->centerOfMass();
+    const Quaternion turn = Quaternion::fromMatrix3x3(hull->principalRotation());
+    return placed(std::move(hull), c, com, turn);
+}
+
+// Auto: the geometry itself.
+EntityCollider autoCollider(const Entity& e, const TriMesh& geometry, const std::string& baseDirectory) {
+    const ColliderRole none; // at the entity's own frame
+    switch (e.shape) {
+    case ShapeKind::Box: return placed(std::make_shared<BoxShape>(e.size * 0.5f), none, Vector3(0.0f), Quaternion());
+    case ShapeKind::Plane:
+        return placed(std::make_shared<BoxShape>(Vector3(0.5f * e.size.x, 0.01f, 0.5f * e.size.z)), none, Vector3(0.0f), Quaternion());
+    case ShapeKind::Sphere: return placed(std::make_shared<SphereShape>(0.5f * e.size.x), none, Vector3(0.0f), Quaternion());
+    case ShapeKind::Mesh: {
+        auto compound = entityCompound(e, baseDirectory);
+        if (!compound) return {};
+        return placed(compound, none, compound->centerOfMass(), Quaternion::fromMatrix3x3(compound->principalRotation()));
+    }
+    default: return hullOf(geometry, none); // cylinder, cone: convex already
+    }
+}
+
+// Box, sphere or capsule: sized by `size`, or fitted to the geometry's extent along the collider's
+// own axes (a capsule's axis is its y).
+EntityCollider primitiveCollider(const ColliderRole& c, const TriMesh& geometry) {
+    Vector3 extent = c.size;
+    if (c.fitToGeometry) {
+        const Matrix3x3 toCollider = colliderTurn(c).toMatrix3x3().transposed();
+        AABB b;
+        for (const Vector3& p : geometry.positions) b.expand(toCollider * (p - c.offset));
+        extent = b.extent();
+    }
+    std::shared_ptr<const ConvexShape> shape;
+    if (c.kind == ColliderKind::Box) shape = std::make_shared<BoxShape>(extent * 0.5f);
+    else if (c.kind == ColliderKind::Sphere) shape = std::make_shared<SphereShape>(0.5f * (c.fitToGeometry ? maxComp(extent) : extent.x));
+    else {
+        const float r = 0.5f * (c.fitToGeometry ? std::max(extent.x, extent.z) : extent.x);
+        shape = std::make_shared<CapsuleShape>(r, std::max(0.0f, 0.5f * extent.y - r));
+    }
+    return placed(std::move(shape), c, Vector3(0.0f), Quaternion());
+}
+
+} // namespace
+
+EntityCollider entityCollider(const Entity& e, const std::string& baseDirectory) {
+    const TriMesh geometry = entityLocalMesh(e, baseDirectory);
+    if (geometry.empty()) return {};
+    const ColliderRole& c = e.collider;
+    if (!c.enabled) return autoCollider(e, geometry, baseDirectory); // no collider: the geometry itself
+    switch (c.kind) {
+    case ColliderKind::Auto: return autoCollider(e, geometry, baseDirectory);
+    case ColliderKind::Box:
+    case ColliderKind::Sphere:
+    case ColliderKind::Capsule: return primitiveCollider(c, geometry);
+    case ColliderKind::Decomposition:
+        if (e.shape == ShapeKind::Mesh) {
+            auto compound = entityCompound(e, baseDirectory);
+            if (!compound) return {};
+            return placed(compound, c, compound->centerOfMass(), Quaternion::fromMatrix3x3(compound->principalRotation()));
+        }
+        [[fallthrough]]; // a primitive is convex: its hull is its decomposition
+    case ColliderKind::ConvexHull: break;
+    }
+    return hullOf(buildConvexHull(geometry.positions, 64), c);
+}
+
+// The collider's surface in the shape's own frame, then posed as the body would be.
+TriMesh colliderMesh(const Entity& e, const std::string& baseDirectory) {
+    const EntityCollider c = entityCollider(e, baseDirectory);
+    if (!c.shape) return TriMesh();
+    TriMesh m;
+    switch (c.shape->type()) {
+    case ShapeType::Box: m = primitives::box(static_cast<const BoxShape*>(c.shape.get())->halfExtents()); break;
+    case ShapeType::Sphere: m = primitives::sphere(static_cast<const SphereShape*>(c.shape.get())->radius(), 16, 8); break;
+    case ShapeType::Capsule: m = *static_cast<const CapsuleShape*>(c.shape.get())->mesh(); break;
+    case ShapeType::ConvexHull: m = *static_cast<const ConvexHullShape*>(c.shape.get())->mesh(); break;
+    case ShapeType::Compound: {
+        std::vector<TriMesh> parts;
+        for (const auto& p : static_cast<const CompoundShape*>(c.shape.get())->partMeshes()) parts.push_back(*p);
+        m = primitives::merge(parts);
+        break;
+    }
+    default: break;
+    }
+    const Quaternion q = entityRotation(e);
+    m.transform((q * c.rotation).toMatrix3x3(), Vector3(1.0f), e.position + q.rotate(c.position));
+    return m;
 }
 
 } // namespace rf

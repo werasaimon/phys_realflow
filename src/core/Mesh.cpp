@@ -213,6 +213,24 @@ TriMesh cylinder(float radius, float length, int seg) {
     return m;
 }
 
+TriMesh capsule(float radius, float halfHeight, int seg, int rings) {
+    // Profile along x: the bottom cap from its pole, the side, the top cap to its pole.
+    std::vector<std::pair<float, float>> prof;
+    for (int i = 0; i <= rings; ++i) {
+        const float a = -0.5f * kPi + 0.5f * kPi * float(i) / float(rings);
+        prof.push_back({-halfHeight + radius * std::sin(a), radius * std::cos(a)});
+    }
+    for (int i = 0; i <= rings; ++i) {
+        const float a = 0.5f * kPi * float(i) / float(rings);
+        prof.push_back({halfHeight + radius * std::sin(a), radius * std::cos(a)});
+    }
+    TriMesh m = revolve(prof, seg);
+    // Axis X -> Y.
+    for (Vector3& p : m.positions) p = {p.y, p.x, p.z};
+    m.flipWinding(); // the swap above is a reflection
+    return m;
+}
+
 static float nacaThickness(float xi, float t) {
     return 5.0f * t * (0.2969f * std::sqrt(xi) - 0.1260f * xi - 0.3516f * xi * xi + 0.2843f * xi * xi * xi -
                        0.1036f * xi * xi * xi * xi);

@@ -19,6 +19,10 @@ struct RigidBody {
     float friction = 0.5f;       // kinetic (sliding) friction coefficient
     float staticFriction = 0.7f; // static (sticking) friction coefficient, >= kinetic
     Vector3 color{0.8f, 0.5f, 0.2f};
+    // What the body looks like, apart from what it collides with (its `shape`): a mesh in the BODY
+    // frame (vertex_world = pos + rot * v), e.g. a horse model on a capsule collider. Null: the
+    // collider itself is drawn. The solver never reads it; it is for viewers only.
+    std::shared_ptr<const TriMesh> visualMesh;
     Vector3 force, torque; // accumulated external loads for the next step
     // Split-impulse pseudo velocities: move the body out of penetration without adding momentum.
     Vector3 biasVel, biasAngVel;

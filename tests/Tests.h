@@ -75,6 +75,7 @@ void testVoronoiFracture();     // FractureTests.cpp: Voronoi cells of a convex 
 void testTerrain();             // TerrainTests.cpp: 150 bodies on a 51 200-triangle static mesh (BVH)
 void testParticlesManyBodies(); // ParticleTests.cpp: 30 000 particles find 150 bodies through the world tree
 void testDestroyBody();         // RigidTests.cpp: one body removed, its slot reused, the rest untouched
+void testCapsuleShape();        // RigidTests.cpp: capsule mass properties, lying / toppling on a box, raycasts
 void testRemoveParticleGroup(); // ParticleTests.cpp: one soft body / liquid removed, the rest goes on
 
 // relativity (RelativityTests.cpp): geodesics in Kerr, light bending, the shadow of a black hole
@@ -95,6 +96,9 @@ void testGraphEmitterFollows();
 void testGraphFlammableCloth();
 void testGraphMeshShape();
 void testGraphGeometryOnly();
+void testGraphColliderApart();  // GraphTests.cpp: a sphere on a box collider slides, a box on a sphere collider rolls
+void testGraphColliderFit();    // GraphTests.cpp: a fitted capsule under a model, collider round trip, off-centre rebuild
+void testGraphColliderOnly();   // GraphTests.cpp: a collider without the rigid role is a static obstacle
 // meta-objects (MetaObjectTests.cpp): one entity changes between frames, the rest does not notice
 void testMetaWaterSoftCycle();
 void testMetaRigidToClothAndBack();

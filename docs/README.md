@@ -188,6 +188,7 @@ bool GraphScene::rebuildEntity(Simulation& sim, const Entity& updated) {
 | Роль | Какой решатель | Что значит физически |
 |---|---|---|
 | `rigid` | `RigidWorld` | недеформируемое тело: плотность, трение, упругость удара; `fixed` — неподвижное (стол, стена) |
+| `collider` | `RigidWorld` | чем тело **сталкивается** — отдельно от того, как оно **выглядит**: авто (сама геометрия), бокс, сфера, капсула, выпуклая оболочка, выпуклые части; размер по геометрии или свой, сдвиг и поворот; без `rigid` — неподвижное препятствие |
 | `soft` | `ParticleSystem` (shape matching) | мягкое тело из частиц, жёсткость 0..1 |
 | `liquid` | `ParticleSystem` (PBF) | бокс сущности заполняется жидкостью |
 | `magnet` | `Magnets` + `RigidWorld` | точечный диполь $\mathbf m$ в системе тела: магниты тянут и толкают друг друга и поворачиваются по полю; в плазме (`magneticGas`) их поле становится фоновым полем МГД |
@@ -195,6 +196,41 @@ bool GraphScene::rebuildEntity(Simulation& sim, const Entity& updated) {
 | `cloth` | `ParticleSystem` (XPBD, ткань) | плоскость становится полотном `size.x × size.z` (другая форма — полотном своей верхней грани): поверхностная плотность, податливость на изгиб, рвётся ли по нитям; `pinned` — закреплённые края: 1 край −x, 2 край +x, 4 край −z, 8 край +z, 16 «верхний ряд» — край, который выше всех после поворота (перекладина шторы; у горизонтального полотна — край −z) |
 | `emitter` | `GasSolver`, сопло `ParticleSystem` | каждый кадр выпускает из формы, **где бы она ни была**: дым (1 = 10 л плотного дыма в секунду), горячий газ с температурой выше окружающей, жидкость; точка выпуска — сразу снаружи формы в сторону скорости выпуска (иначе — позади летящего тела: след; иначе — сверху). Сопло для жидкости в системе частиц одно: работает первый жидкий излучатель |
 | `flammable` | `Combustion` + пиролиз ткани | форма горит: ткань греется от газа, разлагается по Аррениусу и отдаёт топливо в пламя, как штора в сцене «Огонь»; включает модель горения в мире. Горят пока только ткани — у других форм показания сцены так и пишут |
+
+**Коллайдер отдельно от вида.** Как `Collider` рядом с `MeshRenderer` в Unity или простая коллизия в Unreal: конь рисуется конём, а сталкивается капсулой. Тело всегда **рисуется геометрией** сущности (`RigidBody::visualMesh` — меш в системе тела, его берёт снимок для отрисовки), а **сталкивается коллайдером** (`RigidBody::shape`; по нему же выбор мышью). Коллайдер — своя роль `collider`: один — неподвижное препятствие (стена, пол); с `rigid` — коллайдер движущегося тела; `rigid` без коллайдера получает «Авто» с пометкой (редактор добавляет коллайдер вместе с `rigid`). Масса тела — объём коллайдера × плотность, центр масс — его; позу сущности `rebuildEntity` читает через сдвиг тела в системе сущности (`MetaObject::bodyOffset`), поэтому коллайдер со смещением не сдвигает объект при пересборке.
+
+| Вид коллайдера | Что это | Размер |
+|---|---|---|
+| `auto` | сама геометрия: бокс, сфера, тонкий бокс плоскости, выпуклые части модели, выпуклая оболочка остального | по форме; сдвиг и поворот не применяются |
+| `box`, `sphere`, `capsule` | примитив в своей системе (`offset`, `rotation`; ось капсулы — её y) | `fit 1`: по протяжённости геометрии вдоль осей коллайдера (сфера — наибольшая, капсула — диаметр по x/z, высота по y); `fit 0`: `size` |
+| `hull` | выпуклая оболочка геометрии (Quickhull, до 64 вершин) | по геометрии |
+| `decomposition` | выпуклые части модели (как у чайников); примитив и так выпуклый — его оболочка | по геометрии |
+
+[src/scene/EntityShapes.cpp:192](../src/scene/EntityShapes.cpp#L192)
+```cpp
+EntityCollider entityCollider(const Entity& e, const std::string& baseDirectory) {
+    const TriMesh geometry = entityLocalMesh(e, baseDirectory);
+    if (geometry.empty()) return {};
+    const ColliderRole& c = e.collider;
+    if (!c.enabled) return autoCollider(e, geometry, baseDirectory); // no collider: the geometry itself
+    switch (c.kind) {
+    case ColliderKind::Auto: return autoCollider(e, geometry, baseDirectory);
+    case ColliderKind::Box:
+    case ColliderKind::Sphere:
+    case ColliderKind::Capsule: return primitiveCollider(c, geometry);
+    case ColliderKind::Decomposition:
+        if (e.shape == ShapeKind::Mesh) {
+            auto compound = entityCompound(e, baseDirectory);
+            if (!compound) return {};
+            return placed(compound, c, compound->centerOfMass(), Quaternion::fromMatrix3x3(compound->principalRotation()));
+        }
+        [[fallthrough]]; // a primitive is convex: its hull is its decomposition
+    case ColliderKind::ConvexHull: break;
+    }
+    return hullOf(buildConvexHull(geometry.positions, 64), c);
+```
+
+Проверка (`scene graph: the collider apart from the look`, `... a capsule fitted to a model`, `... a collider alone`): сфера на коллайдере-боксе, брошенная вдоль пола со скоростью 1.5 м/с, скользит **0.233 м** и останавливается (скольжение с трением: $v^2/2\mu g = 0.229$ м), а бокс на коллайдере-сфере катится **2.50 м**; снимок отдаёт для сферы её собственный меш (528 треугольников), а коллайдер для выбора — бокс. Модель 0.1 × 0.4 × 0.1 м на подогнанной капсуле лежит нижней точкой коллайдера ровно на полу (0.0100 м при верхе пола 0.0100). Тело с коллайдером, сдвинутым на 0.3 м и повёрнутым на 30°, после пересборки остаётся на месте до $10^{-4}$ м. Сущность только с коллайдером — неподвижное тело (обратная масса 0, сдвиг 0 м): мяч отскакивает от неё со скоростью 2.18 м/с и ложится на её верх (0.4500 м). Поля коллайдера переживают сохранение → загрузку → сохранение без изменений; сущность `rigid` из старого файла без строки `collider` загружается с коллайдером «Авто».
 
 Магниты — диполи ([src/scene/Magnets.h](../src/scene/Magnets.h)). Поле диполя $\mathbf B = \dfrac{\mu_0}{4\pi r^3}\big(3\hat{\mathbf r}(\mathbf m\cdot\hat{\mathbf r}) - \mathbf m\big)$ (Jackson, ур. 5.56), сила на второй диполь от первого (Yung, Landecker & Villani 1998)
 

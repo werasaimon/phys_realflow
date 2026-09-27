@@ -80,6 +80,13 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
         if (body.type() == ShapeType::Sphere) {
             float d = dot(body.pos - points[w], n) - body.radius();
             cm.add(body.pos - n * (body.radius() + 0.5f * d), n, -d);
+        } else if (body.type() == ShapeType::Capsule) { // the two end spheres of its axis
+            const auto* cap = static_cast<const CapsuleShape*>(body.shape.get());
+            const Vector3 up = ps.R * Vector3(0.0f, cap->halfHeight(), 0.0f);
+            for (const Vector3& e : {body.pos - up, body.pos + up}) {
+                const float d = dot(e - points[w], n) - cap->radius();
+                if (d < margin) cm.add(e - n * (cap->radius() + 0.5f * d), n, -d);
+            }
         } else {
             for (const Vector3& v : verts) {
                 float d = dot(v - points[w], n);

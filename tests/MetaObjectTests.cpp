@@ -24,6 +24,7 @@ Entity floorEntity(float width) {
     e.shape = ShapeKind::Plane;
     e.size = {width, 0.02f, width};
     e.rigid.enabled = true;
+    e.collider.enabled = true; // the editor adds a collider with the rigid role
     e.rigid.fixed = true;
     e.locked = true;
     return e;
@@ -35,6 +36,7 @@ Entity boxEntity(const char* name, const Vector3& position, float size) {
     e.size = Vector3(size);
     e.position = position;
     e.rigid.enabled = true;
+    e.collider.enabled = true; // the editor adds a collider with the rigid role
     return e;
 }
 
@@ -171,6 +173,7 @@ void testMetaRigidToClothAndBack() {
     Entity rigidAgain = scene->graph().entities[1];
     rigidAgain.cloth.enabled = false;
     rigidAgain.rigid.enabled = true;
+    rigidAgain.collider.enabled = true; // the editor adds a collider with the rigid role
     scene->rebuildEntity(sim, rigidAgain);
     const int ballSlot = bodyOf(*scene, ballId), sheetSlotAgain = bodyOf(*scene, sheetId);
     std::printf("  sheet: body slot %d -> cloth (%d bodies, %d cloths) -> the ball took slot %d, the sheet is body %d again "

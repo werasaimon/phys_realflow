@@ -13,6 +13,7 @@
 //   entity "Horse"
 //     shape mesh file "models/horse.obj" size 0.5 0.5 0.5 position 1 0.3 0 rotation 0 90 0 color 0.6 0.4 0.3
 //     rigid density 600 friction 0.5 restitution 0.2 fixed 0 velocity 0 0 0 spin 0 0 0
+//     collider kind capsule fit 1 size 0.2 0.2 0.2 offset 0 0 0 rotation 0 0 90
 //   end
 //   entity "Curtain"
 //     object id 4 visible 1 locked 0
@@ -21,7 +22,9 @@
 //     flammable
 //   end
 //
-// A role is written only when it is on. Numbers are written as the shortest decimal that reads
+// A role is written only when it is on - the collider too, a role of its own (kinds: auto, box,
+// sphere, capsule, hull, decomposition); a rigid entity without a collider line (a file from before
+// colliders were a role) loads with the Auto collider. Numbers are written as the shortest decimal that reads
 // back as the same float, so save -> load -> save gives the same text.
 #include "scene/SceneGraph.h"
 
@@ -35,6 +38,8 @@ namespace {
 
 const char* kShapeNames[] = {"box", "sphere", "cylinder", "cone", "plane", "mesh"};
 const int kShapeCount = 6;
+const char* kColliderNames[] = {"auto", "box", "sphere", "capsule", "hull", "decomposition"};
+const int kColliderCount = 6;
 
 // The shortest decimal that reads back as the same float: 0.02 stays "0.02" (not the exact
 // "0.0199999996"), yet save -> load -> save is still exact. Nine digits always suffice for a float.
@@ -140,6 +145,12 @@ static void saveMoreRoles(std::ostringstream& o, const Entity& e) {
     if (e.flammable.enabled) o << "  flammable\n";
 }
 
+// The collider role, a line of its own with every field (written only when the role is on).
+static void saveCollider(std::ostringstream& o, const ColliderRole& c) {
+    o << "  collider kind " << kColliderNames[int(c.kind)] << " fit " << (c.fitToGeometry ? 1 : 0) << " size " << vec(c.size)
+      << " offset " << vec(c.offset) << " rotation " << vec(c.rotationDeg) << "\n";
+}
+
 static void saveEntity(std::ostringstream& o, const Entity& e) {
     std::string name = e.name;
     for (char& c : name)
@@ -154,6 +165,7 @@ static void saveEntity(std::ostringstream& o, const Entity& e) {
         o << "  rigid density " << num(e.rigid.density) << " friction " << num(e.rigid.friction) << " restitution "
           << num(e.rigid.restitution) << " fixed " << (e.rigid.fixed ? 1 : 0) << " velocity " << vec(e.rigid.velocity)
           << " spin " << vec(e.rigid.angularVelocity) << "\n";
+    if (e.collider.enabled) saveCollider(o, e.collider);
     if (e.soft.enabled) o << "  soft density " << num(e.soft.density) << " stiffness " << num(e.soft.stiffness) << "\n";
     if (e.liquid.enabled) o << "  liquid\n";
     if (e.magnet.enabled) o << "  magnet moment " << vec(e.magnet.moment) << "\n";
@@ -207,6 +219,17 @@ static bool readRoleKey(const std::string& role, const std::string& k, LineReade
         return k == "density" ? r.number(e.rigid.density) : k == "friction" ? r.number(e.rigid.friction)
              : k == "restitution" ? r.number(e.rigid.restitution) : k == "fixed" ? r.flag(e.rigid.fixed)
              : k == "velocity" ? r.vector(e.rigid.velocity) : k == "spin" ? r.vector(e.rigid.angularVelocity) : false;
+    if (role == "collider") {
+        ColliderRole& c = e.collider;
+        if (k != "kind")
+            return k == "fit" ? r.flag(c.fitToGeometry) : k == "size" ? r.vector(c.size) : k == "offset" ? r.vector(c.offset)
+                 : k == "rotation" ? r.vector(c.rotationDeg) : false;
+        std::string kind;
+        if (!r.text(kind)) return false;
+        for (int i = 0; i < kColliderCount; ++i)
+            if (kind == kColliderNames[i]) { c.kind = ColliderKind(i); return true; }
+        return false;
+    }
     if (role == "soft") return k == "density" ? r.number(e.soft.density) : k == "stiffness" ? r.number(e.soft.stiffness) : false;
     if (role == "magnet") return k == "moment" && r.vector(e.magnet.moment);
     if (role == "heat") return k == "temperature" ? r.number(e.heat.temperature) : k == "smoke" ? r.number(e.heat.smoke) : false;
@@ -237,6 +260,7 @@ static bool readEntityLine(const std::vector<std::string>& w, Entity& e, std::st
     }
     LineReader r(w, 1);
     if (what == "object") {} // the object's id and flags, not a role
+    else if (what == "collider") e.collider.enabled = true;
     else if (what == "rigid") e.rigid.enabled = true;
     else if (what == "soft") e.soft.enabled = true;
     else if (what == "liquid") e.liquid.enabled = true;
@@ -266,6 +290,10 @@ bool SceneGraph::load(const std::string& text, std::string& error) {
             g.entities.back().name = w.size() > 1 ? w[1] : std::string();
             inEntity = true;
         } else if (w[0] == "end" && inEntity) {
+            // A file from before colliders were a role of their own: its rigid bodies collide as
+            // their geometry - the Auto collider, now written out.
+            Entity& e = g.entities.back();
+            if (e.rigid.enabled && !e.collider.enabled) e.collider.enabled = true;
             inEntity = false;
         } else if (inEntity) {
             ok = readEntityLine(w, g.entities.back(), bad);

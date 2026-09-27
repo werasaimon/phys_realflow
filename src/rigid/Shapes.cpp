@@ -408,4 +408,97 @@ float ConvexHullShape::signedDistance(const Vector3& p, Vector3& n) const {
     return best;
 }
 
+// ---------------------------------------------------------------------------
+// Capsule
+// ---------------------------------------------------------------------------
+CapsuleShape::CapsuleShape(float radius, float halfHeight)
+    : r_(radius), h_(std::max(halfHeight, 0.0f)), mesh_(std::make_shared<TriMesh>(primitives::capsule(radius, h_))) {}
+
+// The segment's end towards d, pushed out by the radius along d.
+Vector3 CapsuleShape::support(const Vector3& d) const {
+    const float l = length(d);
+    const Vector3 tip(0.0f, d.y >= 0 ? h_ : -h_, 0.0f);
+    return l > 1e-12f ? tip + d * (r_ / l) : tip;
+}
+
+float CapsuleShape::volume() const { return kPi * r_ * r_ * (2.0f * h_) + 4.0f / 3.0f * kPi * r_ * r_ * r_; }
+
+// A cylinder of height H = 2h plus two hemispheres (together a sphere of mass ms), per unit mass:
+//   I_axis = mc r^2 / 2 + ms 2 r^2 / 5
+//   I_side = mc (H^2 / 12 + r^2 / 4) + ms (2 r^2 / 5 + H^2 / 4 + 3 H r / 8)
+// (each hemisphere about its flat face's centre is 2 m r^2 / 5; moved to the capsule's centre by the
+// parallel-axis theorem through its own centre of mass 3r/8 from the face - e.g. the PhysX guide,
+// "Rigid Body Dynamics: capsule inertia").
+Vector3 CapsuleShape::unitInertia() const {
+    const float H = 2.0f * h_, r2 = r_ * r_;
+    const float vc = kPi * r2 * H, vs = 4.0f / 3.0f * kPi * r2 * r_, v = vc + vs;
+    const float mc = vc / v, ms = vs / v; // mass shares of the cylinder and the two caps
+    const float axial = mc * r2 * 0.5f + ms * 0.4f * r2;
+    const float side = mc * (H * H / 12.0f + r2 * 0.25f) + ms * (0.4f * r2 + H * H * 0.25f + 3.0f * H * r_ / 8.0f);
+    return Vector3(side, axial, side);
+}
+
+// The distance to the axis segment, minus the radius.
+float CapsuleShape::signedDistance(const Vector3& p, Vector3& n) const {
+    const Vector3 d = p - Vector3(0.0f, clampv(p.y, -h_, h_), 0.0f);
+    const float l = length(d);
+    n = l > 1e-9f ? d / l : Vector3(1, 0, 0);
+    return l - r_;
+}
+
+bool CapsuleShape::contains(const Vector3& p) const {
+    const Vector3 d = p - Vector3(0.0f, clampv(p.y, -h_, h_), 0.0f);
+    return dot(d, d) < r_ * r_;
+}
+
+void CapsuleShape::supportFeature(const Vector3& dir, std::vector<Vector3>& out) const {
+    out.clear();
+    const float l = length(dir);
+    if (l < 1e-12f) { out.push_back(support(dir)); return; }
+    const Vector3 d = dir / l;
+    const Vector3 side(d.x, 0.0f, d.z);
+    // Within ~10 degrees of lying across the direction: the side line from cap to cap supports.
+    if (std::fabs(d.y) < 0.17f && h_ > 0 && length(side) > 1e-6f) {
+        const Vector3 rim = normalize(side) * r_;
+        out.push_back(Vector3(0.0f, -h_, 0.0f) + rim);
+        out.push_back(Vector3(0.0f, h_, 0.0f) + rim);
+        return;
+    }
+    out.push_back(support(dir));
+}
+
+// First hit of the ray: the side (an infinite cylinder of radius r, kept between the caps' planes)
+// or one of the two cap spheres, whichever comes first.
+bool CapsuleShape::raycast(const Vector3& o, const Vector3& d, float maxT, float& t, Vector3& normal) const {
+    float best = maxT;
+    bool hit = false;
+    const float a = d.x * d.x + d.z * d.z;
+    if (a > 1e-12f) { // the side
+        const float b = o.x * d.x + o.z * d.z, c = o.x * o.x + o.z * o.z - r_ * r_;
+        const float disc = b * b - a * c;
+        if (disc >= 0) {
+            const float ts = std::max((-b - std::sqrt(disc)) / a, 0.0f);
+            const Vector3 x = o + d * ts;
+            if (ts <= best && std::fabs(x.y) <= h_) {
+                best = ts;
+                normal = c <= 0 ? Vector3(1, 0, 0) : normalize(Vector3(x.x, 0.0f, x.z));
+                hit = true;
+            }
+        }
+    }
+    for (int end = -1; end <= 1; end += 2) { // the caps
+        const SphereShape cap(r_);
+        const Vector3 centre(0.0f, float(end) * h_, 0.0f);
+        float tc;
+        Vector3 nc;
+        if (cap.raycast(o - centre, d, best, tc, nc) && tc < best + 1e-9f && (o + d * tc).y * float(end) >= h_ - 1e-6f) {
+            best = tc;
+            normal = nc;
+            hit = true;
+        }
+    }
+    if (hit) t = best;
+    return hit;
+}
+
 } // namespace rf

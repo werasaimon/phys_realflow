@@ -89,6 +89,7 @@ int main() {
     run("Voronoi fracture: cells fill the body, convex and watertight", testVoronoiFracture);
     run("particles vs many bodies: the world tree", testParticlesManyBodies);
     run("rigid: destroy one body, reuse its slot", testDestroyBody);
+    run("rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts", testCapsuleShape);
     run("particles: remove one group (soft body, liquid)", testRemoveParticleGroup);
     // relativity: geodesics in Kerr, light bending, the shadow of a black hole
     run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);
@@ -106,6 +107,9 @@ int main() {
     run("scene graph: a flammable curtain over a hot emitter catches fire", testGraphFlammableCloth);
     run("scene graph: a model from a file as rigid, soft and (not) cloth", testGraphMeshShape);
     run("scene graph: a shape with no role is geometry only", testGraphGeometryOnly);
+    run("scene graph: the collider apart from the look (box collider slides, sphere collider rolls)", testGraphColliderApart);
+    run("scene graph: a capsule fitted to a model, collider round trip, off-centre rebuild", testGraphColliderFit);
+    run("scene graph: a collider alone is a static obstacle", testGraphColliderOnly);
     run("meta-objects: water -> jelly -> water -> jelly in place, the rest untouched", testMetaWaterSoftCycle);
     run("meta-objects: a plane rigid -> cloth -> rigid, body slots reused", testMetaRigidToClothAndBack);
     run("meta-objects: a magnet role off and on without a reload", testMetaMagnetToggle);

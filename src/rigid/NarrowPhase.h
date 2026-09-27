@@ -7,6 +7,9 @@
 //   convex-convex (hull, triangle) GJK + EPA for the normal/depth, then the supporting faces of both
 //                                  shapes ("boundary simplices") are clipped against each other (as in
 //                                  Jolt); vertex contacts fall back to the perturbation method (Bullet)
+//   capsule-anything               the capsule is its core segment plus a radius: segment-point,
+//                                  segment-segment analytic; segment-convex by GJK/EPA on the core,
+//                                  and a capsule lying on a face touches it at its two ends
 //
 // Algorithms are chosen through a double-dispatch table indexed by the two shape types.
 
@@ -47,11 +50,14 @@ public:
     static bool sphereConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m);
     static bool boxBox(const PosedShape& A, const PosedShape& B, ContactManifold& m);
     static bool convexConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m);
+    static bool sphereCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m);
+    static bool capsuleCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m);
+    static bool capsuleConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m);
     // Manifold from the supporting faces along n (from B to A); false for vertex/edge-face cases.
     static bool faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts);
 
 private:
-    static constexpr int kTypes = 5; // Compound is dispatched part by part before the table
+    static constexpr int kTypes = 6; // Compound is dispatched part by part before the table
     Algorithm table_[kTypes][kTypes] = {};
 
     // The steps of boxBox(): the best separating axis of the 15 (SAT), and the contact it gives.
@@ -68,6 +74,8 @@ private:
     static void clipIncidentFace(const std::vector<Vector3>& ref, const Vector3& refNormal, std::vector<Vector3>& inc,
                                  std::vector<Vector3>& clipped);
     static void perturbationManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts);
+    // The step of capsuleConvex(): a capsule lying on B's face touches it at both ends of its side.
+    static bool capsuleOnFace(const PosedShape& A, const PosedShape& B, const Vector3& n, ContactManifold& m);
 };
 
 } // namespace rf
