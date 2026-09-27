@@ -60,8 +60,8 @@ flowchart TB
     subgraph SAMPLES["Сцены rfsamples — решения на движке"]
         samples["samples/<br/>Liquid, WindTunnel, Smoke, Rigid (+ рельеф),<br/>SoftBody, Fire, Hydro; plasma/Tokamak,<br/>TokamakScene, MagnetosphereScene; Samples (реестр)"]
     end
-    subgraph APP["Демо realflow — Qt 6"]
-        app["app/<br/>MainWindow, Viewport (OpenGL 3.0),<br/>FluidSurfaceRenderer, PlotPanel"]
+    subgraph APP["Редактор — отдельный репозиторий phys_realflow_editor, Qt 6"]
+        app["src/<br/>MainWindow, Viewport (OpenGL 3.0),<br/>FluidSurfaceRenderer, PlotPanel;<br/>SDK — git-сабмодуль"]
     end
     scene --> samples
     samples --> app
@@ -155,7 +155,7 @@ void Simulation::setGravity(const Vector3& g) {
 SDK не требует ничего, кроме компилятора и CMake ≥ 3.21:
 
 ```sh
-cmake -S . -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release -DRF_BUILD_APP=OFF
+cmake -S . -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-core -j
 build-core/rf_tests            # код возврата = число провалившихся проверок
 RF_TEST=MHD build-core/rf_tests   # только тесты, в имени которых есть подстрока "MHD"
@@ -176,26 +176,17 @@ RF_TEST=MHD build-core/rf_tests   # только тесты, в имени ко�
 
 [.github/workflows/ci.yml](../.github/workflows/ci.yml): на каждый push и pull request SDK и тесты собираются и прогоняются на GCC и Clang (Linux), MSVC (Windows) и Clang (macOS) с `RF_WERROR` и `RF_STRICT_FP`, плюс сборка с санитайзерами на Linux. Отчёты JUnit прикладываются к прогону. Приложение на Qt в CI не собирается (на раннерах нет Qt).
 
-### Приложение (Qt 6.7.3, MinGW)
+### Редактор (Qt 6) — отдельный репозиторий
 
-На Windows проект собирается Qt 6.7.3 с MinGW 11.2:
-
-```sh
-set PATH=C:\Qt\Tools\mingw1120_64\bin;C:\Qt\Tools\Ninja;%PATH%
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.7.3/mingw_64
-cmake --build build -j 24
-```
-
-Нужны модули Qt: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Charts. После сборки рядом с `realflow.exe` копируется `opengl32sw.dll` (Mesa llvmpipe), чтобы программа работала и без видеокарты ([CMakeLists.txt:101](../CMakeLists.txt#L101)).
+Просмотрщик с панелями, графиками и OpenGL-рендером живёт в [phys_realflow_editor](https://github.com/werasaimon/phys_realflow_editor): этот SDK подключён там git-сабмодулем `extern/phys_realflow`, и ничего в SDK не зависит от Qt. Сборка редактора описана в его README (Qt 6.7.3 MinGW: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Charts).
 
 | Опция CMake | По умолчанию | Смысл |
 |---|---|---|
-| `RF_BUILD_APP` | `ON` | собирать Qt-приложение `realflow` |
 | `RF_BUILD_TESTS` | `ON` | собирать `rf_tests` |
 
-### Командная строка приложения
+### Командная строка редактора
 
-Разбор аргументов — [app/main.cpp:67](../app/main.cpp#L67):
+Разбор аргументов — `src/main.cpp` редактора:
 
 | Ключ | Смысл |
 |---|---|

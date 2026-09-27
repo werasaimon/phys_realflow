@@ -9,7 +9,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-option(RF_BUILD_APP   "Build the Qt GUI application" ON)
 option(RF_BUILD_TESTS "Build the solver tests"       ON)
 option(RF_WERROR      "Warnings are errors (CI)"     OFF)
 option(RF_SANITIZE    "AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang, CI)" OFF)
@@ -131,35 +130,8 @@ elseif(MSVC)
   endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# GUI
-# ---------------------------------------------------------------------------
-if(RF_BUILD_APP)
-  find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Charts)
-  qt_standard_project_setup()
-
-  qt_add_executable(realflow WIN32
-    app/main.cpp
-    app/MainWindow.h      app/MainWindow.cpp
-    app/Viewport.h        app/Viewport.cpp
-    app/Shaders.h
-    app/VolumeRenderer.cpp
-    app/SimController.h   app/SimController.cpp
-    app/ParamForm.h       app/ParamForm.cpp
-    app/OrbitCamera.h     app/OrbitCamera.cpp
-    app/ViewportTools.h   app/ViewportTools.cpp
-    app/FluidSurfaceRenderer.h app/FluidSurfaceRenderer.cpp
-    app/PlotPanel.h       app/PlotPanel.cpp
-  )
-  target_link_libraries(realflow PRIVATE rfcore rfsamples
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets Qt6::Charts)
-  # Software OpenGL (Mesa llvmpipe, shipped with Qt) next to the program: with --software-gl the
-  # same shaders run on the CPU - for PCs without a usable GPU / driver.
-  if(WIN32)
-    add_custom_command(TARGET realflow POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE_DIR:Qt6::Core>/opengl32sw.dll" "$<TARGET_FILE_DIR:realflow>")
-  endif()
-endif()
+# The Qt editor lives in its own repository (https://github.com/werasaimon/phys_realflow_editor)
+# with this SDK as a git submodule; nothing here depends on Qt.
 
 # ---------------------------------------------------------------------------
 # Tests

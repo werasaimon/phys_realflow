@@ -1,6 +1,6 @@
 # PhysRealFlow
 
-Физический SDK на **C++17 без внешних зависимостей** и демо-приложение на Qt 6.
+Физический SDK на **C++17 без внешних зависимостей**; редактор на Qt 6 — в [отдельном репозитории](https://github.com/werasaimon/phys_realflow_editor).
 Всё в единицах СИ, каждый метод — со ссылкой на статью и с численным тестом.
 
 | Подсистема | Методы |
@@ -18,16 +18,14 @@
 ## Быстрый старт
 
 ```sh
-# Только SDK и тесты (любой компилятор C++17, CMake ≥ 3.21)
-cmake -S . -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release -DRF_BUILD_APP=OFF
+# SDK и тесты (любой компилятор C++17, CMake ≥ 3.21, никаких зависимостей)
+cmake -S . -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-core -j
 build-core/rf_tests
-
-# Приложение (Windows: Qt 6.7.3 MinGW)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.7.3/mingw_64
-cmake --build build -j
-build/realflow --preset 23            # огонь; --software-gl — рендер на процессоре
 ```
+
+Редактор с окном, панелями и графиками — отдельный репозиторий [phys_realflow_editor](https://github.com/werasaimon/phys_realflow_editor),
+в котором этот SDK подключён git-сабмодулем (`git clone --recurse-submodules`).
 
 ## Структура
 
@@ -42,7 +40,6 @@ src/      SDK (rfcore) — только стандартная библиоте�
             core/Probe             отладчик: любой канал по имени (значения, счётчики, таймеры), отладочная отрисовка
 samples/  готовые сцены (rfsamples) — решения на движке, как samples/ у Box2D:
             Liquid, WindTunnel, Smoke, Rigid (+ рельеф), SoftBody, Fire, Hydro; plasma/ Tokamak, Magnetosphere
-app/      демо realflow (Qt 6, OpenGL 3.0)
 tests/    rf_tests — численные эксперименты с аналитическим ответом
 docs/     документация с формулами, кодом и графиками
 ```
