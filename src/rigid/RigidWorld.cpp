@@ -143,6 +143,28 @@ std::vector<RigidWorld::DebugContact> RigidWorld::debugContacts() const {
     return out;
 }
 
+// The solver gives body A of a manifold +n jn per point and the friction t1 jt1 + t2 jt2, body B the
+// opposite (ContactSolver.cpp): so the impulse on a body is that sum with the sign of its side.
+Vector3 RigidWorld::contactImpulseOn(int body, int& points) const {
+    Vector3 J(0.0f);
+    points = 0;
+    for (const Manifold& m : manifolds_) {
+        const float side = m.a == body ? 1.0f : (m.b == body ? -1.0f : 0.0f);
+        if (side == 0) continue;
+        for (const SolverPoint& p : m.points) J += p.normal * (p.jn * side);
+        J += (m.t1 * m.jt1 + m.t2 * m.jt2) * side;
+        points += m.points.size();
+    }
+    return J;
+}
+
+float RigidWorld::deepestPenetration() const {
+    float deepest = 0;
+    for (const Manifold& m : manifolds_)
+        for (const SolverPoint& p : m.points) deepest = std::max(deepest, p.depth);
+    return deepest;
+}
+
 // Outside impulses wake a sleeping body, but do not reset the sleep timer of an awake one: a body
 // that stays slow despite a steady trickle of small impulses (gas pressure, fluid) can still fall
 // asleep; a real push makes it fast and resets the timer by itself.
@@ -194,9 +216,11 @@ void RigidWorld::updateWorldTree() const {
     // New bodies get a leaf; every body's leaf follows its box (the tree changes only when a body
     // leaves the fat box of its leaf). A destroyed body has no leaf (-1); a body placed into its
     // slot gets one again.
+    // A sleeping body has not moved since it fell asleep (anything that moves it wakes it), so its
+    // leaf is left alone - a pile at rest costs the tree nothing, as in Box2D.
     treeProxies_.resize(bodies_.size(), -1);
     for (size_t i = 0; i < bodies_.size(); ++i) {
-        if (!bodies_[i].alive) continue;
+        if (!bodies_[i].alive || (bodies_[i].sleeping && treeProxies_[i] >= 0)) continue;
         if (treeProxies_[i] < 0) treeProxies_[i] = worldTree_.insert(bodies_[i].worldBounds(), int(i));
         else worldTree_.update(treeProxies_[i], bodies_[i].worldBounds());
     }
@@ -246,42 +270,46 @@ float RigidWorld::kineticEnergy() const {
     return float(e);
 }
 
-// Euler's equations: d(I w)/dt = -w x (I w). A body spinning about a non-principal axis tumbles
-// (the Dzhanibekov effect), and without this term the integrator keeps w instead of the angular
-// momentum L = I w. Implicit midpoint rule in the body frame (as Catto 2015, "Numerical
-// Methods", GDC, but with the torque at the midpoint): f(w1) = I (w1 - w0) + h wm x (I wm) = 0,
-// wm = (w0 + w1) / 2, solved by Newton's method. The midpoint rule is symplectic and conserves
-// the quadratic invariants |I w|^2 and w . I w - angular momentum and energy - where implicit
-// Euler damps them and the explicit term blows up at fast spins.
-Vector3 RigidWorld::gyroscopicStep(const RigidBody& b, float h) {
-    const Matrix3x3 R = b.rotation();
-    const Vector3 I(1.0f / b.invInertiaLocal.x, 1.0f / b.invInertiaLocal.y, 1.0f / b.invInertiaLocal.z);
-    const Vector3 w0 = R.transposed() * b.angVel; // in the body frame, where I is diagonal
-    Vector3 w1 = w0;
-    for (int it = 0; it < 3; ++it) {
-        const Vector3 wm = (w0 + w1) * 0.5f, Iwm = I * wm;
-        const Vector3 f = I * (w1 - w0) + cross(wm, Iwm) * h;
-        const Matrix3x3 J = Matrix3x3::diag(I) + (Matrix3x3::skew(wm) * Matrix3x3::diag(I) - Matrix3x3::skew(Iwm)) * (0.5f * h);
-        w1 = w1 - J.inverse() * f;
-    }
-    return R * w1;
-}
-
+// Before the iterations: the manifolds in bottom-up order, their colours, and each one prepared.
 void RigidWorld::prepare(float dt) {
     contactCount_ = 0;
-    // Gauss-Seidel order: bottom-up (along gravity), so support propagates through stacks within
-    // the first iterations instead of one level per iteration.
-    Vector3 up = normalize(-params.gravity);
-    if (length2(up) < 0.5f) up = Vector3(0, 1, 0);
-    auto height = [&](const Manifold& m) {
-        float h = dot(bodies_[m.a].pos, up);
-        return m.b >= 0 ? std::min(h, dot(bodies_[m.b].pos, up)) : h - 1e3f; // static contacts first
-    };
-    std::stable_sort(manifolds_.begin(), manifolds_.end(),
-                     [&](const Manifold& x, const Manifold& y) { return height(x) < height(y); });
+    sortManifoldsBottomUp();
     for (const Manifold& m : manifolds_) contactCount_ += size_t(m.points.size());
     buildColors();
     forEachManifold([&](Manifold& m) { prepareManifold(m, dt); });
+    warmStats_ = {int(contactCount_), 0}; // summed after the parallel preparation, in manifold order
+    for (const Manifold& m : manifolds_) warmStats_.matched += m.warmMatched;
+}
+
+// Gauss-Seidel order: bottom-up (along gravity), so support propagates through stacks within the
+// first iterations instead of one level per iteration. A manifold is a big record (~0.6 KB: four
+// points, the friction patch, the block matrix), and sorting the records themselves moved them
+// around log n times - 12 ms a frame for a thousand cubes. So the records stay where the narrow
+// phase put them, and the order is a list of their indices (solveOrder_) plus each one's place in
+// it (solveRank_); whoever needs the order - the colouring, the bounces, the shock pass - reads it
+// through them:
+//   1. each manifold's height is computed once, as the sort key;
+//   2. the indices are sorted by it - ties by index, which gives exactly the order of a stable sort
+//      without its temporary buffer;
+//   3. each manifold's rank in that order.
+void RigidWorld::sortManifoldsBottomUp() {
+    Vector3 up = normalize(-params.gravity);
+    if (length2(up) < 0.5f) up = Vector3(0, 1, 0);
+    const int n = int(manifolds_.size());
+    sortKeys_.resize(size_t(n));
+    solveOrder_.resize(size_t(n));
+    for (int i = 0; i < n; ++i) { // 1.
+        const Manifold& m = manifolds_[size_t(i)];
+        const float h = dot(bodies_[m.a].pos, up);
+        sortKeys_[size_t(i)] = m.b >= 0 ? std::min(h, dot(bodies_[m.b].pos, up)) : h - 1e3f; // static contacts first
+        solveOrder_[size_t(i)] = i;
+    }
+    std::sort(solveOrder_.begin(), solveOrder_.end(), [&](int x, int y) { // 2.
+        const float kx = sortKeys_[size_t(x)], ky = sortKeys_[size_t(y)];
+        return kx < ky || (kx == ky && x < y);
+    });
+    solveRank_.resize(size_t(n)); // 3.
+    for (int r = 0; r < n; ++r) solveRank_[size_t(solveOrder_[size_t(r)])] = r;
 }
 
 void RigidWorld::solve() {
@@ -304,6 +332,8 @@ void RigidWorld::step(float dt) {
     }
     // One step of the impulse solver, as a list of what happens to the bodies in order. Every
     // named step is a member below; the probe measures the time and the memory of each stage.
+    // The timers follow one another and never nest, because the Laboratory's profiler adds them
+    // up: integrate (the kick, later the poses), collide, solve, ccd, islands.
     lastDt_ = dt;
     const auto tStart = std::chrono::steady_clock::now();
     long long allocations = Probe::allocations.load(); // the census: which stage churns memory
@@ -312,23 +342,37 @@ void RigidWorld::step(float dt) {
         Probe::add(channel, double(now - allocations));
         allocations = now;
     };
-    beginStep();
-    integrateVelocities(dt);
+    {
+        Probe::Timer t("rigid/integrate ms");
+        beginStep();
+        integrateVelocities(dt);
+    }
     {
         Probe::Timer t("rigid/collide ms");
         collide();
         if (params.sleeping && updateIslands(false, dt)) collide(); // woken island: contacts among its bodies
     }
     countAllocations("memory/rigid collide");
-    solveContacts(dt);
+    {
+        Probe::Timer t("rigid/solve ms"); // prepare, the iterations, the bounces, the shock pass
+        solveContacts(dt);
+    }
     countAllocations("memory/rigid solve");
-    if (Probe::drawEnabled()) drawDebug();
-    rememberContactImpulses();
-    countAllocations("memory/rigid cache");
-    dampRestingBodies(dt);
-    Probe::Timer integrateTimer("rigid/integrate ms"); // to the end of the step: poses, CCD, joints, islands
-    integratePoses(dt);
-    finishStep(dt, tStart);
+    if (Probe::drawEnabled()) {
+        Probe::Timer t("rigid/debug draw ms");
+        drawDebug();
+    }
+    {
+        Probe::Timer t("rigid/solve ms"); // the contact cache for the next warm start, the resting damping
+        rememberContactImpulses();
+        countAllocations("memory/rigid cache");
+        dampRestingBodies(dt);
+    }
+    {
+        Probe::Timer t("rigid/integrate ms");
+        integratePoses(dt);
+    }
+    finishStep(dt, tStart); // the ccd, the joints' positions, the islands: each has its own timer
     countAllocations("memory/rigid integrate"); // poses, CCD, joints, islands
     reportStep();
 }
@@ -338,7 +382,8 @@ void RigidWorld::step(float dt) {
 // frozen into static ones for this step, and every body remembers where the step started (for the
 // continuous collision and the joints' position stage).
 void RigidWorld::beginStep() {
-    for (RigidBody& b : bodies_) b.updateInertia(); // orientation may have been edited externally
+    for (RigidBody& b : bodies_) // orientation may have been edited externally (a sleeper has not turned)
+        if (!b.sleeping) b.updateInertia();
     if (!params.sleeping)
         for (RigidBody& b : bodies_) b.sleeping = false;
     if (grab_.active && grab_.body < int(bodies_.size())) wake(grab_.body);
@@ -349,15 +394,15 @@ void RigidWorld::beginStep() {
     }
 }
 
-// Newton's second law for one step: gravity and the applied forces change the linear velocity,
-// the applied torques the angular one, and Euler's equations (gyroscopicStep) let a body with
-// unequal moments of inertia tumble. Symplectic Euler: velocities first, positions later.
+// Newton's second law for one step, as a kick: gravity and the applied forces change the linear
+// velocity, the applied torques the angular one. The tumble of a body with unequal moments of
+// inertia (Euler's equations) is part of its free turn, later in the step (turnFreely,
+// FreeRotation.cpp). Symplectic Euler: velocities first, positions later.
 void RigidWorld::integrateVelocities(float dt) {
     for (RigidBody& b : bodies_) {
         if (b.invMass == 0) continue;
         b.vel += (params.gravity + b.force * b.invMass) * dt;
         b.angVel += b.applyInvInertiaWorld(b.torque) * dt;
-        b.angVel = gyroscopicStep(b, dt);
     }
 }
 
@@ -379,28 +424,6 @@ void RigidWorld::solveContacts(float dt) {
     applyRestitution();
     if (params.shockPropagation && !manifolds_.empty()) propagateShock();
     timings_.solve = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - ts).count();
-    Probe::add("rigid/solve ms", timings_.solve); // prepare, the iterations, the bounces and the shock pass
-}
-
-// Shock propagation (Guendelman, Bridson & Fedkiw 2003): the manifolds are solved once more from
-// the ground up, each level against a frozen support, so the weight of a tall stack reaches the
-// floor in one sweep instead of one level per iteration.
-void RigidWorld::propagateShock() {
-    computeLevels();
-    // Ground-up order: sort by the lower level of each manifold.
-    std::vector<int>& order = shockOrder_; // kept between steps: no allocation
-    order.resize(manifolds_.size());
-    for (size_t i = 0; i < order.size(); ++i) order[i] = int(i);
-    auto lvl = [&](const Manifold& m) {
-        int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
-        int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
-        return std::min(la, lb);
-    };
-    std::stable_sort(order.begin(), order.end(), [&](int x, int y) { return lvl(manifolds_[x]) < lvl(manifolds_[y]); });
-    for (int pass = 0; pass < params.shockIterations; ++pass) {
-        shockFrictionPass_ = params.shockFriction && pass == params.shockIterations - 1; // once per step
-        for (int i : order) solveManifoldShock(manifolds_[i]);
-    }
 }
 
 // The contact cache for the next step's warm start. Pairs of sleeping bodies produce no
@@ -408,19 +431,16 @@ void RigidWorld::propagateShock() {
 // sagging and being thrown apart. The cache is pruned in place (erase allocates nothing) and a
 // persistent pair keeps its node: only a new pair costs an allocation - rebuilding the map every
 // step was a thousand allocations per frame for a sleeping tower.
+//   1. this step's manifolds are written into the cache, stamped with this step's number;
+//   2. one pass over the cache drops every pair this step did not refresh - unless both its bodies
+//      sleep (sleeping pairs make no manifolds, and a woken stack needs their impulses).
+// (It took two passes over the whole cache before - in a sleeping pile of a thousand cubes that
+// is thousands of pairs twice a substep, for the few that changed.)
 void RigidWorld::rememberContactImpulses() {
-    for (auto it = cache_.begin(); it != cache_.end();) {
-        const uint64_t k = it->first;
-        int a = int(k >> 32), b = int(k & 0xffffffffu) - 64;
-        bool aSleep = a < int(bodies_.size()) && (bodies_[a].sleeping || bodies_[a].mass <= 0);
-        bool bSleep = b < 0 || (b < int(bodies_.size()) && (bodies_[b].sleeping || bodies_[b].mass <= 0));
-        if (aSleep && bSleep) { ++it; continue; }
-        it->second.live = false; // refreshed below if the pair is in this step's manifolds
-        ++it;
-    }
-    for (const Manifold& m : manifolds_) {
+    ++cacheStamp_;
+    for (const Manifold& m : manifolds_) { // 1.
         CachedPair& c = cache_[key(m.a, m.b)];
-        c.live = true;
+        c.stamp = cacheStamp_;
         c.points = m.points;
         c.friction = m.t1 * m.jt1 + m.t2 * m.jt2;
         c.twist = m.jtwist;
@@ -429,8 +449,15 @@ void RigidWorld::rememberContactImpulses() {
         c.lockRef = m.lockRef;
         c.lock = m.jlock;
     }
-    for (auto it = cache_.begin(); it != cache_.end();)
-        it = it->second.live ? std::next(it) : cache_.erase(it);
+    auto asleep = [&](int body) { // static (the walls: body < 0) or sleeping
+        return body < 0 || (body < int(bodies_.size()) && (bodies_[body].sleeping || bodies_[body].mass <= 0));
+    };
+    for (auto it = cache_.begin(); it != cache_.end();) { // 2.
+        const uint64_t k = it->first;
+        const int a = int(k >> 32), b = int(k & 0xffffffffu) - 64;
+        const bool keep = it->second.stamp == cacheStamp_ || (a < int(bodies_.size()) && asleep(a) && asleep(b));
+        it = keep ? std::next(it) : cache_.erase(it);
+    }
 }
 
 // Resting-contact damping (cf. Bullet's additional damping): bodies that touch something and
@@ -471,7 +498,7 @@ void RigidWorld::integratePoses(float dt) {
         b.vel *= ld;
         b.angVel *= ad;
         b.pos += (b.vel + b.biasVel) * dt;
-        b.rot = b.rot.integrated(b.angVel + b.biasAngVel, dt);
+        turnFreely(b, dt); // Euler's equations of the free turn, by an exact splitting (FreeRotation.cpp)
         b.biasVel = Vector3(0.0f);
         b.biasAngVel = Vector3(0.0f);
         b.updateInertia();
@@ -486,13 +513,19 @@ void RigidWorld::integratePoses(float dt) {
 // released, and the islands decide who falls asleep. The timings of these stages are recorded.
 void RigidWorld::finishStep(float dt, std::chrono::steady_clock::time_point tStart) {
     auto tc = std::chrono::steady_clock::now();
-    continuousCollision();
+    continuousCollision(); // its probe timer is "rigid/ccd ms"
     auto ti = std::chrono::steady_clock::now();
     timings_.ccd = std::chrono::duration<float, std::milli>(ti - tc).count();
-    // Joint position stage (nonlinear Gauss-Seidel on the new poses), frozen sleepers still static.
-    solveJointPositions();
-    unfreezeAll();
-    if (params.sleeping) updateIslands(true, dt);
+    {
+        // Joint position stage (nonlinear Gauss-Seidel on the new poses), frozen sleepers still static.
+        Probe::Timer t("rigid/solve ms");
+        solveJointPositions();
+    }
+    {
+        Probe::Timer t("rigid/islands ms"); // the sleepers let go, then who falls asleep
+        unfreezeAll();
+        if (params.sleeping) updateIslands(true, dt);
+    }
     auto tEnd = std::chrono::steady_clock::now();
     timings_.islands = std::chrono::duration<float, std::milli>(tEnd - ti).count();
     timings_.total = std::chrono::duration<float, std::milli>(tEnd - tStart).count();

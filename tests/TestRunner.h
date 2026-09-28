@@ -82,6 +82,23 @@ inline void writeJUnit(const char* path) {
     std::fclose(f);
 }
 
+// FNV-1a (Fowler, Noll, Vo): each byte is xor-ed in, then the hash is multiplied by the FNV prime.
+// Components are fed one by one - never a struct's raw bytes, whose padding is not part of the state.
+struct StateHash {
+    uint64_t h = 14695981039346656037ull; // the FNV-1a offset basis
+    void add(float v) {
+        unsigned char b[4];
+        std::memcpy(b, &v, 4);
+        for (unsigned char c : b) {
+            h ^= c;
+            h *= 1099511628211ull; // the FNV prime for 64 bits
+        }
+    }
+    void add(const Vector3& v) { add(v.x); add(v.y); add(v.z); }
+    void add(const Quaternion& q) { add(q.w); add(q.x); add(q.y); add(q.z); }
+    void add(const std::vector<float>& d) { for (float v : d) add(v); }
+};
+
 // Deepest overlap between any two dynamic bodies (GJK/EPA): > tolerance means superposition.
 inline float maxOverlap(const RigidWorld& w) {
     float worst = 0;

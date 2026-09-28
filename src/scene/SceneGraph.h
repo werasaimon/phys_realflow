@@ -405,6 +405,7 @@ private:
     std::vector<EmitterRef> emitters_;  // every visible entity with the emitter role
     std::unordered_map<uint32_t, std::vector<MetaObject>> meta_; // entity id -> its meta-objects
     std::vector<std::string> notes_;    // roles that could not be honoured, shown in the readings
+    AABB box_;                          // the box the scene lives in: the world's, grown to hold every entity
 };
 
 // The visible lights of a graph, posed in the world, into s.lights (GraphScene::describe, and an

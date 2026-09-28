@@ -105,5 +105,7 @@ const std::vector<Case>& registry();
 void addRigidCases(std::vector<Case>& cases);
 void addGasCases(std::vector<Case>& cases);
 void addParticleCases(std::vector<Case>& cases);
+void addRelativityCases(std::vector<Case>& cases);
+void addPlasmaCases(std::vector<Case>& cases);
 
 } // namespace rf::verify

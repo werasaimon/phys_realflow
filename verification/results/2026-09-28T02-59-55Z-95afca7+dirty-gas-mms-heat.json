@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T02:59:09Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 46.2366542,
+  "cases": [
+    {"id": "gas-mms-heat", "category": "code-verification", "status": "open", "split": "tuning", "value": 1.984211913, "u_num": 0.004883765773, "u_input": 0, "runs": 1, "spread": 0, "reference": 2, "u_ref": 0, "E": -0.01578808733, "u_val": 0.004883765773, "z": -3.232769152, "order": 1.984211913, "order_theory": 2, "verdict": "PASS", "seconds": 46.2362335, "unit": "", "h_label": "dx, м", "convergence": [[0.0625, 0.001046355425, 0.001046355425], [0.03125, 0.0002660224682, 0.0002660224682], [0.015625, 6.684433751e-05, 6.684433751e-05]], "detail": "RMS ошибка T через одно время диффузии: 1.05e-03 K (16 ячеек) … 6.68e-05 K (64 ячеек), амплитуда 1 K, α(T) ~ T^1.75"}
+  ]
+}

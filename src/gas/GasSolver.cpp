@@ -67,6 +67,7 @@ void GasSolver::allocateFields() {
     w_.init(nx_, ny_, nz_ + 1, {0.5f, 0.5f, 0});
     u0_ = u_; v0_ = v_; w0_ = w_;
     p_.init(nx_, ny_, nz_, Vector3(0.5f));
+    pHalf_ = pEnd_ = Field3(); // advection-reflection's kept pressures start again from p_
     smoke_.init(nx_, ny_, nz_, Vector3(0.5f));
     temp_.init(nx_, ny_, nz_, Vector3(0.5f));
     fuel_.init(nx_, ny_, nz_, Vector3(0.5f));
@@ -386,56 +387,50 @@ void GasSolver::injectSources() {
 // Time step
 // ---------------------------------------------------------------------------
 // One time step of the gas, the operator splitting of Stam 1999 / Bridson 2015 in order: the
-// bodies become walls, sources add gas, everything is carried by the flow (advection), the fire
-// burns, the forces push, viscosity diffuses, the walls rub, the pressure makes the flow
-// divergence-free, the magnetic field follows the flow. Every stage is a named step below; the
+// bodies become walls, sources add gas, the flow advances (it is carried by itself, the fire
+// burns, the forces push, viscosity diffuses, the walls rub, the pressure makes it
+// divergence-free), the magnetic field follows the flow. Every stage is a named step below; the
 // probe measures each.
 float GasSolver::step(float maxDt) {
     const float dt = chooseTimeStep(maxDt);
-    using Clock = std::chrono::steady_clock;
-    auto ms = [](Clock::time_point a, Clock::time_point b) { return std::chrono::duration<float, std::milli>(b - a).count(); };
-    auto t0 = Clock::now();
+    const auto start = std::chrono::steady_clock::now();
     {
         Probe::Timer timer("gas/solids ms");
         voxelizeMovingSolids();
     }
-    solidMs_ = ms(t0, Clock::now());
-    applyVelocityBC();
-    injectSources();
+    solidMs_ = millisecondsSince(start);
+    pressureMs_ = 0;
     {
-        Probe::Timer timer("gas/advect ms");
-        advectAll(dt);
+        Probe::Timer timer("gas/sources ms"); // the open sides' inflow, the smoke rake, the sources
+        applyVelocityBC();
+        injectSources();
     }
-    burn(dt);
-    applyVelocityBC();
-    {
-        Probe::Timer timer("gas/forces ms"); // buoyancy, confinement, Lorentz, the bodies' impulses
-        applyForces(dt);
-    }
-    {
-        Probe::Timer timer("gas/diffuse ms");
-        diffuse(dt);
-    }
-    applyVelocityBC();
-    auto t1 = Clock::now();
-    applyWallFriction(dt);
-    auto t2 = Clock::now();
-    {
-        Probe::Timer timer("gas/pressure ms");
-        project(dt);
-    }
+    // The flow over the step: a projection at the end (Stam 1999), or a reflection at mid-step
+    // and a projection at the end (Zehnder et al. 2018) - the same physics, less energy lost.
+    if (params.advectionReflection) advanceFlowByReflection(dt);
+    else advanceFlowByProjection(dt);
     if (magnetic.enabled) {
         Probe::Timer timer("gas/mhd ms");
+        const auto mhd = std::chrono::steady_clock::now();
         induceMagneticField(dt);
+        pressureMs_ += millisecondsSince(mhd);
     }
-    auto t3 = Clock::now();
-    computeForces();
-    computeMovingForces();
-    solidMs_ += ms(t1, t2) + ms(t3, Clock::now());
-    pressureMs_ = ms(t2, t3);
-    computeDiagnostics();
-    reportStep(dt);
-    dissipateScalars(dt);
+    {
+        Probe::Timer timer("gas/solids ms"); // the loads on the obstacle and on the moving bodies
+        const auto forces = std::chrono::steady_clock::now();
+        computeForces();
+        computeMovingForces();
+        solidMs_ += millisecondsSince(forces);
+    }
+    {
+        Probe::Timer timer("gas/diagnostics ms"); // max div u, the smoke, the numbers of the probe
+        computeDiagnostics();
+        reportStep(dt);
+    }
+    {
+        Probe::Timer timer("gas/sources ms"); // smoke and heat fade
+        dissipateScalars(dt);
+    }
     lastDt_ = dt;
     averageCoefficients(dt);
     time_ += dt;
@@ -445,6 +440,7 @@ float GasSolver::step(float maxDt) {
 // The CFL condition: no fluid may cross more than `cfl` cells in one step, measured by the fastest
 // velocity on the grid (or the inflow); with a magnetic field the Alfven waves set a limit too.
 float GasSolver::chooseTimeStep(float maxDt) {
+    Probe::Timer timer("gas/diagnostics ms");
     auto absMax = [](const std::vector<float>& d) {
         return parallelMax<float>(int(d.size()), 0.0f, [&](int b, int e) {
             float m = 0;
@@ -460,13 +456,63 @@ float GasSolver::chooseTimeStep(float maxDt) {
     return dt;
 }
 
+// The flow over one step the classic way (Stam 1999; Bridson 2015, ch. 2): everything is carried
+// by the flow of the step's start, the fire burns, the forces push, viscosity diffuses, the walls
+// rub - and one projection at the end throws the divergent part of the velocity away.
+void GasSolver::advanceFlowByProjection(float dt) {
+    {
+        Probe::Timer timer("gas/advect ms");
+        advectAll(dt);
+    }
+    burn(dt);
+    applyVelocityBC();
+    {
+        Probe::Timer timer("gas/forces ms"); // buoyancy, confinement, Lorentz, the bodies' impulses
+        applyForces(dt);
+    }
+    {
+        Probe::Timer timer("gas/diffuse ms");
+        diffuse(dt);
+    }
+    applyVelocityBC();
+    rubWalls(dt);
+    projectTimed(dt);
+}
+
+// The walls rub the gas (the wall function of MovingSolids.cpp); its time counts with the solids.
+void GasSolver::rubWalls(float dt) {
+    Probe::Timer timer("gas/solids ms");
+    const auto start = std::chrono::steady_clock::now();
+    applyWallFriction(dt);
+    solidMs_ += millisecondsSince(start);
+}
+
+// The pressure projection; its time counts as the pressure's (lastPressureMs, the probe).
+void GasSolver::projectTimed(float dt) {
+    Probe::Timer timer("gas/pressure ms");
+    const auto start = std::chrono::steady_clock::now();
+    project(dt);
+    pressureMs_ += millisecondsSince(start);
+}
+
 // Semi-Lagrangian advection (MacCormack) of the velocity itself and of every scalar the scene
-// carries: smoke always; temperature when something heats the gas; fuel and products in a fire.
+// carries, all by the flow of the step's start.
 void GasSolver::advectAll(float dt) {
     u0_ = u_; v0_ = v_; w0_ = w_;
+    advectVelocity(dt);
+    advectCarriedScalars(dt);
+}
+
+// The three velocity components carried for dt by the flow (u0_, v0_, w0_) - itself, or another.
+void GasSolver::advectVelocity(float dt) {
     advectField(u_, t1_, t2_, dt);
     advectField(v_, t1_, t2_, dt);
     advectField(w_, t1_, t2_, dt);
+}
+
+// The scalars the scene carries, by the flow (u0_, v0_, w0_): smoke always; temperature when
+// something heats the gas; fuel and products in a fire.
+void GasSolver::advectCarriedScalars(float dt) {
     std::vector<Field3*> scalars = {&smoke_};
     if (source.enabled || params.heatBuoyancy != 0 || combustion.enabled || magnetic.enabled) scalars.push_back(&temp_);
     if (combustion.enabled) {

@@ -1,22 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 146" width="640" height="146" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
 <rect width="640" height="146" fill="#fcfcfb"/>
 <text x="320" y="24" text-anchor="middle" font-size="15" font-weight="600" fill="#0b0b0b">Валидация: E = S − D в % от эталона, полоса ± u_val</text>
-<line x1="350.0" y1="44.0" x2="350.0" y2="96.0" stroke="#e5e4df" />
-<text x="350.0" y="114.0" text-anchor="middle" fill="#52514e">-10 %</text>
-<line x1="412.5" y1="44.0" x2="412.5" y2="96.0" stroke="#e5e4df" />
-<text x="412.5" y="114.0" text-anchor="middle" fill="#52514e">-5 %</text>
+<line x1="392.5" y1="44.0" x2="392.5" y2="96.0" stroke="#e5e4df" />
+<text x="392.5" y="114.0" text-anchor="middle" fill="#52514e">-10 %</text>
 <line x1="475.0" y1="44.0" x2="475.0" y2="96.0" stroke="#e5e4df" />
 <text x="475.0" y="114.0" text-anchor="middle" fill="#52514e">0 %</text>
-<line x1="537.5" y1="44.0" x2="537.5" y2="96.0" stroke="#e5e4df" />
-<text x="537.5" y="114.0" text-anchor="middle" fill="#52514e">5 %</text>
-<line x1="600.0" y1="44.0" x2="600.0" y2="96.0" stroke="#e5e4df" />
-<text x="600.0" y="114.0" text-anchor="middle" fill="#52514e">10 %</text>
+<line x1="557.5" y1="44.0" x2="557.5" y2="96.0" stroke="#e5e4df" />
+<text x="557.5" y="114.0" text-anchor="middle" fill="#52514e">10 %</text>
 <line x1="475.0" y1="44.0" x2="475.0" y2="96.0" stroke="#52514e" />
 <text x="475.0" y="40.0" text-anchor="middle" fill="#52514e">эталон</text>
-<rect x="412.5" y="60.0" width="125.0" height="28" fill="#f0efec"><title>допуск ± 5 %</title></rect>
-<text x="318" y="78.0" text-anchor="end" fill="#0b0b0b">Цилиндр, Re = 100: число Струхаля</text>
-<line x1="423.0" y1="74.0" x2="471.2" y2="74.0" stroke="#2a78d6" stroke-width="2"/>
-<line x1="423.0" y1="68.0" x2="423.0" y2="80.0" stroke="#2a78d6" stroke-width="2"/>
-<line x1="471.2" y1="68.0" x2="471.2" y2="80.0" stroke="#2a78d6" stroke-width="2"/>
-<circle cx="447.1" cy="74.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>E = -0.003657 (-2.23 %), u_val = 0.003161</title></circle>
+<rect x="433.8" y="60.0" width="82.5" height="28" fill="#f0efec"><title>допуск ± 5 %</title></rect>
+<text x="318" y="78.0" text-anchor="end" fill="#0b0b0b">Цилиндр, Re = 100, загромождение 12.5 %: число Струхаля</text>
+<line x1="350.0" y1="74.0" x2="439.1" y2="74.0" stroke="#2a78d6" stroke-width="2"/>
+<line x1="350.0" y1="68.0" x2="350.0" y2="80.0" stroke="#2a78d6" stroke-width="2"/>
+<line x1="439.1" y1="68.0" x2="439.1" y2="80.0" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="394.5" cy="74.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>E = -0.01707 (-9.755 %), u_val = 0.009451</title></circle>
 </svg>

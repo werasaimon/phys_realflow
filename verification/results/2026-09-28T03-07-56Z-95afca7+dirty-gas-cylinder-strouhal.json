@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T03:05:39Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 136.8673648,
+  "cases": [
+    {"id": "gas-cylinder-strouhal", "category": "validation", "status": "open", "split": "tuning", "value": 0.1579283611, "u_num": 0.008563286232, "u_input": 0, "runs": 1, "spread": 0, "reference": 0.175, "u_ref": 0.004, "E": -0.01707163889, "u_val": 0.009451448095, "z": -1.806245849, "order": 1.36133628, "order_theory": null, "verdict": "WARN", "seconds": 136.8668429, "unit": "", "h_label": "dx, м", "convergence": [[0.08333333333, 0.1420454524, null], [0.05555555556, 0.1521246436, null], [0.03703703704, 0.1579283611, null]], "detail": "St = 0.1420 / 0.1521 / 0.1579 (сетки 48/72/108), Ричардсон 0.1658, p = 1.36"}
+  ]
+}

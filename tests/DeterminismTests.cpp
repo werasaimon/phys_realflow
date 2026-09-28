@@ -11,23 +11,6 @@
 
 namespace {
 
-// FNV-1a (Fowler, Noll, Vo): each byte is xor-ed in, then the hash is multiplied by the FNV prime.
-// Components are fed one by one - never a struct's raw bytes, whose padding is not part of the state.
-struct StateHash {
-    uint64_t h = 14695981039346656037ull; // the FNV-1a offset basis
-    void add(float v) {
-        unsigned char b[4];
-        std::memcpy(b, &v, 4);
-        for (unsigned char c : b) {
-            h ^= c;
-            h *= 1099511628211ull; // the FNV prime for 64 bits
-        }
-    }
-    void add(const Vector3& v) { add(v.x); add(v.y); add(v.z); }
-    void add(const Quaternion& q) { add(q.w); add(q.x); add(q.y); add(q.z); }
-    void add(const std::vector<float>& d) { for (float v : d) add(v); }
-};
-
 // Everything that moves in a simulation: bodies, particles, the gas and its magnetic field.
 uint64_t hashSimulation(const Simulation& sim) {
     StateHash s;
@@ -166,8 +149,15 @@ void buildRigidBenchmark(RigidWorld& world) {
 // glibc or MSVC, so another compiler needs step 2 of src/math/ElementaryFunctions.h first. The
 // default build (-march=native: FMA wherever the compiler likes) gives another number, printed only.
 // A change of the constant is a change of the rigid solver's results: explain it in the commit.
+// History:
+//   912fa823d3669448 - at first;
+//   ae671dbd1d0310b2 - the speed work of 2026-09-28: the shock pass solves each level's manifolds in
+//                      coloured batches and sweeps a small matrix instead of the bodies;
+//   840f057037dfac45 - the free rotation of the same day: a free body turns by the splitting of
+//                      FreeRotation.cpp (exact turns about the principal axes, in double) instead of
+//                      the implicit gyroscopic step and the end-of-step exponential.
 void testRigidGoldenHash() {
-    constexpr uint64_t kGolden = 0x912fa823d3669448ull; // RF_STRICT_FP=ON, MinGW (GCC 11.2), Release
+    constexpr uint64_t kGolden = 0x840f057037dfac45ull; // RF_STRICT_FP=ON, MinGW (GCC 11.2), Release
     RigidWorld world;
     buildRigidBenchmark(world);
     for (int f = 0; f < 600; ++f) world.step(1.0f / 60.0f);

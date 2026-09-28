@@ -344,6 +344,7 @@ void Simulation::fillSettings(RenderSnapshot& s) const {
     s.gasPushesBodies = gasPushesBodies;
     s.obstacleVersion = obstacleVersion_;
     s.obstacle = obstacleMesh_;
+    s.measurements = measurements_;
     s.info.clear();
     s.plots.clear();
     s.particles.clear();

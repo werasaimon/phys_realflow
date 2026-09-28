@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T00:54:28Z",
+  "commit": "cbb5834+dirty",
+  "mode": "full",
+  "seconds": 2.2607278,
+  "cases": [
+    {"id": "gr-symplectic-drift", "category": "code-verification", "status": "open", "split": "tuning", "value": 1.907418762e-07, "u_num": 0, "u_input": 0, "runs": 1, "spread": 0, "reference": 0, "u_ref": 0, "E": 1.907418762e-07, "u_val": 0, "z": null, "order": 4.018343376, "order_theory": 4, "verdict": "PASS", "seconds": 2.2604112, "unit": "", "h_label": "h, M", "convergence": [[2, 9.482454135e-05, 9.482454135e-05], [1, 5.91579251e-06, 5.91579251e-06], [0.5, 3.611078858e-07, 3.611078858e-07]], "detail": "Тао-4 (h = M, ω = 0,1): max|ΔH| 6.95e-06, тренд/размах 0.000 за 3000 витков; RK4 с тем же шагом: max|ΔH| 4.11e-06, тренд/размах 1.00 — чистый уход"}
+  ]
+}

@@ -123,10 +123,10 @@ void SweepAndPruneBroadPhase::sortAxis(int axis) {
                 const bool eMax = e.data & 1, fMax = f.data & 1;
                 if (!eMax && fMax) {
                     // e's min passes below f's max: the intervals start to overlap on this axis.
-                    if (bounds_[be].overlaps(bounds_[bf])) pairs_.insert(key(be, bf));
+                    if (bounds_[be].overlaps(bounds_[bf])) pairsChanged_ |= pairs_.insert(key(be, bf)).second;
                 } else if (eMax && !fMax) {
                     // e's max passes below f's min: the intervals separate.
-                    pairs_.erase(key(be, bf));
+                    pairsChanged_ |= pairs_.erase(key(be, bf)) > 0;
                 }
             }
             E[j] = f;
@@ -140,6 +140,7 @@ void SweepAndPruneBroadPhase::sortAxis(int axis) {
 void SweepAndPruneBroadPhase::rebuild() {
     const uint32_t n = uint32_t(bounds_.size());
     pairs_.clear();
+    pairsChanged_ = true;
     swaps_ = 0;
     for (int a = 0; a < 3; ++a) {
         std::vector<Endpoint>& E = axes_[a];
@@ -181,14 +182,18 @@ void SweepAndPruneBroadPhase::rebuild() {
     }
 }
 
+// Sorted output: the solver order (and so the result) does not depend on hash-set order. The sorted
+// list is made again only when the set changed since the last call: a pile at rest keeps its
+// thousands of pairs step after step, and sorting them anew every step was its biggest cost.
 void SweepAndPruneBroadPhase::findPairs(std::vector<std::pair<int, int>>& pairs) const {
-    // Sorted output: the solver order (and so the result) does not depend on hash-set order.
-    std::vector<uint64_t>& keys = keys_; // kept between steps
-    keys.assign(pairs_.begin(), pairs_.end());
-    std::sort(keys.begin(), keys.end());
-    pairs.clear();
-    pairs.reserve(keys.size());
-    for (uint64_t k : keys) pairs.emplace_back(int(k >> 32), int(k & 0xffffffffu));
+    if (pairsChanged_) {
+        keys_.assign(pairs_.begin(), pairs_.end());
+        std::sort(keys_.begin(), keys_.end());
+        sortedPairs_.clear();
+        for (uint64_t k : keys_) sortedPairs_.emplace_back(int(k >> 32), int(k & 0xffffffffu));
+        pairsChanged_ = false;
+    }
+    pairs = sortedPairs_;
 }
 
 } // namespace rf

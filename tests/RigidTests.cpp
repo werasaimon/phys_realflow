@@ -817,8 +817,9 @@ void testNoetherRigid() {
     //    in zero gravity, a glancing hit that spins them both: the internal impulses (normal and
     //    friction) cancel pairwise, so P and L about the origin stay what they were.
     //    The same hit at two time steps: the contact impulses cancel exactly (same point, opposite
-    //    sign), so what drift is left is the discretisation of the free rotation of the spun boxes
-    //    (it grows like dt w^2: the bouncing hit spins them to 5-8 rad/s). It must shrink with dt.
+    //    sign), and the free turn of the spun boxes keeps L exactly (a splitting into exact turns,
+    //    FreeRotation.cpp) - what is left is float rounding, at both steps far below 1e-4. (With the
+    //    old first-order turn it was 3.5e-3 at 1/600 s and shrank with dt.)
     auto glancing = [&](int substeps, float& worstP, float& worstL, float& spinC) {
         RigidWorld w;
         w.setDomain(AABB({-10, -10, -10}, {10, 10, 10}));
@@ -848,8 +849,7 @@ void testNoetherRigid() {
         std::printf("  glancing collision: worst |P| drift %.1e / %.1e, worst |L| drift %.1e at dt = 1/600, %.1e at 1/1200 (spin of the hit box %.2f rad/s)\n",
                     p1, p2, l1, l2, s1);
         CHECK(p1 < 1e-4f && p2 < 1e-4f, "momentum drifts %e / %e", p1, p2);
-        CHECK(l2 < l1, "angular momentum drift must shrink with the step: %e at dt, %e at dt/2", l1, l2);
-        CHECK(l2 < 2e-3f, "angular momentum drifts %e at dt/2", l2);
+        CHECK(l1 < 1e-4f && l2 < 1e-4f, "angular momentum drifts %e at dt, %e at dt/2", l1, l2);
         CHECK(s1 > 0.3f, "the glancing hit must spin the second box (%f rad/s)", s1);
     }
     // 3) Rotation symmetry of a free body: a box spun about its middle axis of inertia flips over

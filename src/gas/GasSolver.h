@@ -50,6 +50,16 @@ struct GasParams {
     int maxViscosityIterations = 1000;
     PressurePreconditioner pressurePreconditioner = PressurePreconditioner::Multigrid; // of the PCG (Multigrid.h)
     bool maccormack = true;
+    // Advection-reflection (AdvectionReflection.cpp): the projection that removes the divergent part
+    // of the flow is done at mid-step as a REFLECTION, u <- 2 P(u) - u, which keeps the kinetic
+    // energy, and once more at the end - instead of one projection at the end, which throws the
+    // divergent part's energy away every step (Zehnder, Narain & Thomaszewski, SIGGRAPH 2018; second
+    // order in time: Narain, Zehnder & Thomaszewski 2019). Numerical dissipation 13.8 % -> 1.6 % of
+    // the loss, second order in time, at 1.5 ... 2.1 times the cost of a frame. OFF for now (user,
+    // 2026-09-28), temporarily: with it the pressure's numerical boundary layer at a body grows, and
+    // the surface-loads test's two pressure forces on the sphere drift 35.5 % apart (limit 30 %; the
+    // classic step 21.5 %). It is switched on once that layer is fixed (rotational pressure correction).
+    bool advectionReflection = false;
     float vorticityConfinement = 0.0f;
     bool smokeRake = true;               // smoke streaks injected at the inflow
     float smokeBuoyancy = 0.0f;          // [m/s^2] per unit smoke density (sinks)
@@ -261,7 +271,14 @@ private:
     void findStaticWallCells();
     // The steps of step() (GasSolver.cpp).
     float chooseTimeStep(float maxDt);
+    void advanceFlowByProjection(float dt); // advection, forces, viscosity, one projection at the end
+    void advanceFlowByReflection(float dt); // the same with a reflection at mid-step (AdvectionReflection.cpp)
     void advectAll(float dt);
+    void advectVelocity(float dt);       // the three velocity components, carried by (u0_, v0_, w0_)
+    void advectCarriedScalars(float dt); // smoke, temperature, fuel, products, carried by (u0_, v0_, w0_)
+    void reflectVelocity();              // u <- 2 u - u_advected; the carrier u0 <- 2 u - u_start
+    void rubWalls(float dt);             // applyWallFriction, timed with the solids
+    void projectTimed(float dt);         // project, timed as the pressure
     void burn(float dt);
     void applyForces(float dt);
     void induceMagneticField(float dt);
@@ -353,6 +370,10 @@ private:
     std::vector<uint8_t> viscKind_;
     std::vector<double> viscDiag_, viscB_, viscG_, viscX_, viscR_, viscZ_, viscP_, viscAp_;
     int lastViscousIters_ = 0;
+    // Advection-reflection's copies (AdvectionReflection.cpp): the flow at the start of the step, the
+    // flow after the first half of advection, and the pressures of its two projections - the
+    // mid-step one and the final one, each kept to start the same projection of the next step.
+    Field3 uStart_, vStart_, wStart_, uAdvected_, vAdvected_, wAdvected_, pHalf_, pEnd_;
     int solidCount_ = 0;
 
     Vector3 force_;

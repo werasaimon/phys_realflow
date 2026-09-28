@@ -47,6 +47,8 @@ add_library(rfcore STATIC
   src/rigid/ContactSolver.cpp
   src/rigid/Islands.cpp
   src/rigid/ShockPropagation.cpp
+  src/rigid/FreeRotation.cpp
+  src/rigid/ContactLcp.h
   src/rigid/Grab.cpp
   src/rigid/XpbdSolver.cpp
   src/rigid/RigidDebugDraw.cpp
@@ -64,6 +66,7 @@ add_library(rfcore STATIC
   src/gas/GasDebugDraw.cpp
   src/gas/GasSolverInternal.h
   src/gas/Advection.cpp
+  src/gas/AdvectionReflection.cpp
   src/gas/Viscosity.cpp
   src/gas/PressureSolver.cpp
   src/gas/Multigrid.h             src/gas/Multigrid.cpp
@@ -80,6 +83,8 @@ add_library(rfcore STATIC
   src/relativity/RayTracer.h      src/relativity/RayTracer.cpp
   src/relativity/Spacetime.h      src/relativity/Spacetime.cpp
   src/relativity/Curvature.h      src/relativity/Curvature.cpp
+  src/relativity/KerrHamiltonian.h src/relativity/KerrHamiltonian.cpp
+  src/relativity/SymplecticGeodesic.h src/relativity/SymplecticGeodesic.cpp
   # the scene facade: the solvers together; the scenes themselves are in samples/
   src/scene/Scene.h
   src/scene/Simulation.h          src/scene/Simulation.cpp
@@ -93,6 +98,9 @@ add_library(rfcore STATIC
   src/scene/SceneHierarchy.cpp
   src/scene/GluedGroups.cpp
   src/scene/Magnets.h             src/scene/Magnets.cpp
+  src/scene/Channels.h            src/scene/Channels.cpp
+  src/scene/ChannelMath.h         src/scene/ObjectChannels.cpp
+  src/scene/FieldProbes.cpp
 )
 target_include_directories(rfcore PUBLIC src)
 
@@ -182,6 +190,8 @@ if(RF_BUILD_VERIFY)
     verification/cases/RigidCases.cpp
     verification/cases/GasCases.cpp
     verification/cases/ParticleCases.cpp
+    verification/cases/RelativityCases.cpp
+    verification/cases/PlasmaCases.cpp
   )
   target_include_directories(rfverify PUBLIC verification)
   target_link_libraries(rfverify PUBLIC rfcore)
@@ -212,6 +222,7 @@ if(RF_BUILD_TESTS)
     tests/DebugDrawTests.cpp
     tests/MathTests.cpp
     tests/RigidTests.cpp tests/HardContactTests.h
+    tests/PileTests.cpp
     tests/ParticleTests.cpp
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
@@ -224,9 +235,12 @@ if(RF_BUILD_TESTS)
     tests/MetaObjectTests.cpp
     tests/ArrayTests.cpp
     tests/ActionTests.cpp
+    tests/ChannelTests.cpp
     tests/MathBookTests.cpp
     tests/TensorTests.cpp
-    tests/CurvatureTests.cpp)
+    tests/CurvatureTests.cpp
+    tests/SymplecticTests.cpp
+    tests/PerfTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   if(RF_BUILD_VERIFY) # the smoke test of the registry
     target_sources(rf_tests PRIVATE tests/VerificationTests.cpp)

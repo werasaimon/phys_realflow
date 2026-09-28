@@ -7,7 +7,9 @@
 // body can bend and squash, and springs back.
 //
 // For drawing, the body's surface mesh is skinned to the clusters (as FleX does): every vertex
-// follows the rigid motions of the clusters of its nearest particle.
+// follows the clusters around it - their best-fit LINEAR deformation, not only their rotation
+// (Mueller et al. 2005, sec. 4.3), so the skin squashes with the particles. A skin that only turned
+// kept its rest size while a loaded body was squashed, and reached into the body below.
 
 #include "core/Mesh.h"
 #include "math/Math.h"
@@ -22,6 +24,11 @@ struct SoftCluster {
     Vector3 restCentre;                // centre of mass at rest
     Vector3 centre;                    // centre of mass now (last shape matching)
     Quaternion rotation;               // rotation now (also the warm start of the next extraction)
+    // The best-fit linear map from rest to now, F = A_pq A_qq^-1 (Mueller et al. 2005, eq. 7):
+    // A_pq = sum (p - c) q^T as in the rotation fit, A_qq = sum q q^T of the rest offsets (fixed,
+    // so its inverse is kept). Identity at rest; used only to draw the skin.
+    Matrix3x3 restInverseQQ = Matrix3x3::zero(); // A_qq^-1 (zero: a flat cluster has no linear fit)
+    Matrix3x3 deformation;                        // F now
 };
 
 struct SoftBody {
@@ -40,6 +47,8 @@ struct SoftBody {
     TriMesh surface;
     std::vector<std::vector<int>> vertexClusters;
     std::vector<std::vector<float>> vertexWeights;
+    std::vector<int> vertexAnchor;             // per vertex: its nearest particle at rest (slot in `particles`)
+    std::vector<Vector3> vertexAnchorOffset;   // per vertex: rest position - that particle's rest position
 };
 
 // Clusters for particles at rest positions `rest` (global indices `ids`): cluster centres on a
@@ -47,12 +56,19 @@ struct SoftBody {
 std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::vector<Vector3>& rest, float spacing,
                                        float radius);
 
-// Binds the rest surface mesh to the clusters (vertex -> clusters of the nearest particle).
+// Binds the rest surface mesh to the body: every vertex to its nearest particle (its anchor) and to
+// the clusters around it, with smooth weights.
 void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& particleRest);
 
-// Current positions of the surface vertices: the average of where each of the vertex's clusters
-// carries it (cluster centre + rotation of the rest offset).
-void skinSurface(const SoftBody& body, std::vector<Vector3>& out);
+// Current positions of the surface vertices, from the particles' current `positions`: each vertex
+// rides on its anchor particle, its rest offset turned and squashed by the blend of its clusters'
+// linear deformations.
+void skinSurface(const SoftBody& body, const std::vector<Vector3>& positions, std::vector<Vector3>& out);
+
+// The outward surface normals of a body's particles now (the contacts' signed distance field,
+// Macklin et al. 2014, sec. 5.1): every particle's rest normal turned by the rotations of the
+// clusters it belongs to, averaged. Both arrays are indexed by the global particle index.
+void turnSurfaceNormals(const SoftBody& body, const std::vector<Vector3>& restNormal, std::vector<Vector3>& normal);
 
 // One shape-matching pass over all soft bodies: moves the predicted positions p towards the goals
 // (average over the clusters of each particle). Particles with invMass 0 stay where they are.

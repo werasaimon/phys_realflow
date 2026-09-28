@@ -40,6 +40,11 @@ struct PenetrationResult {
     bool valid = false;
     Vector3 normal;      // unit, from B towards A (moving A along +normal by depth separates them)
     float depth = 0;
+    // How far A must go along the normal lies between depth and depthMax: EPA's polytope lies
+    // inside the Minkowski difference A - B (its face is no farther than the boundary), and the
+    // support of A - B along the normal is as far as the boundary can be. Converged, the two agree
+    // to EPA's tolerance; stopped early (a touch it cannot resolve), depth is a bound from below.
+    float depthMax = 0;
     Vector3 pointA;      // deepest point of A (inside B)
     Vector3 pointB;      // deepest point of B (inside A)
 };

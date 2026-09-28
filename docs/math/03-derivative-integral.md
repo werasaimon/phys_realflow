@@ -36,19 +36,18 @@ $$
 
 Так движок делает шаг любого твёрдого тела. Сначала скорость получает ускорение от силы тяжести и сил:
 
-[src/rigid/RigidWorld.cpp:355](../../src/rigid/RigidWorld.cpp#L355)
+[src/rigid/RigidWorld.cpp:401](../../src/rigid/RigidWorld.cpp#L401)
 ```cpp
 void RigidWorld::integrateVelocities(float dt) {
     for (RigidBody& b : bodies_) {
         if (b.invMass == 0) continue;
         b.vel += (params.gravity + b.force * b.invMass) * dt;
         b.angVel += b.applyInvInertiaWorld(b.torque) * dt;
-        b.angVel = gyroscopicStep(b, dt);
     }
 }
 ```
 
-Потом, уже после контактов, положение сдвигается на новую скорость, умноженную на шаг: строка `b.pos += (b.vel + b.biasVel) * dt;` в [RigidWorld.cpp:473](../../src/rigid/RigidWorld.cpp#L473). Это и есть интеграл, сложенный кусочками.
+Потом, уже после контактов, положение сдвигается на новую скорость, умноженную на шаг: строка `b.pos += (b.vel + b.biasVel) * dt;` в [RigidWorld.cpp:500](../../src/rigid/RigidWorld.cpp#L500). Это и есть интеграл, сложенный кусочками.
 
 ## Тест
 

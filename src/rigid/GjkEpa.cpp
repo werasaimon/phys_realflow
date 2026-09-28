@@ -409,7 +409,9 @@ PenetrationResult epa(const PosedShape& A, const PosedShape& B, const GjkResult&
             if (f.d != kInf) t_trace->faces.insert(t_trace->faces.end(), {f.a, f.b, f.c});
         t_trace->epaIterations = int(V.size()) - 4;
     }
-    return penetrationFromPolytope(S);
+    PenetrationResult res = penetrationFromPolytope(S);
+    if (res.valid) res.depthMax = std::max(res.depth, -dot(supportAB(A, B, -res.normal).w, res.normal));
+    return res;
 }
 
 void setGjkTrace(GjkTrace* trace) { t_trace = trace; }

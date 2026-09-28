@@ -4,6 +4,10 @@
 #include "TestRunner.h"
 #include "Tests.h"
 
+#include "scene/SceneGraph.h"
+
+#include <string>
+
 void testSoftBodyAndCloth() {
     const float dt = 1.0f / 180.0f;
     // 1) Curtain pinned at two corners: XPBD stretch constraints + long range attachments.
@@ -94,7 +98,8 @@ void testSoftBodyAndCloth() {
     // 5) Tearing (thread tension vs strength, cracks along the weave) and mouse grab.
     //    a) a cotton curtain on a rod does not tear under its own weight, nor when waved gently;
     //    b) pulled down hard at the bottom, it rips across the load (horizontal crack);
-    //    c) two panels sewn together, one edge held, the other pulled: they part along the seam;
+    //    c) two panels sewn together across a hanging sheet, heavy enough that the seam (0.3 of the
+    //       strength) carries more than it holds and the fabric less: they part along the seam;
     //    d) a grabbed soft body follows; its skinned surface matches the model at rest.
     auto brokenThreads = [](const Cloth& c, int& warp, int& weft, int seamColumn) {
         int onSeam = 0;
@@ -115,8 +120,17 @@ void testSoftBodyAndCloth() {
         const Cloth& c = s.cloths()[0];
         CHECK(s.grab(s.positions()[c.particle(c.width / 2, c.height - 1)]), "no cloth particle grabbed");
         Vector3 t = s.grabTarget();
-        for (int k = 0; k < 60; ++k) { t += Vector3(0, 0, 0.001f); s.setGrabTarget(t); s.step(dt); }
+        float wavedLoad = 0; // the largest thread tension while waved, as a part of the thread's strength
+        for (int k = 0; k < 60; ++k) {
+            t += Vector3(0, 0, 0.001f);
+            s.setGrabTarget(t);
+            s.step(dt);
+            for (const DistanceConstraint& d : c.constraints)
+                if (!d.broken && d.strength > 0) wavedLoad = std::max(wavedLoad, threadTension(d, s.positions(), dt) / d.strength);
+        }
         const int gentle = s.cloths()[0].tornThreads;
+        std::printf("  curtain waved gently: threads loaded to %.0f%% of their strength at most, cloth cut into %d small steps\n",
+                    100 * wavedLoad, c.smallSteps);
         for (int k = 0; k < 150; ++k) { t += Vector3(0, -0.01f, 0.004f); s.setGrabTarget(t); s.step(dt); }
         int warp, weft;
         brokenThreads(s.cloths()[0], warp, weft, -1);
@@ -130,21 +144,30 @@ void testSoftBodyAndCloth() {
         CHECK(weft > 20 && weft > warp && finite, "a downward pull must rip across (weft %d, warp %d)", weft, warp);
     }
     {
+        // The seam runs across the sheet 10 rows under the rod. The weight per metre of width at the
+        // rod is 0.6 of the weft strength, at the seam ~0.45 (what hangs below it): more than the
+        // seam's 0.3, less than the fabric's 1. The weight comes on over 1.5 s (no dynamic overshoot).
         ParticleSystem s;
-        s.reset(AABB({-1, 0, -1}, {1, 2, 1}));
+        s.reset(AABB({-1, -1, -1}, {1, 2, 1}));
         ClothMaterial sewn;
-        sewn.seamColumns = {20};
-        s.addCloth({-0.3f, 1.5f, 0}, {0.6f, 0, 0}, {0, -0.6f, 0}, sewn, 128, Vector3(1)); // right edge held
-        for (int k = 0; k < 180; ++k) s.step(dt);
+        sewn.seamRows = {10};
+        sewn.areaDensity = 0.6f * sewn.strengthWeft / (9.81f * 0.6f);
+        s.addCloth({-0.3f, 1.5f, 0}, {0.6f, 0, 0}, {0, -0.6f, 0}, sewn, 16, Vector3(1)); // on a rod
+        const Vector3 g = s.params.gravity;
+        for (int k = 0; k < 360; ++k) {
+            s.params.gravity = g * std::min(1.0f, float(k) / 270.0f);
+            s.step(dt);
+        }
         const Cloth& c = s.cloths()[0];
-        s.grab(s.positions()[c.particle(0, c.height / 2)]);
-        Vector3 t = s.grabTarget();
-        for (int k = 0; k < 150; ++k) { t += Vector3(-0.01f, 0, 0); s.setGrabTarget(t); s.step(dt); }
-        int warp, weft;
-        const int onSeam = brokenThreads(s.cloths()[0], warp, weft, 20);
-        std::printf("  sewn panels pulled apart: %d of %d seam stitches gave, %d other threads%s", onSeam, c.height,
-                    warp + weft - onSeam, "\n");
-        CHECK(onSeam == c.height, "the seam must open along its whole length (%d of %d)", onSeam, c.height);
+        int onSeam = 0, other = 0;
+        for (const DistanceConstraint& d : c.constraints) {
+            if (!d.broken || d.strength <= 0) continue;
+            if (d.kind == DistanceConstraint::Weft && d.y == 10) ++onSeam;
+            else ++other;
+        }
+        std::printf("  sewn panels hanging, the seam loaded to 1.5 x what it holds: %d of %d seam stitches gave, %d other threads%s",
+                    onSeam, c.width, other, "\n");
+        CHECK(onSeam == c.width, "the seam must open along its whole length (%d of %d)", onSeam, c.width);
     }
     {
         ParticleSystem q;
@@ -194,6 +217,148 @@ void testSoftBodyAndCloth() {
         CHECK(std::fabs(after.x - before.x) < 0.02f * std::fabs(before.x) + 1e-3f, "momentum not conserved: %f -> %f", before.x,
               after.x);
     }
+}
+
+// Thread tensions of a cloth now, per unit width [N/m] (tension of the thread / the width it
+// stands for), warp and weft threads that are still whole; rows y < nearRows also go to `nearPin`.
+static std::vector<float> threadTensionsPerWidth(const Cloth& c, const std::vector<Vector3>& x, float dt, int nearRows,
+                                                 float& nearPin) {
+    std::vector<float> out;
+    for (const DistanceConstraint& d : c.constraints) {
+        if (d.broken || (d.kind != DistanceConstraint::Warp && d.kind != DistanceConstraint::Weft)) continue;
+        const float t = threadTension(d, x, dt) / threadWidth(c, d);
+        out.push_back(t);
+        if (d.y < nearRows) nearPin = std::max(nearPin, t);
+    }
+    return out;
+}
+
+struct SwingResult {
+    int torn = 0;
+    float nearPin = 0;   // largest thread tension in the pinned quarter while the sheet swings down [N/m]
+    float peak = 0;      // largest thread tension anywhere, any time [N/m]
+    float p99 = 0;       // largest 99th percentile of the thread tensions of a step [N/m]
+    float edgeSpeed = 0; // fastest the free edge moved [m/s]
+};
+
+// A 1 x 1 m sheet pinned along one edge, let go level, swings down on it and back for 3 s.
+static SwingResult swingSheet(const ClothMaterial& material) {
+    ParticleSystem s;
+    s.reset(AABB({-1.2f, -0.5f, -1.2f}, {1.2f, 2.5f, 1.2f}));
+    s.addCloth({-0.5f, 2.0f, -0.5f}, {1, 0, 0}, {0, 0, 1}, material, 16, Vector3(1));
+    const float dt = 1.0f / 180.0f;
+    SwingResult r;
+    for (int k = 0; k < 540; ++k) {
+        s.step(dt);
+        const Cloth& c = s.cloths()[0];
+        float nearPin = 0;
+        std::vector<float> t = threadTensionsPerWidth(c, s.positions(), dt, c.height / 4, nearPin);
+        std::sort(t.begin(), t.end());
+        r.peak = std::max(r.peak, t.back());
+        r.p99 = std::max(r.p99, t[size_t(0.99 * double(t.size() - 1))]);
+        if (k * dt < 0.5f) r.nearPin = std::max(r.nearPin, nearPin); // swinging down, before the fold reaches the edge
+        for (int x = 0; x < c.width; ++x) r.edgeSpeed = std::max(r.edgeSpeed, length(s.velocities()[c.particle(x, c.height - 1)]));
+    }
+    r.torn = s.cloths()[0].tornThreads;
+    return r;
+}
+
+// A cotton sheet (0.3 kg/m^2, threads 30 kN/m, strength 4000 / 3000 N/m) swings on its pinned edge.
+// What the swing really asks of the threads, per unit width, with M = 0.3 kg/m the sheet's mass
+// per metre of the pinned edge:
+//  - near the pinned edge, while the sheet swings down: the pull of a pendulum, at most (at the
+//    bottom) M g (1 + 2) = 8.8 N/m for all the mass at the free end (a stiff plate: 5/2 M g) -
+//    energy M g L = M v^2 / 2 at the end, centripetal M v^2 / L = 2 M g, plus the weight;
+//  - at the free edge, when the fold that runs down the falling sheet reaches it: the edge is
+//    stopped like the tip of a whip, T ~ v sqrt(k mu) (a strip of density mu and stiffness k
+//    stopped from speed v: the stress wave's impedance), a few hundred N/m at 5 m/s.
+// Both are far below the strength: not one thread may break. Two sheets: the default one, which
+// shears and bends like cotton (ClothMaterial: Kawabata's KES-F values), must read the pendulum's
+// pull near the pin; one like card (the old defaults: shear 3000 N/m, bendCompliance 1e-3, a
+// hundred times stiffer) reads more there - its bending links, pushed together where the sheet
+// folds over the rod, press on the threads - and must still lose nothing. Before the threads were
+// solved as whole lines (Cloth.cpp, solveThreadLine) and the contact passes started from the
+// threads' force (ParticleSystem::step), the solver's lag stretched them 3-8 % instead of 0.03 %:
+// ~1000 N/m near the pin, 0.99 of the strength at the bottom (the scene graph's 0.6 m sheet tore
+// ~200 threads).
+void testClothSwingNoFalseTears() {
+    const ClothMaterial cotton;
+    ClothMaterial card;
+    card.shearStiffness = 3000.0f;
+    card.bendCompliance = 1e-3f;
+    const SwingResult soft = swingSheet(cotton), stiff = swingSheet(card);
+    const float pendulum = 3 * cotton.areaDensity * 1.0f * 9.81f;
+    const float whip = soft.edgeSpeed * std::sqrt(cotton.tensileStiffness * cotton.areaDensity);
+    std::printf("  sheet 1 x 1 m swinging 3 s (strength %.0f / %.0f N/m); pendulum pull 3 M g = %.1f N/m, whip v sqrt(k mu) = "
+                "%.0f N/m at the edge's %.1f m/s\n", cotton.strengthWarp, cotton.strengthWeft, pendulum, whip, soft.edgeSpeed);
+    for (const SwingResult* r : {&soft, &stiff})
+        std::printf("    %s: %d threads torn; near the pin while swinging down %.1f N/m; anywhere max %.0f N/m, 99th percentile %.0f N/m\n",
+                    r == &soft ? "cotton (default)" : "card            ", r->torn, r->nearPin, r->peak, r->p99);
+    CHECK(soft.torn == 0 && stiff.torn == 0, "a swinging sheet tore threads (%d, %d)", soft.torn, stiff.torn);
+    CHECK(soft.nearPin < pendulum, "near the pin the threads read %.1f N/m, more than the pendulum's 3 M g = %.1f N/m", soft.nearPin,
+          pendulum);
+    CHECK(soft.peak < whip, "the threads read %.0f N/m, more than the whip at the free edge gives (%.0f N/m)", soft.peak, whip);
+    CHECK(stiff.peak < 0.5f * cotton.strengthWeft, "card-like sheet: %.0f N/m, within a factor 2 of tearing", stiff.peak);
+}
+
+struct HangResult {
+    float weight = 0;     // what hangs below the rod row [N]
+    float carried = 0;    // the vertical pull of every link across the gap under the rod row [N]
+    float threads = 0;    // the part of it the weft threads carry [N]
+    float topThread = 0;  // the middle column's top weft thread, per unit width [N/m]
+    int torn = 0, tornTopRow = 0;
+};
+
+// Statics, then strength. A sheet 0.6 m tall hangs from a rod (its top row pinned); its weight is
+// brought on slowly - gravity ramps up over 1.5 s, so there is no dynamic overshoot - and held
+// 0.5 s. `loadOverStrength` sets its density so that its weight per metre of width, mu g L, is that
+// many times the weft strength.
+static HangResult hangSheet(float loadOverStrength) {
+    ParticleSystem s;
+    s.reset(AABB({-1, -1, -1}, {1, 2, 1}));
+    ClothMaterial m;
+    const float L = 0.6f, g = 9.81f, dt = 1.0f / 180.0f;
+    m.areaDensity = loadOverStrength * m.strengthWeft / (g * L);
+    s.addCloth({-0.3f, 1.5f, 0}, {L, 0, 0}, {0, -L, 0}, m, 16, Vector3(1));
+    for (int k = 0; k < 360; ++k) {
+        s.params.gravity = Vector3(0, -g * std::min(1.0f, float(k) / 270.0f), 0);
+        s.step(dt);
+    }
+    const Cloth& c = s.cloths()[0];
+    const auto& x = s.positions();
+    HangResult r;
+    r.weight = float(c.width * (c.height - 1)) * m.areaDensity * c.particleArea * g;
+    auto row = [&](int particle) { return (particle - c.firstParticle) / c.width; };
+    for (const DistanceConstraint& d : c.constraints) {
+        if (d.broken || (row(d.a) == 0) == (row(d.b) == 0)) continue; // only links across the gap under the rod
+        const Vector3 dir = normalize(x[d.b] - x[d.a]);                   // from the rod row down
+        const float up = threadTension(d, x, dt) * -dir.y;               // the upward pull on what hangs
+        r.carried += up;
+        if (d.kind == DistanceConstraint::Weft) r.threads += up;
+        if (d.kind == DistanceConstraint::Weft && d.x == c.width / 2) r.topThread = threadTension(d, x, dt) / threadWidth(c, d);
+    }
+    r.torn = c.tornThreads;
+    for (const DistanceConstraint& d : c.constraints) r.tornTopRow += d.kind == DistanceConstraint::Weft && d.y == 0 && d.broken;
+    return r;
+}
+
+// Newton at the rod: the links across the gap under it hold up exactly the weight below (the
+// threads most of it, the shear diagonals and bending links the rest), so the thread tension the
+// tearing reads is the real one. Then the strength: loaded to 0.8 of it the sheet holds; loaded
+// to 1.3 (the threads' share of it still above the strength) it tears - across the top, where the
+// load is largest.
+void testClothTearsAtStrength() {
+    const HangResult light = hangSheet(0.8f), heavy = hangSheet(1.3f);
+    const float strength = ClothMaterial().strengthWeft;
+    std::printf("  sheet hanging with 0.8 x its strength: links under the rod carry %.1f N of its %.1f N weight (%+.2f%%), "
+                "threads %.0f%% of it; middle top thread %.0f N/m; %d torn\n", light.carried, light.weight,
+                100 * (light.carried / light.weight - 1), 100 * light.threads / light.carried, light.topThread, light.torn);
+    std::printf("  with 1.3 x (threads' share %.0f N/m vs strength %.0f N/m): %d threads torn, %d of them in the top row\n",
+                1.3f * strength * light.threads / light.carried, strength, heavy.torn, heavy.tornTopRow);
+    CHECK(std::fabs(light.carried / light.weight - 1) < 0.02f, "the links carry %.2f N, the weight is %.2f N", light.carried, light.weight);
+    CHECK(light.torn == 0, "a sheet loaded below its strength tore %d threads", light.torn);
+    CHECK(heavy.tornTopRow > 0, "a sheet loaded above its strength must tear at the top (%d torn, %d at the top)", heavy.torn,
+          heavy.tornTopRow);
 }
 
 void testSPH() {
@@ -493,4 +658,214 @@ void testRemoveParticleGroup() {
     std::printf("  a new soft ball afterwards: %zu particles, lowest at y %.3f (floor 0)\n", s.softBodies()[size_t(body)].particles.size(),
                 lowest);
     CHECK(allFinite(s) && lowest > -0.001f && lowest < 0.05f, "the new soft ball must fall to the floor (lowest %f)", lowest);
+}
+
+// ------------------------------------------------------------------------------------------------
+//  Soft bodies against each other
+// ------------------------------------------------------------------------------------------------
+
+namespace {
+
+// The user's scene, as the editor saves it: six soft cylinders 0.3 m wide and tall, stacked on a
+// rigid floor with 2 mm between them.
+std::string softBarrelScene() {
+    std::string s = "world gravity 0 -9.81 0 size 4 4 4 gas 0 magneticGas 0\n"
+                    "entity \"Пол\"\n  object id 1 visible 1 locked 1\n"
+                    "  shape plane size 3 0.02 3 position 0 0.01 0 rotation 0 0 0 color 0.6 0.62 0.66\n"
+                    "  rigid density 500 friction 0.5 restitution 0.2 fixed 1 velocity 0 0 0 spin 0 0 0\nend\n";
+    for (int k = 0; k < 6; ++k) {
+        char line[256];
+        std::snprintf(line, sizeof line,
+                      "entity \"Бочка %d\"\n  object id %d visible 1 locked 0\n"
+                      "  shape cylinder size 0.3 0.3 0.3 position 0 %.4f 0 rotation 0 0 0 color 0.5 0.5 0.5\n"
+                      "  soft density 500 stiffness 0.5\nend\n",
+                      k + 1, k + 2, 0.17f + 0.302f * float(k));
+        s += line;
+    }
+    return s;
+}
+
+// The centre of mass of a soft body's particles.
+Vector3 softCentre(const ParticleSystem& s, const SoftBody& b) {
+    Vector3 c(0.0f);
+    for (int i : b.particles) c += s.positions()[size_t(i)];
+    return c / float(b.particles.size());
+}
+
+// How deep particles of DIFFERENT soft bodies sit in each other, in particle spacings d0: the
+// largest d0 - |xi - xj| over all such pairs (0: no two touch closer than their diameter), and how
+// many pairs overlap by more than `deeper` spacings.
+struct SoftOverlap {
+    float deepest = 0;
+    int pairs = 0;
+};
+SoftOverlap softOverlap(const ParticleSystem& s, float deeper) {
+    std::vector<int> bodyOf(s.size(), -1);
+    for (size_t b = 0; b < s.softBodies().size(); ++b)
+        for (int i : s.softBodies()[b].particles) bodyOf[size_t(i)] = int(b);
+    const float d0 = s.spacing();
+    SoftOverlap o;
+    const auto& x = s.positions();
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (bodyOf[i] < 0) continue;
+        for (size_t j = i + 1; j < x.size(); ++j) {
+            if (bodyOf[j] < 0 || bodyOf[j] == bodyOf[i]) continue;
+            const float d2 = length2(x[i] - x[j]);
+            if (d2 >= d0 * d0) continue;
+            const float depth = (d0 - std::sqrt(d2)) / d0;
+            o.deepest = std::max(o.deepest, depth);
+            o.pairs += depth > deeper;
+        }
+    }
+    return o;
+}
+
+// While the barrels stand one on the other (every centre within 1 cm of the bottom one's axis):
+// how far neighbours cross [m] over the middle of their faces (within 8 cm of the axis) - the drawn
+// skins (`skin`: top of each barrel's skin against the bottom of the next one's) and the particle
+// clouds (`particles`: top particle of each against the bottom particle of the next, plus one
+// spacing, so 0 = the layers just touch). Negative: a gap. False when the stack no longer stands.
+bool stackCrossing(const ParticleSystem& s, float& skin, float& particles) {
+    const auto& bodies = s.softBodies();
+    const Vector3 axis = softCentre(s, bodies[0]);
+    for (const SoftBody& b : bodies) {
+        const Vector3 c = softCentre(s, b);
+        if (sqr(c.x - axis.x) + sqr(c.z - axis.z) > sqr(0.01f)) return false;
+    }
+    std::vector<float> top(bodies.size(), -kInf), bottom(bodies.size(), kInf);
+    std::vector<Vector3> surface;
+    for (size_t b = 0; b < bodies.size(); ++b) {
+        s.softBodySurface(b, surface);
+        for (const Vector3& v : surface) {
+            if (sqr(v.x - axis.x) + sqr(v.z - axis.z) > sqr(0.08f)) continue;
+            top[b] = std::max(top[b], v.y);
+            bottom[b] = std::min(bottom[b], v.y);
+        }
+    }
+    skin = particles = -kInf;
+    for (size_t b = 0; b + 1 < bodies.size(); ++b) skin = std::max(skin, top[b] - bottom[b + 1]);
+    for (size_t b = 0; b + 1 < bodies.size(); ++b) {
+        float hi = -kInf, lo = kInf;
+        for (int i : bodies[b].particles) {
+            const Vector3& x = s.positions()[size_t(i)];
+            if (sqr(x.x - axis.x) + sqr(x.z - axis.z) <= sqr(0.08f)) hi = std::max(hi, x.y);
+        }
+        for (int i : bodies[b + 1].particles) {
+            const Vector3& x = s.positions()[size_t(i)];
+            if (sqr(x.x - axis.x) + sqr(x.z - axis.z) <= sqr(0.08f)) lo = std::min(lo, x.y);
+        }
+        particles = std::max(particles, hi - lo + s.spacing());
+    }
+    return true;
+}
+
+} // namespace
+
+// Six soft barrels stacked on a rigid floor (the scene a user built): they may squash, bounce and
+// topple - a column of six soft barrels on a narrow base is unstable - but two barrels must never
+// sink into each other, and never stay stuck. Before FleX's stiff-stack mass scaling
+// (ParticleParams::stackMassScaling) they did: within half a second particles of neighbouring
+// barrels overlapped by 0.87 d0, the barrels merged into one sausage and stayed stuck.
+void testSoftStackNoOverlap() {
+    SceneGraph g;
+    std::string error;
+    CHECK(g.load(softBarrelScene(), error), "the barrel scene does not load: %s", error.c_str());
+    Simulation sim;
+    sim.load(std::make_unique<GraphScene>(g));
+    const float d0 = sim.particles.spacing();
+    std::vector<float> start;
+    for (const SoftBody& b : sim.particles.softBodies()) start.push_back(softCentre(sim.particles, b).y);
+    float stacked = 0, anyTime = 0, skin = -kInf, layers = -kInf, rise = 0;
+    int stuckPairs = 0, straightFrames = 0;
+    for (int frame = 1; frame <= 180; ++frame) {
+        sim.stepFrame();
+        for (size_t b = 0; b < start.size(); ++b)
+            rise = std::max(rise, softCentre(sim.particles, sim.particles.softBodies()[b]).y - start[b]);
+        if (frame % 5 != 0) continue;
+        const SoftOverlap o = softOverlap(sim.particles, 0.05f);
+        float skinCross, layerCross;
+        if (stackCrossing(sim.particles, skinCross, layerCross)) {
+            stacked = std::max(stacked, o.deepest);
+            skin = std::max(skin, skinCross / d0);
+            layers = std::max(layers, layerCross / d0);
+            ++straightFrames;
+        }
+        anyTime = std::max(anyTime, o.deepest);
+        if (frame > 150) stuckPairs = std::max(stuckPairs, o.pairs);
+    }
+    std::printf("  six soft barrels: deepest overlap of two barrels %.2f d0 while stacked (%d checks), %.2f d0 at any time; "
+                "particle layers cross by %.2f d0 and skins by %.2f d0 while stacked; after 2.5 s %d pairs deeper than 0.05 d0; highest rise of a barrel %.0f mm\n",
+                stacked, straightFrames, anyTime, layers, skin, stuckPairs, 1000 * rise);
+    // Limits, measured and explained (docs/03, "Мягкие тела друг на друге"): pairs of particles
+    // of two barrels overlap by 0.10 d0 while the stack stands and 0.17 d0 in the blows of its
+    // fall (the iterations' residual under 53 kg); the squashed faces spread and the neighbour's
+    // bottom layer settles into the widened gaps by 1.4 d0, the skin following it (1.1 d0) - it
+    // was 10 d0, the barrels merged, before the mass scaling. A rise of more than 5 cm would be
+    // energy made by the scaling (k = 1.5 lifted a barrel 0.4 m, k = 2 by 1.1 m).
+    CHECK(straightFrames >= 3, "the stack fell before it could be measured (%d checks)", straightFrames);
+    CHECK(stacked < 0.15f && anyTime < 0.25f, "barrels sink into each other: %.2f d0 stacked, %.2f d0 falling", stacked, anyTime);
+    CHECK(layers < 2.0f && skin < 2.0f, "the faces nest too deep: layers %.2f d0, skins %.2f d0", layers, skin);
+    CHECK(stuckPairs == 0, "%d pairs of particles stay stuck in another barrel", stuckPairs);
+    CHECK(rise < 0.05f, "a barrel rose %.0f mm above its start: energy from nowhere", 1000 * rise);
+}
+
+// Two soft cubes thrown at each other in weightless space bounce apart - not a pair of lattices
+// that slid into each other and locked - and a rigid box resting on a soft cube stays on top of it.
+void testSoftPressedApartAndBox() {
+    const float dt = 1.0f / 180.0f;
+    {
+        ParticleSystem s;
+        s.params.gravity = Vector3(0.0f);
+        s.reset(AABB({-1, -1, -1}, {1, 1, 1}));
+        TriMesh a = primitives::box(Vector3(0.12f)), b = primitives::box(Vector3(0.12f));
+        a.translate({-0.12f, 0, 0});
+        b.translate({0.12f, 0, 0});
+        s.addSoftBody(a, 400.0f, 0.3f, Vector3(1), {1.0f, 0, 0});
+        s.addSoftBody(b, 400.0f, 0.3f, Vector3(1), {-1.0f, 0, 0});
+        float deepest = 0;
+        for (int k = 0; k < 180; ++k) {
+            s.step(dt);
+            if (k % 10 == 0) deepest = std::max(deepest, softOverlap(s, 0.05f).deepest);
+        }
+        const Vector3 ca = softCentre(s, s.softBodies()[0]), cb = softCentre(s, s.softBodies()[1]);
+        Vector3 va(0.0f), vb(0.0f);
+        for (int i : s.softBodies()[0].particles) va += s.velocities()[size_t(i)];
+        for (int i : s.softBodies()[1].particles) vb += s.velocities()[size_t(i)];
+        va /= float(s.softBodies()[0].particles.size());
+        vb /= float(s.softBodies()[1].particles.size());
+        const SoftOverlap end = softOverlap(s, 0.05f);
+        std::printf("  two soft cubes thrown together at 2 m/s: deepest overlap %.2f d0, after 1 s centres %.3f m apart (size 0.120), "
+                    "separating at %.2f m/s, %d pairs still deeper than 0.05 d0\n",
+                    deepest, cb.x - ca.x, vb.x - va.x, end.pairs);
+        CHECK(deepest < 0.1f && end.pairs == 0, "the cubes sank into each other (%.2f d0, %d pairs left)", deepest, end.pairs);
+        CHECK(cb.x - ca.x > 0.12f && vb.x - va.x > 0.1f, "the cubes did not bounce apart (%.3f m apart, %.2f m/s)", cb.x - ca.x, vb.x - va.x);
+    }
+    {
+        ParticleSystem s;
+        RigidWorld w;
+        const AABB domain({-0.5f, 0, -0.5f}, {0.5f, 1, 0.5f});
+        w.setDomain(domain);
+        s.setRigidWorld(&w);
+        s.reset(domain);
+        TriMesh jelly = primitives::box(Vector3(0.16f));
+        jelly.translate({0, 0.08f, 0});
+        s.addSoftBody(jelly, 400.0f, 0.3f, Vector3(1));
+        const int box = w.addBox({0, 0.22f, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
+        for (int k = 0; k < 360; ++k) {
+            w.step(dt);
+            s.step(dt);
+        }
+        float top = -kInf; // the jelly's surface under the box
+        for (int i : s.softBodies()[0].particles) {
+            const Vector3& x = s.positions()[size_t(i)];
+            if (std::fabs(x.x - w.bodies()[size_t(box)].pos.x) < 0.04f && std::fabs(x.z - w.bodies()[size_t(box)].pos.z) < 0.04f &&
+                x.y < w.bodies()[size_t(box)].pos.y)
+                top = std::max(top, x.y);
+        }
+        const float gap = (w.bodies()[size_t(box)].pos.y - 0.05f) - (top + s.params.particleRadius);
+        std::printf("  rigid box on a soft cube after 2 s: box bottom %.1f mm above the jelly's surface, box at y %.3f m\n",
+                    1000 * gap, w.bodies()[size_t(box)].pos.y);
+        // The box rests on the particles' surface (their centres + one radius) to within half a radius.
+        CHECK(std::isfinite(gap) && gap > -0.5f * s.params.particleRadius && gap < 0.01f, "the box is not resting on the jelly (%.1f mm)", 1000 * gap);
+    }
 }

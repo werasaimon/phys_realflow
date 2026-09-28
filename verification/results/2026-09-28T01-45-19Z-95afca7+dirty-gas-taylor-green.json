@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T01:44:34Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 45.4908378,
+  "cases": [
+    {"id": "gas-taylor-green", "category": "code-verification", "status": "open", "split": "tuning", "value": 2.268312054, "u_num": 0.06019172816, "u_input": 0, "runs": 1, "spread": 0, "reference": 2, "u_ref": 0, "E": 0.2683120542, "u_val": 0.06019172816, "z": 4.457623371, "order": 2.268312054, "order_theory": 2, "verdict": "PASS", "seconds": 45.4905397, "unit": "", "h_label": "dx, м", "convergence": [[0.0625, 0.8117760085, 0.009092708943], [0.03125, 0.818776202, 0.002092515394], [0.015625, 0.8204173513, 0.0004513661333], [0.0078125, 0.8207884314, 8.02860258e-05]], "detail": "схема: перенос с отражением (advectionReflection); A(1 с)/A(0): 0.8118 (16 ячеек) … 0.8208 (128 ячеек), точное exp(-2νπ²t) = 0.8209, ν = 0.01"}
+  ]
+}

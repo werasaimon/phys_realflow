@@ -45,6 +45,7 @@ int main() {
     run("tall stack (10 boxes)", testTallStack);
     run("stack of 100 boxes dropped from 1 cm", testStack100);
     run("stack of 200 boxes dropped from 1 cm", testStack200);
+    run("rigid perf: 1000 cubes fall", testRigidPerfThousandCubes);
     run("ray cast + mouse joint", testRaycastGrab);
     run("joints: ball, hinge+motor, slider, fixed, distance", testJoints);
     run("continuous collision (GJK conservative advancement)", testCcd);
@@ -59,8 +60,10 @@ int main() {
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
-    // TODO(cloth): the exact-line thread solver (no false tears) is parked in C:/Users/PC/rf-parked
-    // until it is fast enough; its two tests come back with it.
+    run("soft bodies: six barrels stacked do not sink into each other", testSoftStackNoOverlap);
+    run("soft bodies: two thrown together bounce apart, a box rests on a jelly", testSoftPressedApartAndBox);
+    run("cloth: a sheet swinging on its pinned edge loses no thread", testClothSwingNoFalseTears);
+    run("cloth: threads carry the static load and tear at their strength", testClothTearsAtStrength);
     run("grid uniform flow", testGridUniform);
     run("grid sphere drag", testGridSphere);
     run("surface loads per triangle (Cp, Cf, forces)", testSurfaceLoads);
@@ -78,6 +81,7 @@ int main() {
     run("light body in a wave (no kicks, floats)", testLightBodyInWater);
     run("MHD: resistive decay, Alfven wave, div B = 0", testMagneticField);
     run("plasma wind vs magnet (magnetopause)", testMagnetosphere);
+    run("MHD: an Alfvénic state v = b is an exact nonlinear solution (Elsässer)", testAlfvenicState);
     // TODO(tokamak): the fields and the current are right; the kink grows at half the ideal
     // rate and the test's thresholds are not met yet - back on the list once it is finished.
     if (std::getenv("RF_TEST")) run("tokamak: coil and plasma fields, kink below q = 1", testTokamak);
@@ -95,6 +99,7 @@ int main() {
     run("Newton's cradle on the floor: the hit passes down the row", testNewtonCradle);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("gas: multigrid pressure matches PCG and converges in few iterations", testMultigridPressure);
+    run("gas: advection-reflection keeps the inviscid Taylor-Green energy", testAdvectionReflection);
     // Minutes of timing: only on request (RF_TEST="benchmark: gas pressure").
     if (const char* only = std::getenv("RF_TEST"); only && std::strstr(only, "benchmark: gas pressure"))
         run("benchmark: gas pressure, Jacobi PCG vs multigrid PCG, ms per frame", testPressureBenchmark);
@@ -106,6 +111,8 @@ int main() {
     run("rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts", testCapsuleShape);
     run("rigid: restitution 0 - a dropped body stops at the touch", testDeadLanding);
     run("rigid: a cube dropped flat lands without turning or sliding", testFlatLanding);
+    run("rigid: a barrel touching a wide floor gets the floor's normal and its true depth", testBarrelTouchesFloor);
+    run("rigid: a pile of 50 barrels settles, stands still and sleeps", testBarrelPileSettles);
     run("particles: remove one group (soft body, liquid)", testRemoveParticleGroup);
     // relativity: geodesics in Kerr, light bending, the shadow of a black hole
     run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);
@@ -118,10 +125,16 @@ int main() {
     run("curvature: Schwarzschild, Kerr, Reissner-Nordstrom (Christoffels, Ricci, Kretschmann)", testCurvatureBlackHoles);
     run("curvature: de Sitter, Friedmann, a wormhole's exotic matter", testCurvatureCosmology);
     run("curvature: tides of a static observer, geodesics with Gamma vs Hamilton", testTidesAndGammaGeodesic);
+    run("symplectic geodesics: the exact Kerr gradient matches the metric", testKerrHamiltonianGradient);
+    run("symplectic geodesics: energy bounded over thousands of orbits, RK4 drifts", testSymplecticLongOrbits);
+    run("symplectic geodesics: order 2 (midpoint, Tao-2) and 4 (Tao-4, RK4)", testSymplecticOrder);
+    run("symplectic geodesics: forward then back returns to the start", testSymplecticReversibility);
     run("scene graph: save -> load -> save gives the same text", testSceneGraphRoundTrip);
     run("magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998)", testMagnetForce);
     run("magnets: two free magnets pull together, momentum conserved", testMagnetsAttract);
     run("scene graph: every role and shape builds and runs", testGraphSceneBuilds);
+    run("scene graph: no invisible walls (a 28 m column in a 3 m room, a ball off the floor)", testGraphNoInvisibleWalls);
+    run("scene graph: soft bodies inside each other are pushed apart, not thrown", testGraphSoftOverlapNoFlight);
     run("scene graph: a plane made cloth hangs from its pinned edge", testGraphCloth);
     run("scene graph: a smoke emitter on a thrown box leaves a trail", testGraphEmitterFollows);
     run("scene graph: a flammable curtain over a hot emitter catches fire", testGraphFlammableCloth);
@@ -148,11 +161,22 @@ int main() {
     run("debug layers: gas slice (grid, u, -grad p / rho, div u, curl u) and field lines B", testDebugGasLayers);
     run("debug layers: a layer stops at its cap with a label", testDebugLayerCap);
     run("memory: allocations per frame of every scene", testAllocationsPerFrame);
+    run("profiler: the stage timers add up to the whole step, none inside another", testTimersCoverTheStep);
     run("action: friction takes mu m g per metre slid", testActionFriction);
     run("action: a damped pendulum loses the damping's work, the joint none", testActionDampedPendulum);
     run("action: viscous dissipation 2 nu |S|^2 of a Taylor-Green vortex", testActionViscousBalance);
     run("action: magnetic energy turns into Joule heat J^2 / sigma", testActionJouleBalance);
     run("action: a free spinning box keeps its energy and L (Noether)", testActionFreeRotation);
+    // the channels of the charts (scene/Channels.h), each read by a law of nature
+    run("channels: free fall keeps energy (up to the integrator) and gains m g t of momentum", testChannelsFreeFall);
+    run("channels: an elastic collision keeps momentum and energy; the pair's centre moves on", testChannelsCollision);
+    run("channels: friction takes mu m g per metre, read from the slab's own channels", testChannelsFriction);
+    run("channels: Newton's third law - the ground feels the stack, each box its weight", testChannelsStackForces);
+    run("channels: the gas energy of a Taylor-Green vortex decays as exp(-4 nu pi^2 t)", testChannelsTaylorGreen);
+    run("channels: a probe line across a channel reads Poiseuille's parabola", testChannelsPoiseuilleProbe);
+    run("channels: a probe line down a heavy gas reads p = rho g h", testChannelsHydrostaticProbe);
+    run("channels: nothing asked costs nothing; measuring changes no bit; same bits on any threads", testChannelsCostAndInnocence);
+    run("channels: every name card has an id, a unit and a name", testChannelsCatalog);
     // the book "Язык природы" (docs/math/): each picture of the book is one of these runs
     run("mathbook: float and double - what survives a long sum and a small difference", testMathBookRounding);
     run("mathbook: vectors - a charge circles in a field, a push off centre spins a body", testMathBookVectors);

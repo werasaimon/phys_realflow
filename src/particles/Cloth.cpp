@@ -1,11 +1,15 @@
-// Cloth as a grid of particles with distance constraints (XPBD): stretching along warp and weft,
-// bending, tethers, tearing along threads and seams when a thread is overstretched, and burning.
-// The material and the data layout are in Cloth.h.
+// Cloth as a grid of particles with distance constraints (XPBD, Macklin, Mueller, Chentanez 2016):
+// the threads along warp and weft - each solved exactly as one chain (Servin & Lacoursiere 2008),
+// so that their tension is the real one - shear and bending links, tethers (Kim, Chentanez,
+// Mueller 2012), tearing along threads and seams when a thread is loaded beyond its strength, and
+// burning (Arrhenius pyrolysis, Antal & Varhegyi 1995). The material, its sources and the data
+// layout are in Cloth.h; the recipe for one step is in ParticleSystem::stepClothsInSmallSteps.
 #include "particles/Cloth.h"
 
 #include "core/Parallel.h"
 
 #include <algorithm>
+#include <cmath>
 #include <queue>
 
 namespace rf {
@@ -16,12 +20,54 @@ static uint64_t pairKey(int a, int b) {
 
 static bool contains(const std::vector<int>& v, int x) { return std::find(v.begin(), v.end(), x) != v.end(); }
 
+// The thread lines: every row's warp constraints (x = 0 .. w-2) and every column's weft
+// constraints (y = 0 .. h-2), in order along the thread, so constraint k ends where k + 1 starts.
+static void buildThreadLines(Cloth& cloth) {
+    const int w = cloth.width, h = cloth.height;
+    cloth.threadLines.clear();
+    cloth.lineConstraints.clear();
+    auto link = [&](int xa, int ya, int xb, int yb) {
+        cloth.lineConstraints.push_back(cloth.constraintIndex.at(pairKey(cloth.particle(xa, ya), cloth.particle(xb, yb))));
+    };
+    for (int y = 0; y < h; ++y) { // warp: row y
+        cloth.threadLines.push_back({int(cloth.lineConstraints.size()), w - 1});
+        for (int x = 0; x + 1 < w; ++x) link(x, y, x + 1, y);
+    }
+    cloth.weftLinesStart = int(cloth.threadLines.size());
+    for (int x = 0; x < w; ++x) { // weft: column x
+        cloth.threadLines.push_back({int(cloth.lineConstraints.size()), h - 1});
+        for (int y = 0; y + 1 < h; ++y) link(x, y, x, y + 1);
+    }
+    cloth.threadRows.assign(cloth.lineConstraints.size(), ThreadRow());
+}
+
+// A thread is a strip of the fabric as wide as the share b it stands for and as long as its link
+// l0, so it is a spring of stiffness k = E t b / l0 (Hooke for a strip; tensileStiffness is E t,
+// the fabric's tension per unit width per unit strain, N/m) and compliance 1 / k = l0 / (E t b).
+// The rows together are then exactly as wide as the sheet, whatever the particle spacing. (With
+// k = E t, i.e. every thread one spacing wide, a strip 4 spacings wide had 5 rows: 25 % too stiff,
+// and the elastic catenary of the verification sagged too little.)
+static void setThreadCompliances(Cloth& cloth) {
+    const float Et = cloth.material.tensileStiffness;
+    for (DistanceConstraint& c : cloth.constraints) {
+        if (c.kind != DistanceConstraint::Warp && c.kind != DistanceConstraint::Weft) continue;
+        c.compliance = Et > 0 ? c.restLength / (Et * threadWidth(cloth, c)) : 0.0f;
+    }
+}
+
+float threadWidth(const Cloth& cloth, const DistanceConstraint& c) {
+    if (c.kind == DistanceConstraint::Warp) return cloth.warpWidth;
+    if (c.kind == DistanceConstraint::Weft) return cloth.weftWidth;
+    return cloth.spacing;
+}
+
 void buildClothConstraints(Cloth& cloth, const std::vector<Vector3>& rest) {
     const int w = cloth.width, h = cloth.height, first = cloth.firstParticle;
     const ClothMaterial& m = cloth.material;
-    const float s = cloth.spacing;
-    // A thread between neighbours stands for a strip of width s and length s: spring k = stiffness.
-    const float threadCompliance = m.tensileStiffness > 0 ? 1.0f / m.tensileStiffness : 0.0f;
+    // Every row (column) stands for the same share of the sheet, as every particle does of its area.
+    cloth.warpWidth = length(rest[size_t(w) * (h - 1)] - rest[0]) / float(h);
+    cloth.weftWidth = length(rest[size_t(w) - 1] - rest[0]) / float(w);
+    const float threadCompliance = 0; // set per thread from its width (setThreadCompliances)
     const float shearCompliance = m.shearStiffness > 0 ? 1.0f / m.shearStiffness : 0.0f;
     // Colour of every constraint type / position so that equal colours never share a particle:
     // threads and shear alternate every other column (row), bending every fourth.
@@ -42,8 +88,8 @@ void buildClothConstraints(Cloth& cloth, const std::vector<Vector3>& rest) {
     };
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x) {
-            float warp = m.strengthWarp * s * (contains(m.seamColumns, x) ? m.seamStrength : 1.0f);
-            float weft = m.strengthWeft * s * (contains(m.seamRows, y) ? m.seamStrength : 1.0f);
+            float warp = m.strengthWarp * cloth.warpWidth * (contains(m.seamColumns, x) ? m.seamStrength : 1.0f);
+            float weft = m.strengthWeft * cloth.weftWidth * (contains(m.seamRows, y) ? m.seamStrength : 1.0f);
             add(0 + x % 2, DistanceConstraint::Warp, x, y, x + 1, y, threadCompliance, warp);
             add(2 + y % 2, DistanceConstraint::Weft, x, y, x, y + 1, threadCompliance, weft);
             add(4 + x % 2, DistanceConstraint::Shear, x, y, x + 1, y + 1, shearCompliance, 0);
@@ -57,10 +103,12 @@ void buildClothConstraints(Cloth& cloth, const std::vector<Vector3>& rest) {
         cloth.constraints.insert(cloth.constraints.end(), batch.begin(), batch.end());
         cloth.batchStart.push_back(int(cloth.constraints.size()));
     }
+    setThreadCompliances(cloth);
     cloth.rest = rest;
     cloth.constraintIndex.clear();
     for (int k = 0; k < int(cloth.constraints.size()); ++k)
         cloth.constraintIndex[pairKey(cloth.constraints[k].a, cloth.constraints[k].b)] = k;
+    buildThreadLines(cloth);
     cloth.cellIntact.assign(size_t(w - 1) * (h - 1), 1);
     cloth.warpBroken.assign(size_t(w - 1) * h, 0);
     cloth.weftBroken.assign(size_t(w) * (h - 1), 0);
@@ -172,27 +220,148 @@ void buildTethers(Cloth& cloth, const std::vector<float>& invMass) {
     measureTethers(cloth);
 }
 
+// One distance constraint, one XPBD projection (Macklin, Mueller, Chentanez 2016, eq. 18 for a
+// single constraint). With C = |p_a - p_b| - l0 its violation, n its direction and
+// alpha~ = compliance / dt^2 its softness in position units,
+//     dlambda = (-C - alpha~ lambda) / (w_a + w_b + alpha~),
+//     p_a += w_a n dlambda,   p_b -= w_b n dlambda,
+// so a stiff link (alpha~ -> 0) is pulled back to its length and a soft one only part of the way;
+// lambda / dt^2 is the force it carries. Used for shear and bending, and for the threads in the
+// contact passes (ThreadSolve::Projection).
 static void solveConstraint(DistanceConstraint& c, std::vector<Vector3>& p, const std::vector<float>& invMass, float invDt2) {
     const float wa = invMass[c.a], wb = invMass[c.b];
     if (c.broken || wa + wb == 0) return;
-    Vector3 d = p[c.a] - p[c.b];
-    float len = length(d);
+    const Vector3 d = p[c.a] - p[c.b];
+    const float len = length(d);
     if (len < 1e-9f) return;
-    Vector3 n = d / len;
-    float C = len - c.restLength;
-    float alpha = c.compliance * invDt2;
-    float dl = (-C - alpha * c.lambda) / (wa + wb + alpha);
-    c.lambda += dl;
-    p[c.a] += n * (wa * dl);
-    p[c.b] -= n * (wb * dl);
+    const Vector3 n = d / len;
+    const float violation = len - c.restLength;
+    const float alpha = c.compliance * invDt2;
+    const float dLambda = (-violation - alpha * c.lambda) / (wa + wb + alpha);
+    c.lambda += dLambda;
+    p[c.a] += n * (wa * dLambda);
+    p[c.b] -= n * (wb * dLambda);
 }
 
-void solveCloth(Cloth& cloth, std::vector<Vector3>& p, const std::vector<float>& invMass, float dt) {
+// ---------------------------------------------------------------------------------------------
+// A thread solved exactly, as one chain
+//
+// A thread of the weave is a chain: link k runs from particle a_k to b_k, and b_k is a_{k+1}.
+// Writing XPBD's equation for all m links of the line at once (Macklin et al. 2016, eq. 18),
+//     (J W J^T + alpha~) dlambda = -C - alpha~ lambda,        W the inverse masses,
+// only neighbouring links share a particle, so the matrix is tridiagonal:
+//     diagonal       A_kk     = w_a(k) + w_b(k) + alpha~_k
+//     off-diagonal   A_k,k+1  = -w_b(k) n_k . n_{k+1}         (their shared particle)
+//     right side     r_k      = -C_k - alpha~_k lambda_k
+// and one Thomas sweep - eliminate downwards, substitute upwards - solves it exactly in O(m).
+// This is the direct solve of cables and rods of Servin & Lacoursiere 2008 ("Rigid body cable for
+// virtual environments", IEEE TVCG 14(4)) and Deul, Kugelstadt, Weiler, Bender 2018 ("Direct
+// position-based solver for stiff rods", CGF 37(6)).
+//
+// Why not one Gauss-Seidel pass like the rest: a pass carries a correction one or two links
+// along, so in a thread of n links hanging from a pin the top link stays stretched by about the
+// gravity drop of everything below it per step, n g dt^2. For a 1 m sheet that was 3-8 % strain
+// instead of the 0.03 % its weight gives - read as a tension a hundred times the real one, which
+// tore sheets that were only swinging.
+// ---------------------------------------------------------------------------------------------
+
+// An inextensible thread (compliance 0) is solved as a very stiff one, 1e7 N/m: a straight line
+// of threads pinned at both ends cannot change its length by moving along itself, so with no
+// compliance at all its system would be singular (and its tension undefined).
+static constexpr float kStiffestThread = 1e-7f; // m/N
+
+// Step 1 for one link: its row of the system - direction n, diagonal A_kk and right side r_k. A
+// broken or immovable link gets the row "dlambda = 0" (no direction, unit diagonal), so the chain
+// simply falls apart into independent pieces there.
+static void setThreadRow(const DistanceConstraint& c, const std::vector<Vector3>& p, const std::vector<float>& invMass,
+                         float invDt2, ThreadRow& r) {
+    const Vector3 d = p[c.a] - p[c.b];
+    const float len = length(d), w = invMass[c.a] + invMass[c.b];
+    r = ThreadRow{Vector3(0.0f), 1.0, 0.0, 0.0};
+    if (c.broken || w == 0 || len < 1e-9f) return;
+    const double alpha = double(std::max(c.compliance, kStiffestThread)) * invDt2;
+    const double violation = double(len) - c.restLength;
+    r = ThreadRow{d / len, w + alpha, 0.0, -violation - alpha * c.lambda};
+}
+
+// Step 3: the Thomas algorithm for the symmetric tridiagonal system of the rows (Press et al.,
+// "Numerical Recipes", 3rd ed., sec. 2.4). Eliminate downwards: row k loses its lower
+// neighbour, f = A_k,k-1 / A_k-1,k-1; then substitute upwards. Each row's rhs ends as its dlambda.
+// The matrix is diagonally dominant (|A_k,k+1| <= w of the shared particle), so no pivoting.
+static void solveTridiagonal(ThreadRow* row, int m) {
+    for (int k = 1; k < m; ++k) {
+        const double f = row[k - 1].upper / row[k - 1].diag;
+        row[k].diag -= f * row[k - 1].upper;
+        row[k].rhs -= f * row[k - 1].rhs;
+    }
+    row[m - 1].rhs /= row[m - 1].diag;
+    for (int k = m - 2; k >= 0; --k) row[k].rhs = (row[k].rhs - row[k].upper * row[k + 1].rhs) / row[k].diag;
+}
+
+// One thread line solved exactly (see the head of this section), in four steps.
+static void solveThreadLine(Cloth& cloth, const ThreadLine& line, std::vector<Vector3>& p, const std::vector<float>& invMass,
+                            float invDt2) {
+    const int* link = cloth.lineConstraints.data() + line.first;
+    ThreadRow* row = cloth.threadRows.data() + line.first;
+    const int m = line.count;
+    // 1) The diagonal and the right side, link by link.
+    for (int k = 0; k < m; ++k) setThreadRow(cloth.constraints[link[k]], p, invMass, invDt2, row[k]);
+    // 2) The coupling of neighbours through the particle they share (b of k is a of k + 1).
+    for (int k = 0; k + 1 < m; ++k)
+        row[k].upper = -double(invMass[cloth.constraints[link[k]].b]) * dot(row[k].n, row[k + 1].n);
+    // 3) Solve: every row's rhs becomes its dlambda.
+    solveTridiagonal(row, m);
+    // 4) Move the particles as solveConstraint does, and keep the tension each link now carries
+    //    (lambda / dt^2) for the next step's length (stableClothStep).
+    for (int k = 0; k < m; ++k) {
+        DistanceConstraint& c = cloth.constraints[link[k]];
+        const float dLambda = float(row[k].rhs);
+        c.lambda += dLambda;
+        c.force = -c.lambda * invDt2;
+        p[c.a] += row[k].n * (invMass[c.a] * dLambda);
+        p[c.b] -= row[k].n * (invMass[c.b] * dLambda);
+    }
+}
+
+// The string limit of Cloth.h: the shortest sqrt(m l / T) over the pulled threads, m the mass of
+// the lighter end (the one the wave throws about most).
+float stableClothStep(const Cloth& cloth, const std::vector<float>& invMass) {
+    float longestStep = kInf;
+    for (const int k : cloth.lineConstraints) {
+        const DistanceConstraint& c = cloth.constraints[size_t(k)];
+        const float lighterInvMass = std::max(invMass[c.a], invMass[c.b]);
+        if (c.broken || c.force <= 0 || lighterInvMass == 0) continue;
+        longestStep = std::min(longestStep, std::sqrt(c.restLength / (lighterInvMass * c.force)));
+    }
+    return longestStep;
+}
+
+// Every thread of the cloth: all warp lines (rows share no particle, so in parallel), then all
+// weft lines - Gauss-Seidel between the two directions, exact along each thread.
+static void solveThreads(Cloth& cloth, std::vector<Vector3>& p, const std::vector<float>& invMass, float invDt2, bool parallel) {
+    const int directions[3] = {0, cloth.weftLinesStart, int(cloth.threadLines.size())};
+    for (int d = 0; d < 2; ++d) {
+        const int begin = directions[d], count = directions[d + 1] - begin;
+        auto solveLine = [&](int k) { solveThreadLine(cloth, cloth.threadLines[size_t(begin + k)], p, invMass, invDt2); };
+        if (parallel) parallelFor(count, solveLine, 4);
+        else
+            for (int k = 0; k < count; ++k) solveLine(k);
+    }
+}
+
+void solveCloth(Cloth& cloth, std::vector<Vector3>& p, const std::vector<float>& invMass, float dt, ThreadSolve threads) {
     const float invDt2 = 1.0f / (dt * dt);
-    if (cloth.constraints.size() < 60000) { // up to ~10k particles one thread beats the batches' sync overhead
-        for (DistanceConstraint& c : cloth.constraints) solveConstraint(c, p, invMass, invDt2);
+    // Up to ~10k particles one thread beats the batches' sync overhead.
+    const bool parallel = cloth.constraints.size() >= 60000;
+    if (threads == ThreadSolve::ExactLines) solveThreads(cloth, p, invMass, invDt2, parallel);
+    // One Gauss-Seidel pass over the batches from `firstBatch` on: shear and bending (batches 4-15),
+    // and the threads too (batches 0-3) when they are only projected.
+    const int firstBatch = threads == ThreadSolve::ExactLines ? 4 : 0;
+    if (!parallel) {
+        for (size_t k = size_t(cloth.batchStart[firstBatch]); k < cloth.constraints.size(); ++k)
+            solveConstraint(cloth.constraints[k], p, invMass, invDt2);
     } else {
-        for (size_t b = 0; b + 1 < cloth.batchStart.size(); ++b) {
+        for (size_t b = size_t(firstBatch); b + 1 < cloth.batchStart.size(); ++b) {
             const int begin = cloth.batchStart[b], count = cloth.batchStart[b + 1] - begin;
             parallelFor(count, [&](int k) { solveConstraint(cloth.constraints[begin + k], p, invMass, invDt2); }, 256);
         }

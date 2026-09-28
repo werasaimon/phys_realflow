@@ -11,6 +11,7 @@
 #include "gas/SurfaceLoads.h"
 #include "rigid/RigidWorld.h"
 #include "particles/ParticleSystem.h"
+#include "scene/Channels.h"
 #include "scene/Scene.h"
 
 #include <memory>
@@ -177,10 +178,13 @@ struct RenderSnapshot {
     // Everything the engine reported to the Probe this frame: every channel by name (values,
     // counters, timers) and the debug drawing. The plots take any channel from here.
     Probe::Snapshot probe;
+    // The physical channels Simulation::channels asked for this frame, each with its unit and name
+    // (scene/Channels.h); the probe lines with their profiles. Empty while nothing is asked.
+    std::vector<Measurement> measurements;
     // Every contact point of the rigid bodies in the last step, for the research panel: filled
     // only while the ContactPoints layer is on (Probe::layerOn), empty otherwise.
     struct ContactInfo {
-        Vector3 position, normal;   // normal: from body A to body B
+        Vector3 position, normal;   // normal: from body B to body A (it pushes A out of B)
         float depth = 0;            // penetration [m]
         float normalImpulse = 0;    // accumulated normal impulse of the point [N s]
         float frictionImpulse = 0;  // friction impulse of the whole contact patch [N s]
@@ -227,6 +231,9 @@ public:
     bool gasPushesBodies = true;
     // Bodies held by the scene (RigidWorld::hold) are released at this time.
     float releaseTime = 0;
+    // What to measure after every frame (scene/Channels.h): the scene, objects, groups, probes in
+    // the fields. Empty (the default): nothing is measured and the frame costs nothing more.
+    ChannelRequests channels;
 
     Simulation();
 
@@ -264,6 +271,8 @@ public:
 
     double time() const { return time_; } // [s], summed in double (a float sum drifts, GasSolver::time)
     uint64_t frame() const { return frame_; }
+    // The measurements of the last frame, as `channels` asked for them.
+    const std::vector<Measurement>& measurements() const { return measurements_; }
     void touchParams() { ++paramsVersion_; }
     void fillSnapshot(RenderSnapshot& s) const;
     const TriMesh& obstacleMesh() const { return *obstacleMesh_; }
@@ -281,6 +290,7 @@ private:
     // them needs it): rigid.params.substeps rigid steps and particles.params.substeps particle
     // steps, in time order. gasDrag: the gas acts on cloth and liquid before each particle step.
     void stepBodiesAndParticles(bool gasDrag);
+    void pushBodiesByGas(); // the gas impulses of the last frame, and Archimedes, on the bodies
     void applyGasOnSoftBodies();
     void applyGasDragOnCloth(float dt);
     void applyGasDragOnLiquid(float dt);
@@ -313,6 +323,8 @@ private:
     void fillContacts(RenderSnapshot& s) const;
     int sliceLayer() const;
     void updateSurfaceLoads();
+    // After a frame: measure what `channels` asks for and report each value to the Probe.
+    void publishChannels();
 
     std::unique_ptr<Scene> scene_;
     SimMode mode_ = SimMode::Fluid;
@@ -328,6 +340,7 @@ private:
     std::vector<Vector3> softGasImpulse_;                  // gas -> soft bodies (their centre of mass)
     float gasForceMax_ = 0;
     SurfaceLoads surfaceLoads_;
+    std::vector<Measurement> measurements_;   // publishChannels: the last frame's measurements
     mutable uint64_t researchDrawnFrame_ = 0; // Probe::frameIndex() when drawResearchLayers() last drew
 };
 

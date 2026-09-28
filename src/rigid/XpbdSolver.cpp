@@ -8,6 +8,8 @@
 
 #include "rigid/RigidWorld.h"
 
+#include "core/Probe.h"
+
 #include <algorithm>
 
 namespace rf {
@@ -163,8 +165,15 @@ void RigidWorld::solveXContactVelocity(XContact& c, float h) {
 // velocity level.
 void RigidWorld::stepXPBD(float h) {
     lastDt_ = h;
-    xpbdDetectContacts(h);
-    xpbdIntegrate(h);
+    {
+        Probe::Timer t("rigid/collide ms");
+        xpbdDetectContacts(h);
+    }
+    {
+        Probe::Timer t("rigid/integrate ms");
+        xpbdIntegrate(h);
+    }
+    Probe::Timer t("rigid/solve ms"); // the rest of the substep: the constraints and the velocities they leave
     // 2) Positions: contacts with static friction.
     for (int it = 0; it < params.positionIterations; ++it) {
         for (XContact& c : xcontacts_) solveXContactPosition(c, h);

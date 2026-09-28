@@ -1,12 +1,15 @@
 // Magnetohydrodynamics: resistive decay against exp(-eta k^2 t), the Alfven period 2L / v_A,
-// div B = 0 to rounding, the magnetopause at the Chapman-Ferraro distance, and the tokamak's
-// fields and kink against the energy principle.
+// div B = 0 to rounding, the magnetopause at the Chapman-Ferraro distance, an Alfvénic state
+// (v = b: the exact nonlinear solution of Elsässer's equations, our stand-in for Orszag-Tang), and
+// the tokamak's fields and kink against the energy principle.
 #include "TestRunner.h"
 #include "Tests.h"
 
 #include "samples/plasma/TokamakScene.h"
 
+#include <cstdio>
 #include <cstdlib>
+#include <string>
 
 void testMagneticField() {
     // The walls are perfect conductors: the magnetic flux through them is frozen. The analytic
@@ -173,6 +176,138 @@ void testMagnetosphere() {
     CHECK(standoff > 0.27f && standoff < 0.40f, "magnetopause distance %f", standoff);
     CHECK(flank.z > 0.2f, "the plasma must be deflected around the magnet (%f)", flank.z);
     CHECK(g.magnetic.maxDivergence() < 1e-5f && std::isfinite(g.magnetic.energy()), "field broken");
+}
+
+// ------------------------------------------------------------------------------------------------
+// An Alfvénic state: a tangled flow that its own magnetic field keeps from tangling further.
+//
+// In Alfvén units, b = B / sqrt(mu0 rho), incompressible MHD written with Elsässer's variables
+// z± = v ± b (Elsasser 1950, "The hydromagnetic equations", Phys. Rev. 79, 183) reads
+//     dz±/dt + (z∓ . grad) z± = -grad P + (nu + eta)/2 lap z± + (nu - eta)/2 lap z∓ :
+// each Elsässer field is carried only by the OTHER one. So where v = b everywhere, z- = 0 carries
+// nothing and every nonlinear term cancels, for any flow however tangled: an exact nonlinear
+// solution (Dobrowolny, Mangeney & Veltri 1980, Phys. Rev. Lett. 45, 144). With nu = eta only the
+// diffusion is left, and every eigenmode of the Laplacian decays on its own:
+//     A_k(t) = A_k(0) exp(-nu k^2 t).
+// The flow: two convection cells of different size in the unit square,
+//     psi = U1/pi sin(pi x) sin(pi y) + U2/(2 pi) sin(2 pi x) sin(2 pi y),   v = (dpsi/dy, -dpsi/dx),
+// and the field is the same flow, B = sqrt(mu0 rho) v. The walls slip and conduct perfectly, and
+// both cells fit them: no normal flow or field, no vorticity and no current on a wall. Without
+// the field the two cells stir each other (their vorticity is not a function of psi), and neither
+// decays as exp(-nu k^2 t); with it, both do, and v stays equal to b.
+// This is the honest stand-in for the Orszag-Tang vortex (docs/06, "Границы"): Orszag-Tang is
+// compressible MHD in a periodic box, and our gas is incompressible between walls.
+namespace {
+
+constexpr double kPiD = 3.14159265358979323846;
+constexpr double kCellSpeed1 = 1.0, kCellSpeed2 = 0.5; // U1, U2 [m/s]
+
+double alfvenicPsi(double x, double y) {
+    return kCellSpeed1 / kPiD * std::sin(kPiD * x) * std::sin(kPiD * y) +
+           kCellSpeed2 / (2 * kPiD) * std::sin(2 * kPiD * x) * std::sin(2 * kPiD * y);
+}
+
+// The unit square, 4 cells thick in z, free-slip conducting walls, viscosity nu and resistivity
+// eta = nu; the two cells as the flow, and (with `field`) the same cells as the magnetic field.
+// Both are the discrete curl of psi on the same faces, so v = b holds on the grid from the start.
+void startAlfvenicState(GasSolver& g, int cells, double nu, bool field) {
+    const double dx = 1.0 / cells, rho = 1.0;
+    g.params.domainSize = {1, 1, float(4 * dx)};
+    g.params.resolutionX = cells;
+    g.params.inflowSpeed = 0;
+    g.params.fluidDensity = float(rho);
+    g.params.kinematicViscosity = float(nu);
+    g.params.smokeRake = false;
+    g.params.wallFriction = false;
+    for (auto& b : g.params.bc) b = BoundaryType::Wall;
+    g.magnetic.enabled = field;
+    g.magnetic.conductivity = float(1.0 / (MagneticField::kMu0 * nu)); // eta = 1 / (mu0 sigma) = nu
+    g.magnetic.numericalDissipation = 0;
+    g.reset({0, 0, 0}, nullptr);
+    // 1. The flow: each face gets the difference of psi across it (the discrete curl).
+    g.setVelocity([dx](const Vector3& p) {
+        return Vector3(float((alfvenicPsi(p.x, p.y + dx / 2) - alfvenicPsi(p.x, p.y - dx / 2)) / dx),
+                       float(-(alfvenicPsi(p.x + dx / 2, p.y) - alfvenicPsi(p.x - dx / 2, p.y)) / dx), 0.0f);
+    });
+    // 2. The field: the curl of A = (0, 0, sqrt(mu0 rho) psi), the same difference on the same faces.
+    const double alfven = std::sqrt(MagneticField::kMu0 * rho);
+    if (field) g.magnetic.addFromPotential([alfven](const Vector3& p) { return Vector3(0, 0, float(alfven * alfvenicPsi(p.x, p.y))); });
+}
+
+// The amplitude of the cell (m, m): the projection of the cell velocities on its shape.
+double alfvenicMode(const GasSolver& g, int m) {
+    const double dx = 1.0 / g.nx(), k = m * kPiD;
+    double num = 0, den = 0;
+    for (int kk = 0; kk < g.nz(); ++kk)
+        for (int j = 0; j < g.ny(); ++j)
+            for (int i = 0; i < g.nx(); ++i) {
+                const double x = (i + 0.5) * dx, y = (j + 0.5) * dx;
+                const double sx = std::sin(k * x) * std::cos(k * y), sy = -std::cos(k * x) * std::sin(k * y);
+                const Vector3 v = g.cellVelocity(i, j, kk);
+                num += v.x * sx + v.y * sy;
+                den += sx * sx + sy * sy;
+            }
+    return num / den;
+}
+
+// |z-| / |z+| = |v - b| / |v + b| over the grid, b = B / sqrt(mu0 rho): 0 for an Alfvénic state.
+double alfvenicImbalance(const GasSolver& g) {
+    const double alfven = std::sqrt(MagneticField::kMu0 * g.params.fluidDensity);
+    double minus = 0, plus = 0;
+    for (int kk = 0; kk < g.nz(); ++kk)
+        for (int j = 0; j < g.ny(); ++j)
+            for (int i = 0; i < g.nx(); ++i) {
+                const Vector3 v = g.cellVelocity(i, j, kk), b = g.magnetic.cellField(i, j, kk) * float(1.0 / alfven);
+                minus += length2(v - b);
+                plus += length2(v + b);
+            }
+    return std::sqrt(minus / plus);
+}
+
+// The solver to time t, in steps of at most a quarter cell of the fastest speed.
+void advanceTo(GasSolver& g, double t) {
+    const double dtMax = 0.25 / (g.nx() * (kCellSpeed1 + kCellSpeed2));
+    while (g.time() < t - 1e-9) g.step(float(std::min(dtMax, t - g.time())));
+}
+
+} // namespace
+
+void testAlfvenicState() {
+    const int cells = 32;
+    const double nu = 0.01, seconds = 1.0, k1 = 2 * kPiD * kPiD, k2 = 8 * kPiD * kPiD; // k^2 of the two cells
+    GasSolver mhd, hydro;
+    startAlfvenicState(mhd, cells, nu, true);
+    startAlfvenicState(hydro, cells, nu, false);
+    const double m1 = alfvenicMode(mhd, 1), m2 = alfvenicMode(mhd, 2), h1 = alfvenicMode(hydro, 1), h2 = alfvenicMode(hydro, 2);
+    const char* dir = std::getenv("RF_PLOT_DIR"); // the curves for tools/plot_mhd.py, only when asked
+    FILE* plot = dir && *dir ? std::fopen((std::string(dir) + "/alfvenic_state.csv").c_str(), "w") : nullptr;
+    if (plot) std::fprintf(plot, "t_s,mhd_11,mhd_22,hydro_11,hydro_22,exact_11,exact_22,imbalance\n");
+    for (int sample = 0; sample <= 20; ++sample) { // both solvers side by side, sampled every 0.05 s
+        const double t = seconds * sample / 20;
+        advanceTo(mhd, t);
+        advanceTo(hydro, t);
+        if (plot)
+            std::fprintf(plot, "%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.3e\n", t, alfvenicMode(mhd, 1) / m1, alfvenicMode(mhd, 2) / m2,
+                         alfvenicMode(hydro, 1) / h1, alfvenicMode(hydro, 2) / h2, std::exp(-nu * k1 * t), std::exp(-nu * k2 * t),
+                         alfvenicImbalance(mhd));
+    }
+    if (plot) std::fclose(plot);
+    const double e1 = std::exp(-nu * k1 * seconds), e2 = std::exp(-nu * k2 * seconds);
+    const double mhdErr = std::max(std::fabs(alfvenicMode(mhd, 1) / m1 / e1 - 1), std::fabs(alfvenicMode(mhd, 2) / m2 / e2 - 1));
+    const double hydroErr = std::max(std::fabs(alfvenicMode(hydro, 1) / h1 / e1 - 1), std::fabs(alfvenicMode(hydro, 2) / h2 / e2 - 1));
+    const double imbalance = alfvenicImbalance(mhd);
+    std::printf("  Alfvénic state, %d cells, nu = eta = %.2f, %.1f s: cells (1,1) / (2,2) kept %.4f / %.4f of their start, exact %.4f / %.4f "
+                "(worst error %.2f %%), |v - b| / |v + b| = %.1e; the same flow without the field: %.4f / %.4f (worst error %.1f %%)\n",
+                cells, nu, seconds, alfvenicMode(mhd, 1) / m1, alfvenicMode(mhd, 2) / m2, e1, e2, 100 * mhdErr, imbalance,
+                alfvenicMode(hydro, 1) / h1, alfvenicMode(hydro, 2) / h2, 100 * hydroErr);
+    // The error left is first order in dx: the induction step adds the stabilising resistivity
+    // |u|^2 h of a centred, forward-stepped advection of B (MagneticField.cpp, computeElectricField),
+    // so the field decays a little faster than the flow. Measured (rf_verify mhd-alfvenic-state):
+    // worst amplitude error 0.069 / 0.036 / 0.018 on 16 / 32 / 64 cells, order 0.96. On 32 cells
+    // the (2,2) cell is 7.7 % low and |v - b| / |v + b| is 2.6e-2; the limits leave room for that.
+    CHECK(mhdErr < 0.12, "an Alfvénic state must decay as exp(-nu k^2 t): worst error %.3f", mhdErr);
+    CHECK(imbalance < 0.05, "v must stay equal to b: |z-| / |z+| = %.3e", imbalance);
+    CHECK(hydroErr > 5 * mhdErr, "without the field the cells must stir each other (%.3f vs %.3f)", hydroErr, mhdErr);
 }
 
 namespace {

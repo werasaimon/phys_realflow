@@ -53,8 +53,11 @@ public:
     static bool sphereCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m);
     static bool capsuleCapsule(const PosedShape& A, const PosedShape& B, ContactManifold& m);
     static bool capsuleConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m);
-    // Manifold from the supporting faces along n (from B to A); false for vertex/edge-face cases.
-    static bool faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts);
+    // Manifold from the supporting faces along n (from B to A), the deepest point kept within
+    // [depthLow, depthHigh] (EPA's bracket of the pair's depth; infinite: none); false for
+    // vertex/edge-face cases.
+    static bool faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, float depthLow, float depthHigh,
+                             std::vector<ContactPoint>& pts);
 
 private:
     static constexpr int kTypes = 6; // Compound is dispatched part by part before the table

@@ -91,7 +91,10 @@ static double taylorGreenDecay(int cells, double nu, double tEnd) {
 static Result runTaylorGreen(const RunOptions& o) {
     Result r;
     r.hLabel = "dx, м";
-    r.theoreticalOrder = 1; // semi-Lagrangian + implicit Euler viscosity, dt ~ dx: first order in time
+    // The order in time of the scheme that runs: 2 for advection-reflection (the implicit midpoint
+    // rule), 1 for the classic projection step (semi-Lagrangian + implicit Euler viscosity, dt ~ dx).
+    const bool reflection = GasParams().advectionReflection;
+    r.theoreticalOrder = reflection ? 2 : 1;
     const double nu = 0.01, tEnd = 1.0, exact = std::exp(-2 * nu * kPiD * kPiD * tEnd);
     const int levels = o.full ? 4 : 3;
     for (int l = 0; l < levels; ++l) {
@@ -100,8 +103,9 @@ static Result runTaylorGreen(const RunOptions& o) {
         r.convergence.push_back({1.0 / cells, ratio, std::fabs(ratio - exact)});
     }
     orderFromStudy(r);
-    r.detail = format("A(1 с)/A(0): %.4f (16 ячеек) … %.4f (%d ячеек), точное exp(-2νπ²t) = %.4f, ν = 0.01",
-                      r.convergence.front().value, r.convergence.back().value, 16 << (levels - 1), exact);
+    r.detail = format("схема: %s; A(1 с)/A(0): %.4f (16 ячеек) … %.4f (%d ячеек), точное exp(-2νπ²t) = %.4f, ν = 0.01",
+                      reflection ? "перенос с отражением (advectionReflection)" : "проекция в конце шага", r.convergence.front().value,
+                      r.convergence.back().value, 16 << (levels - 1), exact);
     return r;
 }
 
@@ -384,16 +388,23 @@ void addGasCases(std::vector<Case>& cases) {
                      {"Roache 2002, MMS; ожидаемый порядок схемы 2", "https://doi.org/10.1115/1.1436090", 2, 0, "analytic",
                       "T = A (2 + cos πx cos πy (1 + sin ωt / 2)) с α(T) ~ T^1.75, источник — из уравнения (Mms.h)"},
                      runManufacturedHeatCase, {0.3, 0.6, false}, false});
+    // The expected order depends on the scheme that runs (a change logged 2026-09-28): the classic
+    // projection step is first order in time (dt ~ dx, so in dx); advection-reflection is the
+    // implicit midpoint rule, second order (Narain, Zehnder & Thomaszewski 2019, sec. 3.1).
+    const bool reflection = GasParams().advectionReflection;
     cases.push_back({"gas-taylor-green", "Вихрь Тейлора–Грина: затухание", "code-verification", "",
-                     {"Taylor & Green 1937: A = e^{−2νk²t}; порядок 1 (полулагранжев шаг + неявная вязкость, dt ~ dx)",
-                      "https://doi.org/10.1098/rspa.1937.0036", 1, 0, "analytic", "полупериод в ящике со скольжением — точное решение"},
+                     {reflection ? "Taylor & Green 1937: A = e^{−2νk²t}; порядок 2 (перенос с отражением — неявная средняя точка, "
+                                   "Narain et al. 2019)"
+                                 : "Taylor & Green 1937: A = e^{−2νk²t}; порядок 1 (проекция в конце шага + неявная вязкость, dt ~ dx)",
+                      "https://doi.org/10.1098/rspa.1937.0036", reflection ? 2.0 : 1.0, 0, "analytic",
+                      "полупериод в ящике со скольжением — точное решение; перенос с отражением (advectionReflection, выключен по умолчанию): порядок 2.268 при ожидаемом 2"},
                      runTaylorGreen, {0.3, 0.6, false}, false});
     cases.push_back({"gas-poiseuille", "Течение Пуазейля между пластинами", "code-verification", "",
-                     {"Пуазейль: u = 6U η(1−η); порядок MAC-схемы 2", "", 2, 0, "analytic", "Re = 2, стенки — ячейки сосуда"},
+                     {"Пуазейль: u = 6U η(1−η); порядок MAC-схемы 2", "", 2, 0, "analytic", "Re = 2, стенки — ячейки сосуда; перенос с отражением (выключен по умолчанию): порядок 1.986"},
                      runPoiseuille, {0.3, 0.6, false}, false});
     cases.push_back({"gas-couette", "Течение Куэтта–Пуазейля: подвижная пластина", "code-verification", "",
                      {"Куэтт–Пуазейль: u = U_w η + 6(U − U_w/2) η(1−η); порядок MAC-схемы 2 (White, Viscous Fluid Flow, §3-2)", "", 2, 0,
-                      "analytic", "верхняя пластина — движущееся тело со скоростью U; чистый Куэтт (линейный) схема передаёт точно"},
+                      "analytic", "верхняя пластина — движущееся тело со скоростью U; чистый Куэтт (линейный) схема передаёт точно; перенос с отражением (выключен по умолчанию): порядок 1.988"},
                      runCouette, {0.3, 0.6, false}, false});
     cases.push_back({"gas-heat-spot", "Остывание пятна тепла: GCI пика", "solution-verification", "grid convergence",
                      {"Точное решение уравнения теплопроводности (ядро)", "", heatSpotExactPeak(), 0, "analytic", "пик в центре через 1 с"},
@@ -401,9 +412,21 @@ void addGasCases(std::vector<Case>& cases) {
     cases.push_back({"gas-advection", "Перенос MacCormack: порядок", "solution-verification", "grid convergence",
                      {"Selle et al. 2008, MacCormack: порядок 2", "https://doi.org/10.1007/s10915-007-9166-4", 2, 0, "analytic", ""},
                      runAdvection, {0.3, 0.6, false}, true});
-    cases.push_back({"gas-cylinder-strouhal", "Цилиндр, Re = 100: число Струхаля", "validation", "benchmark: cylinder vortex street",
-                     {"Williamson 1996, эксперимент (безграничный поток)", "https://doi.org/10.1146/annurev.fl.28.010196.002401", 0.164, 0.002,
-                      "experiment", "u_D — разброс кривой St(Re) ~1 %; у нас загромождение 12.5 % (Sahin & Owens 2004: ~0.17)"},
+    // The reference matches our channel, not an unbounded flow (a change logged 2026-09-28 in
+    // verification/unblinding-log.md). Behr, Hastreiter, Mittal & Tezduyar 1995 computed exactly our
+    // set-up - a uniform inflow, slip (symmetry) lateral walls, Re = 100 - for walls at A = 9 ... 32
+    // radii from the cylinder (their table 4, two formulations). Our walls are 4 D = 8 radii away
+    // (blockage 12.5 %), just below their closest; St is linear in the blockage there, so their two
+    // closest points are extended to it: 0.1735 (space-time) and 0.1761 (velocity-pressure-stress),
+    // mean 0.175. u_D = 0.004: half their spread (0.0013), the extension (~0.002) and their own
+    // discretisation (~0.002), rounded up. Williamson's 0.164 is the unbounded flow of experiment.
+    cases.push_back({"gas-cylinder-strouhal", "Цилиндр, Re = 100, загромождение 12.5 %: число Струхаля", "validation",
+                     "benchmark: cylinder vortex street",
+                     {"Behr, Hastreiter, Mittal, Tezduyar 1995: равномерный приток, скользящие стенки, Re = 100 — продолжение их табл. 4 до "
+                      "загромождения 12.5 %",
+                      "https://doi.org/10.1016/0045-7825(94)00736-7", 0.175, 0.004, "code",
+                      "их A = 9 и 12.5 радиуса: St 0.1711 / 0.1658 и 0.1739 / 0.1690, продолжено до A = 8; безграничный поток "
+                      "(эксперимент Williamson 1996, doi 10.1146/annurev.fl.28.010196.002401): 0.164; перенос с отражением (выключен по умолчанию): 0.1745"},
                      runStrouhal, {0.05, 0.10, true}, true});
 }
 

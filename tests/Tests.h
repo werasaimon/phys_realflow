@@ -5,6 +5,7 @@
 // core utilities: the probe and the allocation census (CoreTests.cpp)
 void testProbe();
 void testAllocationsPerFrame();
+void testTimersCoverTheStep(); // the stage timers add up to the whole step: no grey gap in the profiler
 
 // the research layers of the debug drawing (DebugDrawTests.cpp)
 void testDebugLayersOff();
@@ -30,6 +31,7 @@ void testBroadPhase();
 void testTallStack();
 void testStack100();
 void testStack200();
+void testRigidPerfThousandCubes(); // PerfTests.cpp: 1000 cubes fall, ms per stage
 void testRaycastGrab();
 void testJoints();
 void testCcd();
@@ -45,6 +47,10 @@ void testHardContactDynamics();
 
 // particles: liquid, soft bodies, cloth (ParticleTests.cpp)
 void testSoftBodyAndCloth();
+void testSoftStackNoOverlap();
+void testSoftPressedApartAndBox();
+void testClothSwingNoFalseTears();
+void testClothTearsAtStrength();
 void testSPH();
 void testFloating();
 void testLiquidWalls();
@@ -68,6 +74,7 @@ void testFireScene();
 // plasma (PlasmaTests.cpp)
 void testMagneticField();
 void testMagnetosphere();
+void testAlfvenicState();
 void testTokamak();
 
 // scenes (SceneTests.cpp)
@@ -84,6 +91,7 @@ void testCylinderStrouhal();
 void testNewtonCradle();        // RigidTests.cpp: a row of balls passes a hit on (restitution through the slop zone)
 void testNoetherRigid();        // RigidTests.cpp: energy, momentum, angular momentum of the rigid solver
 void testMultigridPressure();   // GasTests.cpp: MGPCG against the Jacobi PCG, iterations on 32^3 .. 128^3
+void testAdvectionReflection(); // GasTests.cpp: the inviscid Taylor-Green energy, projection vs reflection
 void testPressureBenchmark();   // GasTests.cpp: pressure ms per frame on the gas scenes (on request)
 void testGridConvergence();     // GasTests.cpp: order of convergence of the gas solver on refined grids
 void testDamBreakMartinMoyce(); // ParticleTests.cpp: dam-break front against Martin & Moyce 1952
@@ -93,6 +101,8 @@ void testParticlesManyBodies(); // ParticleTests.cpp: 30 000 particles find 150 
 void testDestroyBody();         // RigidTests.cpp: one body removed, its slot reused, the rest untouched
 void testCapsuleShape();        // RigidTests.cpp: capsule mass properties, lying / toppling on a box, raycasts
 void testDeadLanding();         // RigidTests.cpp: restitution 0 - a dropped body stops at the touch
+void testBarrelTouchesFloor(); // PileTests.cpp: a barrel touching a wide floor gets its normal and true depth
+void testBarrelPileSettles();  // PileTests.cpp: 50 barrels dropped into a pile settle, stand still and sleep
 void testFlatLanding();         // RigidTests.cpp: a cube dropped flat lands without turning or sliding
 void testRemoveParticleGroup(); // ParticleTests.cpp: one soft body / liquid removed, the rest goes on
 
@@ -107,6 +117,10 @@ void testCurvatureFlatAndSphere();  // CurvatureTests.cpp: coordinates are not c
 void testCurvatureBlackHoles();     // CurvatureTests.cpp: Schwarzschild, Kerr, Reissner-Nordstrom curvature
 void testCurvatureCosmology();      // CurvatureTests.cpp: de Sitter, Friedmann, the wormhole's exotic matter
 void testTidesAndGammaGeodesic();   // CurvatureTests.cpp: tidal tensor, the geodesic equation with Gamma vs Hamilton
+void testKerrHamiltonianGradient(); // SymplecticTests.cpp: Carter's exact gradient vs the metric's derivatives
+void testSymplecticLongOrbits();    // SymplecticTests.cpp: energy bounded over thousands of orbits, RK4 drifts
+void testSymplecticOrder();         // SymplecticTests.cpp: orders 2 (midpoint, Tao-2) and 4 (Tao-4, RK4)
+void testSymplecticReversibility(); // SymplecticTests.cpp: forward then back returns to the start
 // tensors and the linear-algebra toolbox (TensorTests.cpp)
 void testTensorEinstein();
 void testMatrixToolbox();
@@ -116,6 +130,8 @@ void testSceneGraphRoundTrip();
 void testMagnetForce();
 void testMagnetsAttract();
 void testGraphSceneBuilds();
+void testGraphNoInvisibleWalls(); // GraphTests.cpp: a column taller than the world box falls freely; a ball rolls off the floor
+void testGraphSoftOverlapNoFlight(); // GraphTests.cpp: soft bodies made inside each other are pushed apart, not thrown
 void testGraphCloth();
 void testGraphEmitterFollows();
 void testGraphFlammableCloth();
@@ -143,6 +159,17 @@ void testActionDampedPendulum();
 void testActionViscousBalance();
 void testActionJouleBalance();
 void testActionFreeRotation();
+
+// the channels (ChannelTests.cpp, scene/Channels.h): what a chart shows, checked against physics
+void testChannelsFreeFall();
+void testChannelsCollision();
+void testChannelsFriction();
+void testChannelsStackForces();
+void testChannelsTaylorGreen();
+void testChannelsPoiseuilleProbe();
+void testChannelsHydrostaticProbe();
+void testChannelsCostAndInnocence();
+void testChannelsCatalog();
 
 // the book "Язык природы" (MathBookTests.cpp, docs/math/): every picture of the book is a real run
 void testMathBookRounding();

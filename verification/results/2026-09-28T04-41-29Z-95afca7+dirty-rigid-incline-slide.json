@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T04:41:29Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 0.0126097,
+  "cases": [
+    {"id": "rigid-incline-slide", "category": "code-verification", "status": "open", "split": "tuning", "value": 2.358821809, "u_num": 0, "u_input": 0, "runs": 1, "spread": 0, "reference": 2.356287237, "u_ref": 0, "E": 0.002534572629, "u_val": 0, "z": null, "order": null, "order_theory": null, "verdict": "PASS", "seconds": 0.0124116, "unit": "м/с²", "h_label": "h", "convergence": [], "detail": "склон 30°, μk = 0.3, μs = 0.4: a = 2.3588 м/с², путь за 1 с 1.413 м"}
+  ]
+}

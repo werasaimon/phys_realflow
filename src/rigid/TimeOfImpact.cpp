@@ -135,65 +135,122 @@ ToiResult partsTimeOfImpact(const SweptPose& A, const SweptPose& B, float tol) {
 // of this pass; both bodies of a colliding pair stop at their common time of impact (motion
 // clamping); a stopped body stays put for the rest of the step (its sweep becomes static), and
 // the pass repeats so bodies that would now run into it are caught too (A hits B, B hits C, ...).
+//
+// What it costs: only the fast bodies are swept against the others, as Box2D's "bullet" bodies and
+// Bullet's ccdMotionThreshold do - the slow ones are left to the speculative contacts. The fast
+// list is made once per step, not once per pass (a pass only refreshes the bodies it clamped). The
+// candidates come from a plain scan while the fast bodies are few - a tree over a thousand swept
+// boxes costs a millisecond to build, a scan of them for one fast body a microsecond - and a slow
+// body gets its exact sweep only when its coarse box (coarseSweepBox) reaches a fast body's sweep.
+// A pile of a thousand falling cubes spent 14 ms a frame here before.
 void RigidWorld::continuousCollision() {
     Probe::Timer timer("rigid/ccd ms");
     ccdHits_ = 0;
     ccdClamped_.assign(bodies_.size(), 0);
     if (!params.ccd) return;
-    if (!anyFastBody()) return; // nothing fast this step (the usual case): no sweeps to test
-    for (int pass = 0; pass < 8; ++pass) {
+    // 1. Who is fast this step (the usual answer: nobody, and nothing else is done).
+    if (!findFastBodies()) return;
+    // 2. The sweeps: the fast bodies' now, the others' when a scan finds them near - or, with many
+    //    fast bodies, every body's at once and a tree over them.
+    const size_t n = bodies_.size();
+    sweeps_.resize(n);
+    sweepBoxes_.resize(n);
+    const bool useTree = fastBodies_.size() * n > kCcdScanLimit;
+    sweepReady_.assign(n, useTree ? 1 : 0);
+    if (useTree) {
         sweepBodies();
-        std::vector<float> sMin(bodies_.size(), 1.0f);
-        findTimesOfImpact(sMin);
-        if (!clampToTimesOfImpact(sMin)) break;
+        sweptTree_.build(sweepBoxes_, 2);
+    } else {
+        for (int i : fastBodies_) sweepBody(i), sweepReady_[size_t(i)] = 1;
+    }
+    // 3. The passes: times of impact, then the clamping, until nothing more is stopped.
+    for (int pass = 0; pass < 8; ++pass) {
+        impactTimes_.assign(bodies_.size(), 1.0f);
+        findTimesOfImpact(impactTimes_, useTree);
+        if (!clampToTimesOfImpact(impactTimes_)) break;
     }
 }
 
-bool RigidWorld::anyFastBody() const {
-    for (const RigidBody& b : bodies_)
-        if (b.invMass > 0 && !b.sleeping && isFast(b, sweptOf(b), params.ccdThreshold)) return true;
-    return false;
+// The bodies that move (or whose rim turns) further in this step than a fraction of their own
+// thickness (isFast); sleeping and static ones never are. Returns whether there is any.
+// A quick bound screens them first, without the logarithm of the turn: for the step's rotation
+// dq = q1 q0^-1 with vector part v, the turn angle is 2 asin|v| <= pi |v|, so a body slow even by
+// that bound is slow - only the others get the exact test (the same bodies come out).
+bool RigidWorld::findFastBodies() {
+    fastBodies_.clear();
+    motionBound_.assign(bodies_.size(), 0.0f);
+    for (int i = 0; i < int(bodies_.size()); ++i) {
+        const RigidBody& b = bodies_[i];
+        if (b.invMass == 0 || b.sleeping) continue;
+        const Quaternion dq = b.rot * b.prevRot.conjugate();
+        const float turnBound = kPi * std::sqrt(dq.x * dq.x + dq.y * dq.y + dq.z * dq.z);
+        const float reachBound = length(b.pos - b.prevPos) + turnBound * b.shape->boundingRadius();
+        motionBound_[size_t(i)] = reachBound; // no point of the body moved further this step
+        const float minExtent = std::max(0.5f * minComp(b.shape->localBounds().extent()), 1e-3f);
+        if (reachBound < params.ccdThreshold * minExtent) continue; // slow even by the bound
+        if (isFast(b, sweptOf(b), params.ccdThreshold)) fastBodies_.push_back(i);
+    }
+    return !fastBodies_.empty();
 }
 
-// The sweep of every body over this step and the box that contains it from start to end,
-// widened by the tolerance (kept between steps: no allocation).
+// A box that surely holds body j's whole sweep over this step, made without the sweep: its box at
+// the start of the step (made for the broad phase, already widened by the contact margin), grown
+// by how far any of its points can have moved (motionBound_) and by the tolerance.
+AABB RigidWorld::coarseSweepBox(int j) const {
+    AABB box = boxes_[size_t(j)];
+    const float grow = motionBound_[size_t(j)] + params.ccdTolerance;
+    box.lo -= Vector3(grow);
+    box.hi += Vector3(grow);
+    return box;
+}
+
+// The sweep of one body over this step and the box that contains it from start to end, widened by
+// the tolerance.
+void RigidWorld::sweepBody(int i) {
+    const float tol = params.ccdTolerance;
+    sweeps_[size_t(i)] = sweptOf(bodies_[i]);
+    AABB box = boundsAt(sweeps_[size_t(i)], 0);
+    box.expand(boundsAt(sweeps_[size_t(i)], 1));
+    box.lo -= Vector3(tol);
+    box.hi += Vector3(tol);
+    sweepBoxes_[size_t(i)] = box;
+}
+
+// The sweeps of all bodies (kept between steps: no allocation once grown).
 void RigidWorld::sweepBodies() {
-    const float tol = params.ccdTolerance;
-    const int n = int(bodies_.size());
-    std::vector<SweptPose>& sw = sweeps_;
-    std::vector<AABB>& swBox = sweepBoxes_;
-    sw.resize(n);
-    swBox.resize(n);
-    for (int i = 0; i < n; ++i) {
-        sw[i] = sweptOf(bodies_[i]);
-        swBox[i] = boundsAt(sw[i], 0);
-        swBox[i].expand(boundsAt(sw[i], 1));
-        swBox[i].lo -= Vector3(tol);
-        swBox[i].hi += Vector3(tol);
-    }
+    sweeps_.resize(bodies_.size());
+    sweepBoxes_.resize(bodies_.size());
+    for (int i = 0; i < int(bodies_.size()); ++i) sweepBody(i);
 }
 
-// For every fast body, the earliest moment (0..1 of the step) it touches another body, a domain
-// wall or the static mesh: conservative advancement (timeOfImpact) on the pairs a BVH over the
-// swept boxes proposes (O(n log n) instead of all pairs). Both bodies of a pair stop together.
-void RigidWorld::findTimesOfImpact(std::vector<float>& sMin) {
+// For every fast body not yet stopped, the earliest moment (0..1 of the step) it touches another
+// body, a domain wall or the static mesh: conservative advancement (timeOfImpact) on the pairs
+// whose swept boxes meet. The candidates come from the tree over the swept boxes (built once per
+// step: a stopped body's new box lies inside its old one, so the tree stays conservative) or from a
+// plain scan of all boxes. Both bodies of a pair stop together.
+void RigidWorld::findTimesOfImpact(std::vector<float>& sMin, bool useTree) {
     const float tol = params.ccdTolerance;
-    const int n = int(bodies_.size());
     const std::vector<SweptPose>& sw = sweeps_;
     const std::vector<AABB>& swBox = sweepBoxes_;
-    BVH sweptTree;
-    sweptTree.build(swBox, 2);
-    for (int i = 0; i < n; ++i) {
-        const RigidBody& body = bodies_[i];
-        if (body.invMass == 0 || !isFast(body, sw[i], params.ccdThreshold)) continue;
-        sweptTree.queryAABB(swBox[i], [&](uint32_t ju) {
-            int j = int(ju);
-            if (j == i || !swBox[j].overlaps(swBox[i])) return;
-            ToiResult r = partsTimeOfImpact(sw[i], sw[j], tol);
+    for (int i : fastBodies_) {
+        if (ccdClamped_[size_t(i)]) continue; // stopped by an earlier pass: static now
+        auto tryPair = [&](int j) {
+            if (j == i || !swBox[size_t(j)].overlaps(swBox[size_t(i)])) return;
+            ToiResult r = partsTimeOfImpact(sw[size_t(i)], sw[size_t(j)], tol);
             if (!r.hit) return;
-            sMin[i] = std::min(sMin[i], r.s);
-            if (bodies_[j].invMass > 0) sMin[j] = std::min(sMin[j], r.s); // the pair stops together
-        });
+            sMin[size_t(i)] = std::min(sMin[size_t(i)], r.s);
+            if (bodies_[j].invMass > 0) sMin[size_t(j)] = std::min(sMin[size_t(j)], r.s); // the pair stops together
+        };
+        if (useTree) sweptTree_.queryAABB(swBox[size_t(i)], [&](uint32_t j) { tryPair(int(j)); });
+        else
+            for (int j = 0; j < int(bodies_.size()); ++j) {
+                if (!sweepReady_[size_t(j)]) { // a slow body: its exact sweep only if it can be near
+                    if (j == i || !coarseSweepBox(j).overlaps(swBox[size_t(i)])) continue;
+                    sweepBody(j);
+                    sweepReady_[size_t(j)] = 1;
+                }
+                tryPair(j);
+            }
         if (params.collideWithDomain) {
             const Vector3 normals[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
             const Vector3 points[6] = {domain_.lo, domain_.hi, domain_.lo, domain_.hi, domain_.lo, domain_.hi};
@@ -230,6 +287,8 @@ bool RigidWorld::clampToTimesOfImpact(const std::vector<float>& sMin) {
         b.prevPos = b.pos; // static for the remaining passes of this step
         b.prevRot = b.rot;
         b.updateInertia();
+        sweepBody(i); // its sweep is now a point: the next pass sees it standing there
+        sweepReady_[size_t(i)] = 1;
         if (!ccdClamped_[i]) ++ccdHits_;
         ccdClamped_[i] = 1;
         any = true;

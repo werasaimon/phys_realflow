@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T04:41:30Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 0.0033714,
+  "cases": [
+    {"id": "rigid-noether-momentum", "category": "code-verification", "status": "open", "split": "tuning", "value": 2.660497671e-07, "u_num": 0, "u_input": 0, "runs": 1, "spread": 0, "reference": 0, "u_ref": 0, "E": 2.660497671e-07, "u_val": 0, "z": null, "order": null, "order_theory": null, "verdict": "PASS", "seconds": 0.0032014, "unit": "", "h_label": "h", "convergence": [], "detail": "худший |ΔP|/|P| = 2.7e-07 за 1 с, спин второго ящика 4.06 рад/с"}
+  ]
+}

@@ -3,9 +3,12 @@
 // the solvers need a per-step arena allocator (Box2D's b2StackAllocator, PhysX's scratch memory).
 #include "TestRunner.h"
 
+#include "core/Format.h"
 #include "core/Probe.h"
 
+#include <algorithm>
 #include <cmath>
+#include <map>
 #include <thread>
 
 void testProbe() {
@@ -113,5 +116,48 @@ void testAllocationsPerFrame() {
         }
         std::printf("  %-32s %12.0f %12.0f %12.2f %12.0f\n", c.name, sum / c.measure, worst, ms / c.measure, c.limit);
         CHECK(sum / c.measure < c.limit, "%s: %.0f allocations per frame, limit %.0f", c.name, sum / c.measure, c.limit);
+    }
+}
+
+void testTimersCoverTheStep() {
+    // The Laboratory's profiler bar adds the stage timers of a frame up and paints what they miss
+    // grey («Вне замеров»). So every stage of the step has a timer, and no timer runs inside another
+    // (the bar would count that time twice): the timers add up to the whole step. The rest - the
+    // probe's own bookkeeping, the loops between the stages - is allowed 10 %.
+    struct Case { const char* name; Preset preset; int warmup, measure; };
+    const Case cases[] = {{"rigid tower (100 boxes)", Preset::RigidTower, 30, 30},
+                          {"100 teapots", Preset::RigidTeapots, 30, 30},
+                          {"joints", Preset::RigidJoints, 30, 30},
+                          {"water: wave in a pool", Preset::Water, 20, 20},
+                          {"cloth and soft bodies", Preset::SoftCloth, 20, 20},
+                          {"cloth in the wind", Preset::GasSoftCloth, 10, 10},
+                          {"smoke and bodies", Preset::SmokeBodies, 10, 10},
+                          {"wind tunnel: sphere", Preset::TunnelSphere, 10, 10},
+                          {"fire: burning curtain", Preset::Fire, 10, 10},
+                          {"magnetosphere", Preset::Magnetosphere, 10, 10},
+                          {"terrain: 150 bodies on a mesh", Preset::Terrain, 30, 30}};
+    std::printf("  %-32s %10s %10s %9s   %s\n", "scene", "step ms", "timed ms", "covered", "the three longest stages");
+    for (const Case& c : cases) {
+        Simulation sim;
+        loadSample(sim, c.preset);
+        for (int f = 0; f < c.warmup; ++f) sim.stepFrame();
+        double step = 0, timed = 0;
+        std::map<std::string, double> stages;
+        for (int f = 0; f < c.measure; ++f) {
+            sim.stepFrame();
+            const Probe::Snapshot s = Probe::snapshot();
+            step += s.value("frame/step ms");
+            for (const Probe::Channel& ch : s.channels)
+                if (ch.kind == Probe::Kind::TimerMs) timed += ch.value, stages[ch.name] += ch.value;
+        }
+        std::vector<std::pair<double, std::string>> longest;
+        for (const auto& [name, ms] : stages) longest.push_back({ms / c.measure, name});
+        std::sort(longest.rbegin(), longest.rend());
+        std::string top;
+        for (size_t i = 0; i < longest.size() && i < 3; ++i) top += format("%s %.2f  ", longest[i].second.c_str(), longest[i].first);
+        const double covered = timed / std::max(step, 1e-9);
+        std::printf("  %-32s %10.2f %10.2f %8.1f %%   %s\n", c.name, step / c.measure, timed / c.measure, covered * 100, top.c_str());
+        CHECK(covered > 0.90, "%s: the timers cover %.1f %% of the step (no grey gap over 10 %%)", c.name, covered * 100);
+        CHECK(covered < 1.02, "%s: the timers add up to %.1f %% of the step - one runs inside another", c.name, covered * 100);
     }
 }

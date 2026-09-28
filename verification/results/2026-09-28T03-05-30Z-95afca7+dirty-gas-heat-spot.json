@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-28T03:04:56Z",
+  "commit": "95afca7+dirty",
+  "mode": "full",
+  "seconds": 33.3662578,
+  "cases": [
+    {"id": "gas-heat-spot", "category": "solution-verification", "status": "open", "split": "tuning", "value": 0.05772576854, "u_num": 0.0007452271584, "u_input": 0, "runs": 1, "spread": 0, "reference": 0.05844332628, "u_ref": 0, "E": -0.0007175577451, "u_val": 0.0007452271584, "z": -0.9628711689, "order": 1.967796943, "order_theory": 2, "verdict": "WARN", "seconds": 33.3657756, "unit": "K", "h_label": "dx, м", "convergence": [[0.0625, 0.04792058468, 0.0105227416], [0.03125, 0.0557294786, 0.002713847684], [0.015625, 0.05772576854, 0.0007175577451]], "detail": "пик 0.04792 / 0.05573 / 0.05773 K (16/32/64), Ричардсон 0.05841 K, точный 0.05844 K, p = 1.97, GCI 1.48%"}
+  ]
+}

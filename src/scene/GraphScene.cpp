@@ -54,6 +54,40 @@ bool anyVisible(const std::vector<Entity>& entities, bool (*has)(const Entity&))
     return false;
 }
 
+// The box an entity takes in the world: the box of its shape (a model fits a cube of its largest
+// size, EntityShapes.cpp) turned with it - the half-extents |R| h.
+AABB entityBounds(const Entity& e) {
+    const Vector3 h = e.shape == ShapeKind::Mesh ? Vector3(0.5f * maxComp(e.size)) : e.size * 0.5f;
+    const Matrix3x3 R = entityRotation(e).toMatrix3x3();
+    Vector3 half;
+    for (int r = 0; r < 3; ++r) half[r] = std::fabs(R.m[r][0]) * h.x + std::fabs(R.m[r][1]) * h.y + std::fabs(R.m[r][2]) * h.z;
+    return AABB(e.position - half, e.position + half);
+}
+
+// The box the scene lives in: the world's box, grown to hold every visible entity - half a metre
+// to spare at the sides, a metre above the highest. Nothing authored starts inside a wall. Before,
+// a tower taller than the room started through its lid, and the solver drove it down into the room:
+// a column of 100 spheres reaching 28 m, pushed into a 3 m box, flew apart at up to 403 m/s.
+AABB sceneBox(const WorldSettings& w, const std::vector<Entity>& entities) {
+    AABB box({-0.5f * w.size.x, 0.0f, -0.5f * w.size.z}, {0.5f * w.size.x, w.size.y, 0.5f * w.size.z});
+    for (const Entity& e : entities) {
+        if (!e.visible) continue;
+        const AABB b = entityBounds(e);
+        box.lo = vmin(box.lo, b.lo - Vector3(0.5f, 0.0f, 0.5f)); // the floor stays under the lowest one
+        box.hi = vmax(box.hi, b.hi + Vector3(0.5f, 1.0f, 0.5f));
+    }
+    return box;
+}
+
+// Rigid bodies in a world without liquid or gas meet only what the scene has - its floor, its
+// walls - as in Box2D, Jolt and PhysX, which have no world walls at all: a ball rolling off the
+// table falls, it does not stop at an invisible wall. Only the ground stays: the floor grid the
+// viewer draws at the bottom of the box. (Liquid and gas keep the box's walls: it is their vessel.)
+AABB openAbove(const AABB& box) {
+    constexpr float kFar = 1.0e4f; // [m] walls far beyond anything a scene holds
+    return AABB({-kFar, box.lo.y, -kFar}, {kFar, kFar, kFar});
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -91,10 +125,13 @@ void GraphScene::configure(Simulation& sim) {
 
 void GraphScene::build(Simulation& sim) {
     const WorldSettings& w = graph_.world;
-    const AABB box({-0.5f * w.size.x, 0.0f, -0.5f * w.size.z}, {0.5f * w.size.x, w.size.y, 0.5f * w.size.z});
+    box_ = sceneBox(w, flat_);
     if (w.gas) sim.useGasBox({0.5f, 0.0f, 0.5f}); // floor at y = 0
-    else if (hasLiquid(flat_)) sim.useLiquidTank(box);
-    else sim.useRigidArena(box);
+    else if (hasLiquid(flat_)) sim.useLiquidTank(box_);
+    else {
+        sim.useRigidArena(box_);             // soft bodies and cloth: particles in the box
+        sim.rigid.setDomain(openAbove(box_)); // rigid bodies: the ground only (openAbove)
+    }
     magnetBody_.clear();
     magnetMoment_.clear();
     magnetEntity_.clear();
@@ -392,6 +429,9 @@ void GraphScene::setLightsAndCameras(const std::vector<Light>& lights, const std
 
 void GraphScene::describe(const Simulation& sim, RenderSnapshot& s) const {
     describeLights(graph_, s);
+    // The viewer frames the camera, lays the floor grid and fits the shadows to the scene's box -
+    // not to the far walls of the open world the rigid bodies live in (openAbove).
+    if (sim.mode() == SimMode::Rigid) s.domain = box_;
     s.info.push_back({"Сущностей", format("%zu", flat_.size())});
     s.info.push_back({"Магнитов", format("%zu", magnetBody_.size())});
     if (!magnetBody_.empty()) s.info.push_back({"Наибольшая магнитная сила", format("%.4g Н", maxMagnetForce_)});
@@ -408,7 +448,6 @@ void GraphScene::describe(const Simulation& sim, RenderSnapshot& s) const {
     }
     if (liquidEmitters > 1) s.info.push_back({"Струи жидкости", format("работает первая из %d (сопло одно)", liquidEmitters)});
     for (const std::string& note : notes_) s.info.push_back({"Роли", note});
-    (void)sim;
 }
 
 } // namespace rf

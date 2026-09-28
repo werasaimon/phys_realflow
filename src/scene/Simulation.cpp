@@ -127,15 +127,35 @@ void Simulation::stepFrame() {
             stepGasWithBodies();
             time_ += frameDt;
         }
-        updateSurfaceLoads();
+        {
+            Probe::Timer timer("gas/surface loads ms"); // the pressure and friction on the obstacle's triangles
+            updateSurfaceLoads();
+        }
         break;
     }
-    if (scene_) scene_->afterStep(*this);
+    if (scene_) {
+        Probe::Timer timer("scene/controllers ms"); // the scene's own work: magnets, emitters, timed events
+        scene_->afterStep(*this);
+    }
     ++frame_;
     lastStepMs_ = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
     Probe::set("frame/step ms", lastStepMs_);
     Probe::set("frame/time s", time_);
     Probe::set("memory/allocations per frame", double(Probe::allocations.load() - allocations0));
+    publishChannels(); // after the counters: measuring is not part of the frame's physics
+}
+
+// The physical channels (scene/Channels.h): measured only when asked, then each single value is
+// also reported to the Probe under its id, so the charts and the CSV find it by name. A probe
+// line's profile stays in the measurements (a chart of a profile is not a time series).
+void Simulation::publishChannels() {
+    if (channels.empty()) {
+        measurements_.clear(); // nothing asked: nothing measured (clear keeps the memory)
+        return;
+    }
+    measurements_ = measureAll(*this, channels);
+    for (const Measurement& m : measurements_)
+        if (m.profile.empty()) Probe::set(m.info.id.c_str(), m.value);
 }
 
 int Simulation::sliceLayer() const {

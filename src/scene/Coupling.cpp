@@ -4,6 +4,7 @@
 #include "scene/Simulation.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 namespace rf {
 
@@ -154,6 +155,25 @@ void Simulation::applyGasOnSoftBodies() {
     }
 }
 
+// Step 1 of stepGasWithBodies: the pressure impulses the gas gave every body over the last
+// frame's gas steps, plus the buoyancy of the displaced gas (the Boussinesq grid carries no
+// hydrostatic pressure), as a wrench; the soft bodies take theirs as a velocity change.
+void Simulation::pushBodiesByGas() {
+    Probe::Timer timer("scene/coupling ms"); // what the solvers pass each other
+    const float rho = grid.params.fluidDensity;
+    for (int i = 0; i < int(rigid.bodies().size()); ++i) {
+        RigidBody& b = rigid.bodies()[i];
+        if (b.invMass == 0) continue;
+        Vector3 J = i < int(gasImpulse_.size()) ? gasImpulse_[i] : Vector3(0.0f);
+        Vector3 L = i < int(gasAngularImpulse_.size()) ? gasAngularImpulse_[i] : Vector3(0.0f);
+        J -= gravity() * (rho * b.shape->volume() * frameDt); // Archimedes in the gas
+        // A resting body is not woken by pressure noise far below its sleep threshold.
+        if (b.sleeping && length(J) * b.invMass < 0.5f * rigid.params.sleepLinear) continue;
+        rigid.applyExternalWrench(i, J, L);
+    }
+    applyGasOnSoftBodies();
+}
+
 void Simulation::stepBodiesAndParticles(bool gasDrag) {
     // Every rigid step has the length the rigid solver asks for (frameDt / its substeps), with or
     // without particles; before each particle step come the rigid steps that end within it
@@ -166,6 +186,7 @@ void Simulation::stepBodiesAndParticles(bool gasDrag) {
         const int rEnd = (p + 1) * nr / np; // rigid steps done by the end of this particle step
         for (; r < rEnd; ++r) rigid.step(hr);
         if (gasDrag) {
+            Probe::Timer timer("scene/coupling ms");
             applyGasDragOnCloth(hp);
             applyGasDragOnLiquid(hp);
         }
@@ -181,25 +202,12 @@ void Simulation::stepGasWithBodies() {
     //  3) bodies -> gas: the bodies at their new poses and velocities are the moving boundaries of
     //     the gas steps that cover the same frame time.
     if (rigid.anyHeld() && time_ >= releaseTime) rigid.releaseHeld();
-    const int nb = int(rigid.bodies().size());
-    if (gasPushesBodies) {
-        const float rho = grid.params.fluidDensity;
-        for (int i = 0; i < nb; ++i) {
-            RigidBody& b = rigid.bodies()[i];
-            if (b.invMass == 0) continue;
-            Vector3 J = i < int(gasImpulse_.size()) ? gasImpulse_[i] : Vector3(0.0f);
-            Vector3 L = i < int(gasAngularImpulse_.size()) ? gasAngularImpulse_[i] : Vector3(0.0f);
-            J -= gravity() * (rho * b.shape->volume() * frameDt); // Archimedes in the gas
-            // A resting body is not woken by pressure noise far below its sleep threshold.
-            if (b.sleeping && length(J) * b.invMass < 0.5f * rigid.params.sleepLinear) continue;
-            rigid.applyExternalWrench(i, J, L);
-        }
-        applyGasOnSoftBodies();
-    }
+    if (gasPushesBodies) pushBodiesByGas();
     stepBodiesAndParticles(gasPushesBodies); // rigid bodies interleaved with the particles
 
     // Fire: the cloths take heat from the gas (or burn and give it heat and fuel gas).
     if (grid.combustion.enabled) {
+        Probe::Timer timer("particles/heat ms");
         std::vector<FireOutput> fire;
         auto gasHeat = [this](const Vector3& x) { return GasHeat{grid.temperatureAt(x), grid.irradianceAt(x)}; };
         particles.burnCloths(frameDt, gasHeat, grid.combustion.ambientTemperature, fire);
@@ -211,8 +219,11 @@ void Simulation::stepGasWithBodies() {
     softGasImpulse_.assign(particles.softBodies().size(), Vector3(0.0f));
     float remaining = frameDt;
     for (int it = 0; it < 8 && remaining > 1e-6f; ++it) {
-        grid.setMovingSolids(movingSolids());
-        passLiquidToGas();
+        {
+            Probe::Timer timer("scene/coupling ms");
+            grid.setMovingSolids(movingSolids());
+            passLiquidToGas();
+        }
         float dt = grid.step(remaining);
         const auto& F = grid.movingForces();
         const auto& T = grid.movingTorques();

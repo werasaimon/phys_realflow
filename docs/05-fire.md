@@ -9,7 +9,7 @@
 | горение газа, радиационное остывание | `Combustion` — [src/gas/Combustion.h](../src/gas/Combustion.h), [Combustion.cpp](../src/gas/Combustion.cpp) |
 | плавучесть, расширение, теплопроводность, излучение пламени | `GasSolver` — [src/gas/GasSolver.cpp](../src/gas/GasSolver.cpp) |
 | нагрев, пиролиз, обугливание и прогорание ткани | `burnCloth` — [src/particles/Cloth.cpp](../src/particles/Cloth.cpp#L256) |
-| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/scene/Snapshot.cpp:472](../src/scene/Snapshot.cpp#L472) |
+| обмен ткань ↔ газ | `Simulation::stepGasWithBodies` — [src/scene/Coupling.cpp:197](../src/scene/Coupling.cpp#L197) |
 
 Все температуры в газе огня — **перегрев в кельвинах над окружающим воздухом** $T_0$ = `ambientTemperature` = 293 K. Абсолютная температура $T + T_0$.
 
@@ -110,7 +110,7 @@ for (int c = b; c < e; ++c) {
 }
 ```
 
-Мощность пламени ([GasSolver.cpp:427](../src/gas/GasSolver.cpp#L427)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
+Мощность пламени ([GasSolver.cpp:534](../src/gas/GasSolver.cpp#L534)): каждая единица сгоревшего топлива нагрела ячейку на $H$, поэтому
 
 $$
 \dot Q = \frac{\sum b\cdot H\cdot\rho\,c_p\,\Delta x^3}{\Delta t}\quad[\text{Вт}].
@@ -255,7 +255,7 @@ $$
 T_{heated} = T_g + \frac{R}{hA_2} + \left(T - T_g - \frac{R}{hA_2}\right)e^{-hA_2\Delta t/C}.
 $$
 
-[src/particles/Cloth.cpp:318](../src/particles/Cloth.cpp#L318)
+[src/particles/Cloth.cpp:487](../src/particles/Cloth.cpp#L487)
 ```cpp
 const float Tabs = T + T0;
 const float radiation = m.emissivity * area * (irradiance[k] - 2.0f * sigma * (Tabs * Tabs * Tabs * Tabs - T0 * T0 * T0 * T0));
@@ -282,7 +282,7 @@ $$
 
 $g$ монотонно растёт, $g(T_{heated}) \ge 0$, а при $T_{end} = T_{heated} - H_p m_v/C$ (всё разложилось) $g \le 0$. Корень ищется **бисекцией**, 30 шагов:
 
-[src/particles/Cloth.cpp:328](../src/particles/Cloth.cpp#L328)
+[src/particles/Cloth.cpp:497](../src/particles/Cloth.cpp#L497)
 ```cpp
 const float volatileMass = freshMass * (1.0f - m.charMassFraction) * unburnt; // [kg] left to decompose
 float decomposed = 0;                                                         // fraction of `unburnt`
@@ -308,7 +308,7 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 - Нить, у которой **оба конца** прогорели, распадается (`breakThread`, [Cloth.cpp:332](../src/particles/Cloth.cpp#L332)).
 - Обугленная ткань слабеет: прочность нити умножается на $c_{char} + (1 - c_{char})\min(u_a, u_b)$, $c_{char}$ = `charStrength` = 0.001 ([Cloth.cpp:239](../src/particles/Cloth.cpp#L239)). Прогоревшая ткань рвётся под собственным весом.
-- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:206](../src/particles/ParticleSystem.cpp#L206)).
+- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:263](../src/particles/ParticleSystem.cpp#L263)).
 
 ### Порога воспламенения нет — он получается сам
 
@@ -327,11 +327,12 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 ## 5.6 Связь ткани с газом
 
-`Simulation::stepGasWithBodies` ([Coupling.cpp:190](../src/scene/Coupling.cpp#L190)) один раз за кадр:
+`Simulation::stepGasWithBodies` ([Coupling.cpp:197](../src/scene/Coupling.cpp#L197)) один раз за кадр:
 
-[src/scene/Coupling.cpp:202](../src/scene/Coupling.cpp#L202)
+[src/scene/Coupling.cpp:209](../src/scene/Coupling.cpp#L209)
 ```cpp
 if (grid.combustion.enabled) {
+    Probe::Timer timer("particles/heat ms");
     std::vector<FireOutput> fire;
     auto gasHeat = [this](const Vector3& x) { return GasHeat{grid.temperatureAt(x), grid.irradianceAt(x)}; };
     particles.burnCloths(frameDt, gasHeat, grid.combustion.ambientTemperature, fire);

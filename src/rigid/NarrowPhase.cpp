@@ -105,6 +105,17 @@ Vector3 perpendicular(const Vector3& n) {
     return normalize(std::fabs(n.x) > 0.57f ? Vector3(n.y, -n.x, 0) : Vector3(0, n.z, -n.y));
 }
 
+// The gap below which GJK's normal, the direction v / |v| between the closest points, is noise.
+// v is a difference of support points, each rounded to float precision (epsilon 1.2e-7) of its
+// size, so v carries an error of about epsilon * size and its direction one of epsilon * size / |v|.
+// Under a thousand such roundings the error is above a milliradian: 0.3 mm for a barrel on a
+// 3.6 m floor, whose corners are the floor's support points.
+float touchTolerance(const GjkResult& g) {
+    float size = 0;
+    for (int i = 0; i < g.simplexSize; ++i) size = std::max({size, length(g.a[i]), length(g.b[i])});
+    return 1000.0f * std::numeric_limits<float>::epsilon() * size;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -165,6 +176,7 @@ struct NarrowScratch {
     std::vector<Vector3> poly, clipped;    // box - box: the incident face and its clipped copy
     std::vector<ContactPoint> boxPoints;   // box - box: the points below the reference face
     std::vector<Vector3> fa, fb, inc, cut; // faceManifold: the two faces, the incident one clipped
+    std::vector<float> depths;              // faceManifold: the depth of each clipped point
     std::vector<ContactPoint> hullPoints;  // convex - convex: the face manifold or the single point
     std::vector<PosedShape> partsA, partsB; // compound: the convex parts of both sides
     std::vector<AABB> partBounds;
@@ -454,7 +466,8 @@ void NarrowPhase::clipIncidentFace(const std::vector<Vector3>& ref, const Vector
     }
 }
 
-bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, std::vector<ContactPoint>& pts) {
+bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const Vector3& n, float depthLow, float depthHigh,
+                               std::vector<ContactPoint>& pts) {
     NarrowScratch& S = scratch(); // the worker's scratch: no allocation per pair
     std::vector<Vector3>&fa = S.fa, &fb = S.fb, &inc = S.inc, &clipped = S.cut;
     fa.clear();
@@ -485,15 +498,43 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
     Vector3 nr = faceNormal(ref);
     if (dot(nr, refIsB ? n : -n) < 0) nr = -nr; // reference normal pointing towards the other shape
     clipIncidentFace(ref, nr, inc, clipped);
-    // Depth of every clipped point along the contact normal n, from the other shape's supporting
-    // plane along n (not along the reference face's own normal, which may differ by up to ~25 deg):
-    // then the deepest point is exactly the EPA penetration, and all depths agree with n.
-    const float planeB = dot(n, B.support(n)), planeA = dot(n, A.support(-n));
-    bool any = false;
+    // The depth of every clipped point: how far it lies behind the reference face's own plane,
+    // measured along the contact normal n - as Jolt's ManifoldBetweenTwoFaces (Rouwe) projects the
+    // clipped points onto that plane along the penetration axis:
+    //     d = (nr . r0 - nr . x) / |nr . n|,   r0 a corner of the reference face.
+    // Before, every depth was measured from the reference shape's supporting plane along n. EPA's
+    // normal is good to about a milliradian, and along a slightly tilted n the support of a long
+    // shape is its far corner: a 3.6 m floor tilted by 1e-3 put its "plane" 1.8 mm off under a
+    // barrel lying on it, the depths of a resting barrel jumped by a millimetre from step to step
+    // (as EPA's tilt changed sign) and a pile of barrels never stopped twitching (PileTests.cpp).
+    // The plane is the face only near the face; two rules for deep contacts:
+    //   1. a point behind the plane but clearly outside the reference shape (by more than the
+    //      contact margin - it went through, or past the shape's side) touches nothing: left out
+    //      (a triangle of a static mesh has no inside and keeps every point);
+    //   2. the deepest kept point stays within what EPA knows of the pair's depth along n,
+    //      [depthLow, depthHigh] (PenetrationResult): raised when the clipping left out the point
+    //      that goes deepest, lowered when a point went deeper than the pair can; the others move
+    //      with it. A touch EPA cannot resolve leaves the bracket wide and the plane alone decides.
+    const PosedShape& refShape = refIsB ? B : A;
+    const bool solid = refShape.shape->type() != ShapeType::Triangle;
+    const float planeRef = dot(nr, ref[0]), along = std::fabs(dot(nr, n)); // along >= cosMax
+    std::vector<float>& depths = S.depths;
+    depths.clear();
+    float deepest = -kInf;
     for (const Vector3& x : inc) {
-        const float depth = refIsB ? planeB - dot(n, x) : dot(n, x) - planeA; // incident points: A's (ref B) or B's (ref A)
-        if (depth < -margin) continue;
-        pts.push_back({x + n * (refIsB ? 0.5f * depth : -0.5f * depth), n, depth}); // midway between the surfaces
+        float d = (planeRef - dot(nr, x)) / along;
+        Vector3 outward;
+        if (d > 0 && solid && refShape.shape->signedDistance(refShape.R.transposed() * (x - refShape.p), outward) > margin) d = -kInf;
+        depths.push_back(d);
+        deepest = std::max(deepest, d);
+    }
+    if (deepest == -kInf) return false;
+    const float shift = clampv(deepest, depthLow, depthHigh) - deepest; // rule 2
+    bool any = false;
+    for (size_t i = 0; i < inc.size(); ++i) {
+        const float d = depths[i] + shift;
+        if (d < -margin) continue;
+        pts.push_back({inc[i] + n * (refIsB ? 0.5f * d : -0.5f * d), n, d}); // midway between the surfaces
         any = true;
     }
     return any;
@@ -501,24 +542,39 @@ bool NarrowPhase::faceManifold(const PosedShape& A, const PosedShape& B, const V
 
 bool NarrowPhase::convexConvex(const PosedShape& A, const PosedShape& B, ContactManifold& m) {
     GjkResult g = gjk(A, B, margin); // pairs farther apart than the margin stop early
+    if (!g.intersect && g.distance >= margin) return false;
     Vector3 n;
     ContactPoint single;
-    if (!g.intersect) {
-        // Separated but within the margin: speculative contacts.
-        if (g.distance >= margin || g.distance < 1e-9f) return false;
+    // Separated but within the margin: a speculative contact along the closest points' direction -
+    // unless the shapes touch closer than that direction can be trusted (touchTolerance). There,
+    // as for an overlap, EPA gives the normal: its polytope's faces are made of the shapes' own
+    // long edges. A barrel resting on the floor, 2 micrometres off, got its normal from GJK
+    // pointing up into the floor: the floor's far side was "nearer", 32 cm deep, and the barrel
+    // was pushed through the floor.
+    const bool touching = !g.intersect && g.distance <= touchTolerance(g);
+    float depthLow = -kInf, depthHigh = kInf; // the pair's depth along n, when EPA gives a bracket
+    if (!g.intersect && !touching) {
         n = (g.pointA - g.pointB) / g.distance;
         single = {(g.pointA + g.pointB) * 0.5f, n, -g.distance};
     } else {
         PenetrationResult pr = epa(A, B, g);
-        if (!pr.valid) return false;
-        n = pr.normal;
-        single = {(pr.pointA + pr.pointB) * 0.5f, n, pr.depth};
+        if (pr.valid) {
+            n = pr.normal;
+            single = touching ? ContactPoint{(g.pointA + g.pointB) * 0.5f, n, -g.distance}
+                              : ContactPoint{(pr.pointA + pr.pointB) * 0.5f, n, pr.depth};
+            if (!touching) depthLow = pr.depth, depthHigh = pr.depthMax;
+        } else if (touching && g.distance > 1e-9f) { // EPA found no volume: GJK's normal after all
+            n = (g.pointA - g.pointB) / g.distance;
+            single = {(g.pointA + g.pointB) * 0.5f, n, -g.distance};
+        } else {
+            return false;
+        }
     }
 
     // 1) Boundary simplices: clip the supporting faces (exact multi-point manifold).
     std::vector<ContactPoint>& pts = scratch().hullPoints; // the worker's scratch
     pts.clear();
-    if (faceManifold(A, B, n, pts)) {
+    if (faceManifold(A, B, n, depthLow, depthHigh, pts)) {
         reduceManifold(pts, 4);
         for (auto& p : pts) m.points.push_back(p);
         return true;

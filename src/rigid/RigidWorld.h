@@ -199,6 +199,18 @@ public:
     };
     std::vector<DebugContact> debugContacts() const;
     float lastStepDt() const { return lastDt_; }
+    // What the contacts of the last step did to one body (the channels, scene/Channels.h): the
+    // impulse they gave it, normal plus friction [N s] - over lastStepDt() it is the mean contact
+    // force of that step - and how many contact points touch it. Read only, no allocation.
+    Vector3 contactImpulseOn(int body, int& points) const;
+    // The deepest penetration among the contact points of the last step [m].
+    float deepestPenetration() const;
+    // How well the contact cache carried last step's impulses over (the warm start, Catto 2005):
+    // the contact points of the last step and how many of them found their cached point. A pile
+    // at rest should match nearly all of them; points that jump from step to step lose their
+    // impulse, start from a guess, and the body rocks instead of settling.
+    struct WarmStartStats { int points = 0, matched = 0; };
+    const WarmStartStats& warmStartStats() const { return warmStats_; }
 
     // The research view of the watched pair (Probe::watchPair), filled while its layers are on:
     // what GJK and EPA found for it in the last step.
@@ -261,11 +273,12 @@ private:
         Vector3 jlock;
         float K[4][4] = {};  // normal effective-mass matrix of the points (block solver)
         int activeSet = -1;  // block solver: active points of the last solve (tried first)
+        int warmMatched = 0; // points that found their cached twin in the warm start
     };
     // What survives from one step to the next for a body pair.
     struct CachedPair {
         SolverPoints points;
-        bool live = true;     // seen this step (the pruning of the cache after the solve)
+        uint32_t stamp = 0;   // the step that last wrote it (the pruning of the cache after the solve)
         Vector3 friction;     // world tangential impulse at the patch centre
         float twist = 0;   // impulse moment about the normal
         Vector3 roll;         // rolling resistance impulse moment
@@ -283,13 +296,15 @@ private:
 
     void collide();
     void collideStatic(int i, std::vector<Manifold>& out) const;
+    bool mayTouchStatic(int i) const; // its box reaches a domain wall or the static mesh
     void collideWalls(int i, std::vector<Manifold>& out) const;      // the six domain planes
     void collideStaticMesh(int i, std::vector<Manifold>& out) const; // the static triangle mesh
     void addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm) const;
     void prepare(float dt);
+    void sortManifoldsBottomUp();
     void solve();
     void buildColors();
-    static Vector3 gyroscopicStep(const RigidBody& b, float h); // w after the gyroscopic torque over h
+    static void turnFreely(RigidBody& b, float h); // the free turn over h: Euler's equations by splitting (FreeRotation.cpp)
     // Every manifold, colour by colour: a colour's manifolds share no dynamic body, so a big
     // colour is solved in parallel.
     template <class F> void forEachManifold(F&& f) {
@@ -318,6 +333,10 @@ private:
     void integrateVelocities(float dt);
     void solveContacts(float dt);
     void propagateShock();
+    void buildShockBatches();
+    int colorShockLevel(int first, int last, int level, bool& twoSided);
+    void addShockBatch(int first, int last, int color);
+    std::vector<int>& nextShockBatch();
     void rememberContactImpulses();
     void dampRestingBodies(float dt);
     void integratePoses(float dt);
@@ -352,12 +371,17 @@ private:
     template <class J> J& attach(std::unique_ptr<J> j, const Vector3& anchorA, const Vector3& anchorB, const Vector3& axis);
     void solveJointPositions();
     void continuousCollision();
-    // Its steps (TimeOfImpact.cpp): is any body fast, the sweeps of this pass, the earliest impact
-    // of every fast body, and the clamping of the bodies to those times.
-    bool anyFastBody() const;
+    // Its steps (TimeOfImpact.cpp): which bodies are fast, the sweeps of all bodies (once a step) or
+    // of one, the earliest impact of every fast body, and the clamping of the bodies to those times.
+    bool findFastBodies();
     void sweepBodies();
-    void findTimesOfImpact(std::vector<float>& sMin);
+    void sweepBody(int i);
+    AABB coarseSweepBox(int j) const; // surely holds body j's sweep, made without it
+    void findTimesOfImpact(std::vector<float>& sMin, bool useTree);
     bool clampToTimesOfImpact(const std::vector<float>& sMin);
+    // Up to this many (fast body, body) box tests the candidates come from a plain scan; beyond,
+    // from a tree over the swept boxes (a thousand boxes: ~1 ms to build, a scan ~1 us per body).
+    static constexpr size_t kCcdScanLimit = 200000;
     size_t ccdHits_ = 0;
     std::vector<char> ccdClamped_; // bodies stopped by CCD in the last step (their next contact is an impact)
     Matrix3x3 grabMass_ = Matrix3x3::zero();
@@ -395,6 +419,7 @@ private:
     std::vector<XContact> xcontacts_;
     int substepCounter_ = 0;
     void solveManifoldShock(Manifold& m);
+    int pushUpperOffSupport(Manifold& m, bool upperIsA, float* pushes); // its one-sided push
     void dragAlongSupport(Manifold& m, RigidBody& upper, bool upperIsA, const float* acc, int np); // its friction part
 
     std::vector<RigidBody> bodies_;
@@ -404,13 +429,33 @@ private:
     // freed, so the hot path allocates nothing (the probe's census counts allocations per frame).
     std::vector<AABB> boxes_;                       // fat bounds of the bodies for the broad phase
     std::vector<std::vector<Manifold>> slots_;      // narrow-phase output per body / pair, concatenated in order
+    std::vector<int> staticWork_, pairWork_;        // collide: the bodies near the static world, the pairs that can move
     std::vector<uint64_t> colorUsed_;               // colours already used at each body (buildColors)
-    std::vector<int> shockOrder_;                   // manifolds sorted by level for the shock pass
+    std::vector<int> shockOrder_;                   // buildShockBatches: the manifolds in ground-up order,
+    std::vector<int> shockKeys_;                    //   the level of each manifold,
+    std::vector<int> shockColorOf_;                 //   its colour within its level,
+    std::vector<int> bodyShockLevel_;               //   the level a body's colours below belong to,
+    std::vector<uint64_t> bodyShockColors_;         //   the colours a body already has in that level,
+    std::vector<std::vector<int>> shockBatches_;    //   and the batches, level by level, colour by colour
+    std::vector<char> shockBatchSerial_;            //   (a batch of the overflow colour runs one by one)
+    int shockBatchCount_ = 0;                       //   (how many of them are in use this step)
+    static constexpr int kNoShockLevel = -1000000;
+    static constexpr int kShockTwoSided = 64;         // the colour of a level's two-sided solves (one by one)
+    static constexpr size_t kShockParallelBatch = 32; // smaller batches run on the calling thread
+    uint32_t cacheStamp_ = 0;                       // rememberContactImpulses: the number of this step
+    std::vector<float> sortKeys_;                   // sortManifoldsBottomUp: the height of each manifold,
+    std::vector<int> solveOrder_;                   //   the manifolds' indices in bottom-up order,
+    std::vector<int> solveRank_;                    //   and each manifold's place in that order
     std::vector<char> touching_;                    // bodies with a loaded contact (rest damping)
     std::vector<int> levelStart_, levelAdj_, levelQueue_, levelFill_; // computeLevels: adjacency rows and the BFS queue
     std::vector<Frozen> frozenKeep_;                // unfreezeAll: the sleepers that stay frozen
-    std::vector<SweptPose> sweeps_;                 // continuousCollision: the sweeps of a pass
-    std::vector<AABB> sweepBoxes_;
+    std::vector<SweptPose> sweeps_;                 // continuousCollision: the sweeps of this step
+    std::vector<AABB> sweepBoxes_;                  //   and the boxes around them
+    std::vector<int> fastBodies_;                   //   the bodies fast enough to be swept
+    std::vector<float> motionBound_;                //   how far any point of each body moved at most
+    std::vector<char> sweepReady_;                  //   whose exact sweep is made this step
+    std::vector<float> impactTimes_;                //   the earliest impact of each body, 0..1 of the step
+    BVH sweptTree_;                                 //   the tree over the swept boxes (many fast bodies)
     // Scratch of the collision passes, one per thread of the pool (ThreadPool::workerIndex):
     // cleared before use, never freed.
     struct CollideScratch {
@@ -436,6 +481,7 @@ private:
     AABB domain_{{-1, 0, -1}, {1, 2, 1}};
     const MeshBVH* mesh_ = nullptr;
     size_t contactCount_ = 0;
+    WarmStartStats warmStats_;
     float lastDt_ = 1.0f / 600.0f;
     bool shockFrictionPass_ = false;
     Timings timings_;

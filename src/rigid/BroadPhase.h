@@ -101,6 +101,8 @@ private:
     std::vector<Endpoint> axes_[3];
     std::unordered_set<uint64_t> pairs_;
     mutable std::vector<uint64_t> keys_; // scratch of findPairs (the sorted output), kept between steps
+    mutable std::vector<std::pair<int, int>> sortedPairs_; // the last sorted output
+    mutable bool pairsChanged_ = true;   // the set changed since sortedPairs_ was made
     size_t swaps_ = 0;
 };
 

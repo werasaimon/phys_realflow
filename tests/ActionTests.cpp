@@ -352,14 +352,12 @@ SpinDrift freeSpin(float dt, float seconds, PlotCsv* csv) {
 
 // Free rotation. No force, no torque: the action is unchanged by a shift in time (energy kept) and
 // by a turn of the whole world (the vector L kept) - Noether. A box spun about its middle axis
-// flips over and over while both stay put. The drift of L must shrink as the step shrinks (the
-// order is printed: the convergence plot). The target was 1e-3 over 20 s at 600 Hz; the solver
-// gives about 3e-3 for both, so the hard bound here is 1e-2 and the 1e-3 target is a finding
-// (docs/11-action.md, "Границы"): the vector L drifts at first order in dt and peaks during each
-// flip (a phase error of the orientation, advanced with the end-of-step velocity), and the energy
-// rises in steps during the flips and stays flat in between - and rises MORE with a smaller step
-// (2e-4 at 1/150 s, 1.6e-3 at 1/1200 s over 5 s), so it is not a truncation error of dt; its cause
-// is not found yet.
+// flips over and over while both stay put. The free turn is a splitting into exact turns about the
+// principal axes (FreeRotation.cpp): every sub-step is a rotation, so the vector L is kept to
+// rounding at any step, and the energy error is that of a second-order symplectic method - it
+// shrinks four times when the step halves, and stays bounded, with no steps at the flips.
+// (The implicit midpoint turn it replaced drifted L at first order - 2.8e-3 over 20 s - and the
+// energy rose in steps at every flip, more with a smaller step: 3e-3 over 20 s.)
 void testActionFreeRotation() {
     SpinDrift d;
     {
@@ -369,18 +367,24 @@ void testActionFreeRotation() {
     std::printf("  free spin 20 s at 1/600 s: %d flips, energy drift %.1e, |L - L0| / |L0| %.1e (target 1e-3%s)\n", d.flips, d.energy,
                 d.momentum, d.energy < 1e-3 && d.momentum < 1e-3 ? ": met" : ": NOT met, see docs/11-action.md");
     CHECK(d.flips >= 4, "the box must flip over (it flipped %d times)", d.flips);
-    CHECK(d.energy < 1e-2 && d.momentum < 1e-2, "energy drift %e, momentum drift %e", d.energy, d.momentum);
+    CHECK(d.energy < 1e-4 && d.momentum < 1e-5, "energy drift %e, momentum drift %e", d.energy, d.momentum);
+    // The order of the energy error, where the truncation - not the rounding - is what is measured:
+    // steps of 1/60, 1/120 and 1/240 s over 5 s. The vector L at every step: rounding only.
     PlotCsv conv("free_rotation_convergence", "dt_s,momentum_drift,energy_drift");
-    const float steps[4] = {1.0f / 150, 1.0f / 300, 1.0f / 600, 1.0f / 1200};
-    double prev = 0;
+    const float steps[3] = {1.0f / 60, 1.0f / 120, 1.0f / 240};
+    double prevEnergy = 0;
     std::printf("  drift over 5 s:");
     for (float dt : steps) {
         const SpinDrift s = freeSpin(dt, 5, nullptr);
         conv.row({dt, s.momentum, s.energy});
         std::printf("  dt 1/%.0f: L %.1e, E %.1e", 1 / dt, s.momentum, s.energy);
-        if (prev > 0) std::printf(" (order %.2f)", std::log2(prev / std::max(s.momentum, 1e-30)));
-        CHECK(prev == 0 || s.momentum < prev, "the drift of L must shrink with the step: %e after %e", s.momentum, prev);
-        prev = s.momentum;
+        if (prevEnergy > 0) {
+            const double order = std::log2(prevEnergy / std::max(s.energy, 1e-30));
+            std::printf(" (energy order %.2f)", order);
+            CHECK(order > 1.8, "the energy error must fall as dt^2: order %f", order);
+        }
+        CHECK(s.momentum < 1e-5, "the vector L drifted %e at dt 1/%.0f", s.momentum, 1 / dt);
+        prevEnergy = s.energy;
     }
     std::printf("\n");
 }

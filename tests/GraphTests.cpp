@@ -201,12 +201,167 @@ void testGraphSceneBuilds() {
     CHECK(finite, "NaN in the graph scene");
 }
 
+// A new scene of the editor: the world's 4 x 3 x 4 m box with its floor, a fixed plane.
+static SceneGraph floorOnlyGraph() {
+    SceneGraph g;
+    Entity floor;
+    floor.name = "Пол";
+    floor.shape = ShapeKind::Plane;
+    floor.size = {4, 0.02f, 4};
+    floor.position = {0, 0.01f, 0};
+    floor.rigid.enabled = true;
+    floor.rigid.fixed = true;
+    floor.collider.enabled = true;
+    g.entities.push_back(floor);
+    return g;
+}
+
+static Entity ball(const Vector3& position) {
+    Entity s;
+    s.name = "Сфера";
+    s.shape = ShapeKind::Sphere;
+    s.size = Vector3(0.2f);
+    s.position = position;
+    s.rigid.enabled = true; // 500 kg/m^3, friction 0.5, restitution 0.2: the editor's defaults
+    s.collider.enabled = true;
+    return s;
+}
+
+static Entity jelly(const Vector3& position) {
+    Entity s;
+    s.name = "Желе";
+    s.shape = ShapeKind::Box;
+    s.size = Vector3(0.3f);
+    s.position = position;
+    s.soft.enabled = true; // 150 kg/m^3, stiffness 0.3: the editor's defaults
+    return s;
+}
+
+// A soft body's centre of mass and its speed, and the particles' kinetic and potential energy.
+static void softMotion(const Simulation& sim, int body, Vector3& centre, Vector3& velocity) {
+    const ParticleSystem& ps = sim.particles;
+    double m = 0;
+    Vector3 x(0.0f), v(0.0f);
+    for (int i : ps.softBodies()[size_t(body)].particles) {
+        const float mi = ps.invMasses()[size_t(i)] > 0 ? 1.0f / ps.invMasses()[size_t(i)] : 0.0f;
+        x += ps.positions()[size_t(i)] * mi;
+        v += ps.velocities()[size_t(i)] * mi;
+        m += mi;
+    }
+    centre = x * float(1.0 / m);
+    velocity = v * float(1.0 / m);
+}
+
+static double particleEnergy(const Simulation& sim) {
+    const ParticleSystem& ps = sim.particles;
+    const float g = -sim.particles.params.gravity.y;
+    double e = 0;
+    for (size_t i = 0; i < ps.size(); ++i) {
+        if (ps.invMasses()[i] == 0) continue;
+        const double m = 1.0 / ps.invMasses()[i];
+        e += 0.5 * m * length2(ps.velocities()[i]) + m * g * ps.positions()[i].y;
+    }
+    return e;
+}
+
+// Two soft bodies made inside each other are pushed apart, not thrown apart (found by the user:
+// "soft bodies that went into each other began to fly"). The overlap is removed from where the
+// particles start and where they go alike (pre-stabilization, Macklin et al. 2014, sec. 4.4), so
+// it never becomes a speed. (1) Weightless, a third of each jelly inside the other: after 2 s
+// neither moves faster than 5 cm/s. (2) A jelly 10 cm inside one lying on the floor: it rises by
+// no more than the overlap, and the energy of the particles never exceeds its start by more than
+// the weight lifted out of the overlap.
+void testGraphSoftOverlapNoFlight() {
+    SceneGraph weightless;
+    weightless.world.gravity = Vector3(0.0f);
+    weightless.entities.push_back(jelly({-0.1f, 1.5f, 0}));
+    weightless.entities.push_back(jelly({0.1f, 1.5f, 0}));
+    Simulation apart;
+    apart.load(std::make_unique<GraphScene>(weightless));
+    float fastest = 0;
+    for (int f = 0; f < 120; ++f) { // 2 s
+        apart.stepFrame();
+        for (int b = 0; b < 2; ++b) {
+            Vector3 x, v;
+            softMotion(apart, b, x, v);
+            fastest = std::max(fastest, length(v));
+        }
+    }
+    SceneGraph pile = floorOnlyGraph();
+    pile.entities.push_back(jelly({0, 0.17f, 0}));
+    pile.entities.push_back(jelly({0, 0.37f, 0})); // 10 cm inside the lower one
+    Simulation stacked;
+    stacked.load(std::make_unique<GraphScene>(pile));
+    Vector3 top0, v;
+    softMotion(stacked, 1, top0, v);
+    const double e0 = particleEnergy(stacked);
+    double mass = 0;
+    for (float w : stacked.particles.invMasses()) mass += w > 0 ? 1.0 / w : 0.0;
+    float highest = top0.y;
+    double worstGain = 0;
+    for (int f = 0; f < 120; ++f) {
+        stacked.stepFrame();
+        Vector3 top;
+        softMotion(stacked, 1, top, v);
+        highest = std::max(highest, top.y);
+        worstGain = std::max(worstGain, particleEnergy(stacked) - e0);
+    }
+    const double allowed = 0.5 * mass * 9.81 * 0.1; // half of the particles lifted by the overlap
+    std::printf("  jellies a third inside each other, weightless: fastest centre %.4f m/s in 2 s; a jelly 10 cm inside another: "
+                "rose %.4f m, energy gain %.3f J (allowed %.3f J)\n", fastest, highest - top0.y, worstGain, allowed);
+    CHECK(fastest < 0.05f, "overlapping jellies were thrown apart at %.3f m/s", fastest);
+    CHECK(highest - top0.y < 0.11f, "the upper jelly flew up %.3f m", highest - top0.y);
+    CHECK(worstGain < allowed, "the overlap made energy: +%.3f J", worstGain);
+}
+
+// The world's box is no wall for rigid bodies - Box2D, Jolt and PhysX have no world walls at all.
+// Found by the user: a column of 100 spheres 28 m high in the 3 m room was pushed down through the
+// box's lid and flew apart. (1) The column falls as nature has it: the gaps close from the bottom
+// up, so for the first second nothing below reaches the top sphere - it falls freely,
+// y = y0 - g t^2 / 2 - and no sphere is ever lower than a free fall would take it (the only things
+// acting on it are gravity and supports from below). (2) A ball rolled off the floor's edge rolls on
+// past where the old side wall stood (x = 2 m).
+void testGraphNoInvisibleWalls() {
+    SceneGraph tower = floorOnlyGraph();
+    for (int i = 0; i < 100; ++i) tower.entities.push_back(ball({-0.9f, 0.12f + 0.28f * float(i), -0.9f})); // 8 cm gaps
+    Simulation sim;
+    sim.load(std::make_unique<GraphScene>(tower));
+    const float g = 9.81f, y0Top = 0.12f + 0.28f * 99;
+    const int frames = int(std::lround(1.0f / sim.frameDt)); // 1 s
+    float worstBelowFreeFall = 0;
+    for (int f = 1; f <= frames; ++f) {
+        sim.stepFrame();
+        const float t = float(f) * sim.frameDt;
+        for (int i = 0; i < 100; ++i) { // body 0 is the floor, the spheres follow in their order
+            const float freeFall = 0.12f + 0.28f * float(i) - 0.5f * g * t * t;
+            worstBelowFreeFall = std::max(worstBelowFreeFall, freeFall - sim.rigid.bodies()[size_t(1 + i)].pos.y);
+        }
+    }
+    const float t = float(frames) * sim.frameDt;
+    const float topFall = y0Top - sim.rigid.bodies()[100].pos.y, freeFall = 0.5f * g * t * t;
+
+    SceneGraph table = floorOnlyGraph();
+    table.entities.push_back(ball({1.5f, 0.12f, 0}));
+    table.entities.back().rigid.velocity = {3, 0, 0};
+    Simulation rolled;
+    rolled.load(std::make_unique<GraphScene>(table));
+    for (int f = 0; f < 2 * frames; ++f) rolled.stepFrame(); // 2 s
+    const Vector3 end = rolled.rigid.bodies()[1].pos;
+
+    std::printf("  100 spheres, 28 m, in a 3 m room: the top one fell %.3f m in %.2f s (free fall %.3f); lowest below free fall "
+                "%.4f m. A ball rolled off the floor at 3 m/s: x = %.2f m, y = %.3f m after 2 s\n",
+                topFall, t, freeFall, worstBelowFreeFall, end.x, end.y);
+    CHECK(std::fabs(topFall - freeFall) < 0.02f * freeFall, "the top sphere does not fall freely: %.3f m instead of %.3f", topFall, freeFall);
+    CHECK(worstBelowFreeFall < 0.01f, "a sphere was pushed down, %.3f m below a free fall", worstBelowFreeFall);
+    CHECK(end.x > 2.5f, "the ball stopped at an invisible wall: x = %.2f m", end.x);
+    CHECK(end.y > 0.09f && end.y < 0.13f, "the ball is not on the ground: y = %.3f m", end.y);
+}
+
 // The role ties are what the editor promises: a plane made cloth, pinned at its top, hangs.
 // Two cases: (1) a sheet stood up (turned 90 degrees) hangs its own length from the rod, nothing
 // torn; (2) a level sheet pinned along one edge swings down on it and never hangs lower than its
-// length. Case 2 uses a non-tearable cloth: at the bottom of that swing the tearable default loses
-// ~200 threads at once (the cloth solver's tension estimate spikes as the free edge whips, far
-// above the ~10 N/m the swing really puts on 4000 N/m threads) - a known issue of the cloth solver.
+// length. Both are tearable and lose no thread (the swing once tore ~200 at its bottom: the cloth
+// solver's lag read as tension - fixed, see testClothSwingNoFalseTears).
 static void hangSheet(bool standing, float& pinnedY, float& hang, int& torn, bool& finite) {
     SceneGraph g;
     g.world.size = {2, 3, 2};
@@ -218,7 +373,7 @@ static void hangSheet(bool standing, float& pinnedY, float& hang, int& torn, boo
     if (standing) sheet.rotationDeg = {90, 0, 0}; // stands from y 1.2 to 1.8; else level: "top row" = its -z edge
     sheet.cloth.enabled = true;
     sheet.cloth.pinnedEdges = 16;
-    sheet.cloth.tearable = standing;
+    sheet.cloth.tearable = true;
     g.entities.push_back(sheet);
     Simulation sim;
     sim.load(std::make_unique<GraphScene>(g));
@@ -246,11 +401,13 @@ void testGraphCloth() {
     hangSheet(true, pinnedA, hangA, tornA, finiteA);
     hangSheet(false, pinnedB, hangB, tornB, finiteB);
     std::printf("  cloth 0.6 x 0.6 m, standing, pinned at the top: rod at y %.3f, hangs %.3f m, %d threads torn; "
-                "level, pinned along one edge: swings, lowest point %.3f m below the edge\n", pinnedA, hangA, tornA, hangB);
+                "level, pinned along one edge: swings, lowest point %.3f m below the edge, %d threads torn\n", pinnedA, hangA, tornA,
+                hangB, tornB);
     CHECK(finiteA && finiteB, "NaN in the cloth");
     CHECK(std::fabs(pinnedA - 1.8f) < 1e-3f && std::fabs(pinnedB - 1.5f) < 1e-3f, "the pinned row moved");
     CHECK(std::fabs(hangA - 0.6f) < 0.02f && tornA == 0, "the standing sheet does not hang its length: %f m, %d torn", hangA, tornA);
     CHECK(hangB > 0.5f && hangB < 0.63f, "the swinging sheet must reach down about its length, never more: %f m", hangB);
+    CHECK(tornB == 0, "the swinging sheet tore %d threads", tornB);
 }
 
 // A rigid box that emits smoke, thrown sideways through still air: the smoke is left along its

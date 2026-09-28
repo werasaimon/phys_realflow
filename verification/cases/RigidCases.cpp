@@ -6,6 +6,7 @@
 //   pendulum        - the period of a compound pendulum at 10 degrees (elliptic integral), and
 //                     its convergence as the time step shrinks
 //   Noether         - energy, momentum and angular momentum stay what they were
+//   free rotor      - the energy error of the free turn (a symplectic splitting) falls as dt^2
 //   Newton's cradle - a hit passes down a row of elastic balls
 // The scenes are built the way tests/RigidTests.cpp builds them; damping is off, because what is
 // verified is the solver of the equations, not the damping model.
@@ -279,6 +280,59 @@ static Result runNoetherAngular(const RunOptions&) {
     return out;
 }
 
+// ---------------------------------------------------------------------------------------------
+// The free rotor: a box spun about its middle axis (half sizes 0.1 x 0.3 x 0.5 m, 1000 kg/m^3,
+// w = (0.01, 4, 0.01) rad/s: the tennis-racket flip), no gravity, no damping, for 5 s. The free turn
+// is the symmetric splitting R1(h/2) R2(h/2) R3(h) R2(h/2) R1(h/2) of exact turns about the
+// principal axes (src/rigid/FreeRotation.cpp; McLachlan 1993, Dullweber, Leimkuhler & McLachlan
+// 1997): second order, so the largest energy error of the run falls four times when dt halves.
+// The steps are frame-sized (1/60, 1/120, 1/240 s), where the truncation - not the float rounding -
+// is what the error measures.
+static double freeRotorEnergyError(float dt, double seconds) {
+    RigidWorld w;
+    w.setDomain(AABB({-10, -10, -10}, {10, 10, 10}));
+    undamped(w);
+    w.params.gravity = Vector3(0.0f);
+    w.params.collideWithDomain = false;
+    const int i = w.addBox({0, 0, 0}, {0.1f, 0.3f, 0.5f}, Quaternion(), 1000, Vector3(1));
+    RigidBody& b = w.bodies()[i];
+    b.angVel = {0.01f, 4.0f, 0.01f};
+    auto energy = [&] {
+        const Vector3 wb = b.rotation().transposed() * b.angVel;
+        return 0.5 * (double(wb.x) * wb.x / b.invInertiaLocal.x + double(wb.y) * wb.y / b.invInertiaLocal.y +
+                      double(wb.z) * wb.z / b.invInertiaLocal.z);
+    };
+    const double E0 = energy();
+    double worst = 0;
+    const int steps = int(std::lround(seconds / dt));
+    for (int k = 0; k < steps; ++k) {
+        w.step(dt);
+        worst = std::max(worst, std::fabs(energy() / E0 - 1));
+    }
+    return worst;
+}
+
+// Three levels, dt, 2 dt and 4 dt, in quick and full runs alike: a fourth, 1/480 s, reaches the
+// floor of float rounding (1.1e-5 against 2.1e-5 at 1/240 s) and would measure the rounding.
+static Result runFreeRotorOrder(const RunOptions&) {
+    Result r;
+    r.unit = "";
+    r.hLabel = "dt, с";
+    r.theoreticalOrder = 2;
+    const int levels = 3;
+    for (int l = 0; l < levels; ++l) {
+        const float dt = 1.0f / 60 / float(1 << l);
+        const double e = freeRotorEnergyError(dt, 5.0);
+        r.convergence.push_back({dt, e, e});
+    }
+    const OrderFit fit = fitOrder(r.convergence);
+    r.value = r.observedOrder = fit.order;
+    r.numericalUncertainty = std::isfinite(fit.stdError) ? fit.stdError : 0;
+    r.detail = format("наибольшая ошибка энергии за 5 с: %.2e при dt = 1/60, %.2e при dt = %.1e с (переворот ракетки)",
+                      r.convergence.front().error, r.convergence.back().error, r.convergence.back().h);
+    return r;
+}
+
 // Six steel balls 1 cm apart, e = 1, no friction; the first comes in at 2 m/s.
 static Result runNewtonCradle(const RunOptions&) {
     RigidWorld w;
@@ -321,6 +375,11 @@ void addRigidCases(std::vector<Case>& cases) {
                      runNoetherMomentum, {1e-4, 1e-3, false}, false});
     cases.push_back({"rigid-noether-angular", "|L| свободного тела (Джанибеков)", "code-verification", "Noether", noether,
                      runNoetherAngular, {1e-3, 1e-2, false}, false});
+    cases.push_back({"rigid-free-rotor-order", "Свободное вращение: порядок ошибки энергии по dt", "code-verification",
+                     "action: a free spinning box",
+                     {"Симметричное расщепление на точные повороты (McLachlan 1993; Dullweber, Leimkuhler, McLachlan 1997)",
+                      "https://doi.org/10.1063/1.474310", 2, 0, "analytic", "теоретический порядок схемы"},
+                     runFreeRotorOrder, {0.2, 0.4, false}, false});
     cases.push_back({"rigid-newton-cradle", "Колыбель Ньютона на полу, e = 1", "code-verification", "Newton's cradle on the floor",
                      {"Сохранение импульса и энергии: последний шар уходит с 2 м/с", "", 2.0, 0, "analytic", ""},
                      runNewtonCradle, {0.01, 0.05, true}, false});

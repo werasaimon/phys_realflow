@@ -5,6 +5,26 @@
 
 namespace rf {
 
+// A_qq^-1 = (sum q q^T)^-1 over a cluster's rest offsets q: the fixed half of its linear fit. A
+// flat cluster (all offsets in one plane) has no inverse; it gets the zero matrix, and its skin
+// then follows the rotation alone.
+static Matrix3x3 restSpreadInverse(const std::vector<Vector3>& offsets) {
+    Matrix3x3 spread = Matrix3x3::zero();
+    for (const Vector3& q : offsets) spread += Matrix3x3::outer(q, q);
+    const float scale = spread.m[0][0] + spread.m[1][1] + spread.m[2][2]; // for a size-free test
+    return spread.inverse(1e-6f * scale * scale * scale);
+}
+
+// The linear map a skin vertex follows for one cluster: the cluster's linear deformation F while
+// it is sound, else its rotation. "Sound": the volume ratio det F between 1/4 and 4 - a cluster
+// squashed flat, blown up or turned inside out gives the skin nonsense, and the rotation is the
+// honest fallback.
+static Matrix3x3 skinMap(const SoftCluster& cl) {
+    const float volumeRatio = cl.deformation.determinant();
+    if (volumeRatio > 0.25f && volumeRatio < 4.0f) return cl.deformation;
+    return cl.rotation.toMatrix3x3();
+}
+
 std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::vector<Vector3>& rest, float spacing,
                                        float radius) {
     AABB box;
@@ -31,6 +51,7 @@ std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::v
                     cl.particles.push_back(ids[m]);
                     cl.restOffsets.push_back(rest[m] - com);
                 }
+                cl.restInverseQQ = restSpreadInverse(cl.restOffsets);
                 clusters.push_back(std::move(cl));
             }
     if (clusters.empty()) { // small body: one cluster with everything
@@ -41,26 +62,46 @@ std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::v
         cl.restCentre = cl.centre = com;
         cl.particles = ids;
         for (const Vector3& r : rest) cl.restOffsets.push_back(r - com);
+        cl.restInverseQQ = restSpreadInverse(cl.restOffsets);
         clusters.push_back(std::move(cl));
     }
     return clusters;
 }
 
+// The rest particle nearest to x (its slot in the body).
+static int nearestSlot(const std::vector<Vector3>& particleRest, const Vector3& x) {
+    int nearest = 0;
+    float best = kInf;
+    for (size_t m = 0; m < particleRest.size(); ++m) {
+        const float d = length2(particleRest[m] - x);
+        if (d < best) { best = d; nearest = int(m); }
+    }
+    return nearest;
+}
+
 void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& particleRest) {
-    // Every vertex follows the clusters whose rest centre lies within 1.5 cluster radii, with the
-    // weight (1 - d / R)^2 - a smooth blend, so neighbouring vertices bound to different clusters
-    // do not tear the skin apart where the clusters rotate differently. A vertex with no cluster
-    // in reach (a thin spike of the mesh) takes the nearest particle's clusters.
+    // 1. Every vertex rides on its nearest particle (the anchor): drawn, it stays next to the
+    //    particles it covers however much they are squashed where the body presses on another.
+    // 2. Its offset from the anchor turns and stretches with the clusters around it - those whose
+    //    rest centre lies within 1.5 cluster radii, weighted (1 - d / R)^2, a smooth blend, so
+    //    neighbouring vertices do not tear apart where the clusters turn differently. A vertex with
+    //    no cluster in reach (a thin spike of the mesh) takes its anchor's clusters.
     body.surface = restSurface;
-    body.vertexClusters.assign(restSurface.positions.size(), {});
-    body.vertexWeights.assign(restSurface.positions.size(), {});
+    const size_t vertices = restSurface.positions.size();
+    body.vertexClusters.assign(vertices, {});
+    body.vertexWeights.assign(vertices, {});
+    body.vertexAnchor.assign(vertices, 0);
+    body.vertexAnchorOffset.assign(vertices, Vector3(0.0f));
     const int first = body.particles.front();
     std::vector<std::vector<int>> clustersOf(body.particles.size());
     for (int k = 0; k < int(body.clusters.size()); ++k)
-        for (int i : body.clusters[k].particles) clustersOf[i - first].push_back(k);
+        for (int i : body.clusters[k].particles) clustersOf[size_t(i - first)].push_back(k);
     const float R = 1.5f * std::max(body.clusterRadius, 1e-6f);
-    for (size_t v = 0; v < restSurface.positions.size(); ++v) {
+    for (size_t v = 0; v < vertices; ++v) {
         const Vector3& x = restSurface.positions[v];
+        const int anchor = nearestSlot(particleRest, x);
+        body.vertexAnchor[v] = anchor;
+        body.vertexAnchorOffset[v] = x - particleRest[size_t(anchor)];
         for (int k = 0; k < int(body.clusters.size()); ++k) {
             const float d = length(body.clusters[k].restCentre - x);
             if (d >= R) continue;
@@ -68,13 +109,7 @@ void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<V
             body.vertexWeights[v].push_back(sqr(1.0f - d / R));
         }
         if (body.vertexClusters[v].empty()) {
-            size_t nearest = 0;
-            float best = kInf;
-            for (size_t m = 0; m < particleRest.size(); ++m) {
-                const float d = length2(particleRest[m] - x);
-                if (d < best) { best = d; nearest = m; }
-            }
-            body.vertexClusters[v] = clustersOf[nearest];
+            body.vertexClusters[v] = clustersOf[size_t(anchor)];
             body.vertexWeights[v].assign(body.vertexClusters[v].size(), 1.0f);
         }
         float total = 0;
@@ -83,16 +118,34 @@ void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<V
     }
 }
 
-void skinSurface(const SoftBody& body, std::vector<Vector3>& out) {
+void skinSurface(const SoftBody& body, const std::vector<Vector3>& positions, std::vector<Vector3>& out) {
+    // vertex = its anchor particle now + the blend of its clusters' linear maps applied to the rest
+    // offset from that particle: x_v = x_a + sum_n w_n F_n (v_rest - a_rest). (The same blend of
+    // "centre + F (rest - rest centre)" evaluated at the vertex and at the anchor, subtracted - the
+    // cluster centres cancel.)
     out.resize(body.surface.positions.size());
     for (size_t v = 0; v < out.size(); ++v) {
-        const Vector3& rest = body.surface.positions[v];
-        Vector3 sum(0.0f);
-        for (size_t n = 0; n < body.vertexClusters[v].size(); ++n) {
-            const SoftCluster& cl = body.clusters[body.vertexClusters[v][n]];
-            sum += (cl.centre + cl.rotation.rotate(rest - cl.restCentre)) * body.vertexWeights[v][n];
-        }
-        out[v] = body.vertexClusters[v].empty() ? rest : sum;
+        Matrix3x3 blend = Matrix3x3::zero();
+        for (size_t n = 0; n < body.vertexClusters[v].size(); ++n)
+            blend += skinMap(body.clusters[size_t(body.vertexClusters[v][n])]) * body.vertexWeights[v][n];
+        const Vector3& anchor = positions[size_t(body.particles[size_t(body.vertexAnchor[v])])];
+        out[v] = anchor + blend * body.vertexAnchorOffset[v];
+    }
+}
+
+void turnSurfaceNormals(const SoftBody& body, const std::vector<Vector3>& restNormal, std::vector<Vector3>& normal) {
+    // A particle's surface direction turns as the body around it turns: with the rotations the
+    // last shape matching found for its clusters (the same rotations its goals are made of).
+    for (int i : body.particles) normal[size_t(i)] = Vector3(0.0f);
+    for (const SoftCluster& cl : body.clusters) {
+        const Matrix3x3 R = cl.rotation.toMatrix3x3();
+        for (int i : cl.particles) normal[size_t(i)] += R * restNormal[size_t(i)];
+    }
+    // The average of unit vectors is shorter than one: back to unit length. A particle in no
+    // cluster keeps its rest normal.
+    for (int i : body.particles) {
+        Vector3& n = normal[size_t(i)];
+        n = length2(n) > 1e-12f ? normalize(n) : restNormal[size_t(i)];
     }
 }
 
@@ -117,6 +170,7 @@ void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, 
             Matrix3x3 A = Matrix3x3::zero();
             for (size_t m = 0; m < cl.particles.size(); ++m) A += Matrix3x3::outer(p[cl.particles[m]] - c, cl.restOffsets[m]);
             cl.rotation = extractRotation(A, cl.rotation, 10);
+            cl.deformation = A * cl.restInverseQQ; // the linear fit F (for the skin only)
             cl.centre = c;
             const Matrix3x3 R = cl.rotation.toMatrix3x3();
             for (size_t m = 0; m < cl.particles.size(); ++m) {

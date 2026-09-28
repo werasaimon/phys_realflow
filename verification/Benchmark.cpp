@@ -18,6 +18,8 @@ const std::vector<Case>& registry() {
         addRigidCases(all);
         addGasCases(all);
         addParticleCases(all);
+        addRelativityCases(all);
+        addPlasmaCases(all);
         std::stable_sort(all.begin(), all.end(),
                          [](const Case& a, const Case& b) { return categoryRank(a.category) < categoryRank(b.category); });
         return all;

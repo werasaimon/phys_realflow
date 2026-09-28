@@ -213,15 +213,16 @@ def main():
                            ("∫ J²/σ по свободным рёбрам", d["joule_heat_uJ"]), ("jouleHeating() по ячейкам", d["cell_diagnostic_uJ"])], scale=1e-3)
     d = read_csv(src, "free_rotation")
     line_chart(os.path.join(dst, "free-rotation-drift.svg"), "Свободное вращение: дрейф инвариантов Нётер", "время, с",
-               "относительный дрейф, ×10⁻³", f"Брусок вращается вокруг средней оси, Δt = 1/600 с. Тест «action: a free spinning box…» ({run})",
-               d["t_s"], [("энергия E/E₀ − 1", d["energy_drift"]), ("|L − L₀| / |L₀|", d["momentum_drift"])], scale=1e3)
+               "относительный дрейф, ×10⁻⁶", f"Брусок вращается вокруг средней оси, Δt = 1/600 с. Тест «action: a free spinning box…» ({run})",
+               d["t_s"], [("энергия E/E₀ − 1", d["energy_drift"]), ("|L − L₀| / |L₀|", d["momentum_drift"])], scale=1e6)
     line_chart(os.path.join(dst, "free-rotation-omega.svg"), "Эффект Джанибекова: угловая скорость в осях тела", "время, с",
                "ω, рад/с", f"Та же прогонка: ω_y меняет знак — тело переворачивается. Тест «action: a free spinning box…» ({run})",
                d["t_s"], [("ω_x", d["wx"]), ("ω_y (средняя ось)", d["wy"]), ("ω_z", d["wz"])])
     d = read_csv(src, "free_rotation_convergence")
-    convergence_chart(os.path.join(dst, "free-rotation-convergence.svg"), "Дрейф L сходится с первым порядком по Δt",
-                      f"5 с свободного вращения при четырёх шагах. Тест «action: a free spinning box…» ({run})", d["dt_s"],
-                      [("|L − L₀| / |L₀|", d["momentum_drift"]), ("|E/E₀ − 1|", d["energy_drift"])], order=1)
+    convergence_chart(os.path.join(dst, "free-rotation-convergence.svg"), "Ошибка энергии сходится со вторым порядком по Δt",
+                      f"5 с свободного вращения при Δt = 1/60, 1/120, 1/240 с; вектор L — на уровне округления. "
+                      f"Тест «action: a free spinning box…» ({run})", d["dt_s"],
+                      [("|E/E₀ − 1|", d["energy_drift"]), ("|L − L₀| / |L₀|", d["momentum_drift"])], order=2)
     print("plots written to", dst)
 
 

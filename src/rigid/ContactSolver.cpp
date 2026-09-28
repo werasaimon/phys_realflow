@@ -2,6 +2,7 @@
 // colouring for parallel solving, and the solver of one manifold - the per-point sequential
 // impulses with the block LCP of its normal impulses and its friction (Catto 2005-2011).
 #include "rigid/RigidWorld.h"
+#include "rigid/ContactLcp.h"
 
 #include "core/Parallel.h"
 #include "core/Probe.h"
@@ -46,6 +47,18 @@ void RigidWorld::collideStatic(int i, std::vector<Manifold>& out) const {
     if (bodies_[i].invMass == 0) return;
     if (params.collideWithDomain) collideWalls(i, out);
     if (mesh_ && !mesh_->empty()) collideStaticMesh(i, out);
+}
+
+// Can body i touch the static environment this step? Its box - already widened by the contact
+// margin for the broad phase - reaches a domain wall or the static mesh's bounds. Far from both
+// (the usual case) there is nothing to test.
+bool RigidWorld::mayTouchStatic(int i) const {
+    if (bodies_[i].invMass == 0) return false;
+    const AABB& box = boxes_[size_t(i)];
+    const bool insideWalls = box.lo.x > domain_.lo.x && box.lo.y > domain_.lo.y && box.lo.z > domain_.lo.z &&
+                             box.hi.x < domain_.hi.x && box.hi.y < domain_.hi.y && box.hi.z < domain_.hi.z;
+    const bool nearMesh = mesh_ && !mesh_->empty() && mesh_->bounds().overlaps(box);
+    return (params.collideWithDomain && !insideWalls) || nearMesh;
 }
 
 // Domain walls: one manifold per plane (static ids -1 .. -6). A sphere touches a wall at one
@@ -132,9 +145,12 @@ void RigidWorld::collideStaticMesh(int i, std::vector<Manifold>& out) const {
 void RigidWorld::collide() {
     manifolds_.clear();
     NarrowPhase::margin = params.contactMargin;
-    // 1) Broad phase: candidate pairs from fattened AABBs.
+    // 1) Broad phase: candidate pairs from fattened AABBs. A sleeping body keeps its box from the
+    //    step it fell asleep in (it has not moved since), only the others are bounded again.
+    const bool fresh = boxes_.size() != bodies_.size();
     boxes_.resize(bodies_.size());
     for (size_t i = 0; i < bodies_.size(); ++i) {
+        if (!fresh && bodies_[i].sleeping) continue;
         AABB bb = bodies_[i].worldBounds();
         bb.lo -= Vector3(params.contactMargin);
         bb.hi += Vector3(params.contactMargin);
@@ -150,6 +166,9 @@ void RigidWorld::collide() {
     // 2) Narrow phase in parallel (static environment per body, then body pairs). Each task writes
     //    its own slot and the slots are concatenated in a fixed order -> deterministic results.
     //    The slots are kept between steps (cleared, not freed): the same vectors every step.
+    //    Only real work goes to the threads: a quick scan first lists the bodies that can touch the
+    //    static environment and the pairs with a body that can move (in a pile at rest: almost
+    //    none) - handing the pool a task for every idle body cost more than the tests themselves.
     const int nb = int(bodies_.size()), np = int(pairs_.size());
     if (collideScratch_.size() != size_t(ThreadPool::instance().threadCount()))
         collideScratch_.resize(size_t(ThreadPool::instance().threadCount()));
@@ -157,11 +176,17 @@ void RigidWorld::collide() {
     for (auto& v : slots_) v.clear();
     // Small grains: pair costs differ by orders of magnitude (sphere-sphere vs compound-compound),
     // and the pool hands out chunks dynamically, so many small chunks balance the load.
-    parallelFor(nb, [&](int i) { collideStatic(i, slots_[i]); }, 4);
-    parallelFor(np, [&](int k) {
-        auto [i, j] = pairs_[k];
+    staticWork_.clear();
+    for (int i = 0; i < nb; ++i)
+        if (mayTouchStatic(i)) staticWork_.push_back(i);
+    pairWork_.clear();
+    for (int k = 0; k < np; ++k)
+        if (bodies_[pairs_[size_t(k)].first].invMass > 0 || bodies_[pairs_[size_t(k)].second].invMass > 0) pairWork_.push_back(k);
+    parallelFor(int(staticWork_.size()), [&](int t) { const int i = staticWork_[size_t(t)]; collideStatic(i, slots_[size_t(i)]); }, 4);
+    parallelFor(int(pairWork_.size()), [&](int t) {
+        const int k = pairWork_[size_t(t)];
+        auto [i, j] = pairs_[size_t(k)];
         const RigidBody &A = bodies_[i], &B = bodies_[j];
-        if (A.invMass == 0 && B.invMass == 0) return;
         ContactManifold& cm = collideScratch_[size_t(ThreadPool::workerIndex())].pair; // the worker's scratch
         cm.points.clear();
         if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
@@ -215,8 +240,7 @@ void RigidWorld::buildColors() {
     const int nm = int(manifolds_.size());
     if (nm < 256) {
         colors_.resize(1);
-        colors_[0].resize(nm);
-        for (int i = 0; i < nm; ++i) colors_[0][i] = i;
+        colors_[0] = solveOrder_;
         parallelColors_ = false;
         return;
     }
@@ -224,8 +248,8 @@ void RigidWorld::buildColors() {
     std::vector<uint64_t>& used = colorUsed_;
     used.assign(bodies_.size(), 0);
     colors_.resize(64);
-    for (int i = 0; i < nm; ++i) {
-        const Manifold& m = manifolds_[i];
+    for (int i : solveOrder_) {
+        const Manifold& m = manifolds_[size_t(i)];
         // Static bodies (infinite mass) never conflict.
         uint64_t mask = (bodies_[m.a].invMass > 0 ? used[m.a] : 0) | (m.b >= 0 && bodies_[m.b].invMass > 0 ? used[m.b] : 0);
         int c = 63;
@@ -247,6 +271,7 @@ void RigidWorld::prepareManifold(Manifold& m, float dt) {
     auto oldIt = params.warmStarting ? cache_.find(key(m.a, m.b)) : cache_.end();
     const CachedPair* old = oldIt != cache_.end() ? &oldIt->second : nullptr;
     const float cell = contactCell(A);
+    m.warmMatched = 0;
     prepareContactPoints(m, dt);
     prepareFrictionPatch(m);
     prepareNormalMassMatrix(m);
@@ -413,6 +438,7 @@ void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cel
             p.jn = q->jn;
             matched += q->jn;
             hit[k] = 1;
+            ++m.warmMatched;
         } else {
             ++unmatched;
         }
@@ -452,47 +478,8 @@ void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cel
 
 // Block solver (Box2D's 2-point block solver generalised to <= 4 points): the normal impulses of
 // the manifold are found together as the exact solution of the small LCP by enumerating active
-// sets, largest first. A small CFM on the diagonal makes 4 coplanar points (rank-3 K) well posed
-// and selects the minimum-energy, i.e. symmetric, load distribution.
-// The small LCP of one manifold: K x + b >= 0, x >= 0, x^T (K x + b) = 0 for the (<= 4) normal
-// impulses x. An active set is a guess of which points push (x > 0); the guess is right when the
-// pushing points end at zero normal velocity and the others are not being pulled into contact.
-namespace {
-struct ContactLcp {
-    int n = 0;
-    float bb[4];     // the velocities the points would have with no impulse at all
-    float Kc[4][4];  // the effective-mass matrix with the CFM on its diagonal
-    float x[4] = {0, 0, 0, 0}; // the solution found by the last successful tryActiveSet
-
-    // Solves the points of `mask` as equalities and checks the complementarity of the rest.
-    bool tryActiveSet(int mask) {
-        int idx[4], k = 0;
-        for (int i = 0; i < n; ++i)
-            if (mask & (1 << i)) idx[k++] = i;
-        float xs4[4] = {0, 0, 0, 0};
-        if (k > 0) {
-            float Ms[4][4], rs[4], xs[4];
-            for (int i = 0; i < k; ++i) {
-                rs[i] = -bb[idx[i]];
-                for (int j = 0; j < k; ++j) Ms[i][j] = Kc[idx[i]][idx[j]];
-            }
-            if (!solveSmall(k, Ms, rs, xs)) return false;
-            for (int i = 0; i < k; ++i)
-                if (xs[i] < 0.0f) return false;
-            for (int i = 0; i < k; ++i) xs4[idx[i]] = xs[i];
-        }
-        for (int i = 0; i < n; ++i) {
-            if (mask & (1 << i)) continue;
-            float w = bb[i];
-            for (int j = 0; j < n; ++j) w += Kc[i][j] * xs4[j];
-            if (w < -1e-5f) return false;
-        }
-        for (int i = 0; i < n; ++i) x[i] = xs4[i];
-        return true;
-    }
-};
-} // namespace
-
+// sets, largest first (ContactLcp.h). A small CFM on the diagonal makes 4 coplanar points (rank-3 K)
+// well posed and selects the minimum-energy, i.e. symmetric, load distribution.
 void RigidWorld::blockNormalSolve(Manifold& m) {
     RigidBody& A = bodies_[m.a];
     RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
@@ -514,20 +501,9 @@ void RigidWorld::blockNormalSolve(Manifold& m) {
         lcp.bb[i] = b[i];
         for (int j = 0; j < n; ++j) lcp.bb[i] -= m.K[i][j] * a[j];
     }
-    // Total enumeration of active sets (exact for <= 4 points). K + cfm I is positive definite, so
-    // the LCP solution is unique and the search order only affects speed: first x = 0 (the whole
-    // manifold separates - common for speculative points), then the active set of the previous
-    // iteration (it rarely changes between iterations), then all sets, largest first.
-    const int full = (1 << n) - 1;
-    bool found = lcp.tryActiveSet(0);
-    int foundMask = 0;
-    if (!found && m.activeSet > 0 && m.activeSet <= full && lcp.tryActiveSet(m.activeSet)) found = true, foundMask = m.activeSet;
-    for (int size = n; size >= 1 && !found; --size)
-        for (int mask = full; mask >= 1 && !found; --mask) {
-            if (int(std::bitset<32>(unsigned(mask)).count()) != size || mask == m.activeSet) continue;
-            if (lcp.tryActiveSet(mask)) found = true, foundMask = mask;
-        }
-    if (found) m.activeSet = foundMask;
+    // Total enumeration of active sets (exact for <= 4 points), last iteration's set tried early.
+    const int found = lcp.solve(m.activeSet);
+    if (found >= 0) m.activeSet = found;
     // No valid active set (numerical corner case): x = 0. Apply the change of every impulse.
     for (int i = 0; i < n; ++i) {
         SolverPoint& p = m.points[i];
@@ -547,7 +523,8 @@ void RigidWorld::blockNormalSolve(Manifold& m) {
 // started, and an impact is a one-off - re-applying it next step as if it were the contact's
 // steady load pumped the stack's energy by 15 % per substep.
 void RigidWorld::applyRestitution() {
-    for (Manifold& m : manifolds_) {
+    for (int index : solveOrder_) {
+        Manifold& m = manifolds_[size_t(index)];
         bool impact = false, loaded = false;
         for (const SolverPoint& p : m.points) {
             impact |= p.bounce > 0;

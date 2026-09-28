@@ -152,25 +152,48 @@ void testGasParticles() {
           handkerchiefY[0]);
 }
 
+namespace {
+
+// The x of the flag's centre now (the mean of its particles).
+float flagCentreX(const ParticleSystem& P) {
+    const Cloth& flag = P.cloths()[0];
+    float x = 0;
+    for (int i = 0; i < flag.width * flag.height; ++i) x += P.positions()[size_t(flag.firstParticle + i)].x;
+    return x / float(flag.width * flag.height);
+}
+
+// Takes the collapsing water column out of the hydro scene: the fluid group whose particles start
+// above the pool (y > 0.17 m). Without it nothing sets the air in motion - the still reference.
+void removeWaterColumn(ParticleSystem& P) {
+    for (size_t i = 0; i < P.size(); ++i)
+        if (P.phases()[i] == uint8_t(ParticlePhase::Fluid) && P.positions()[i].y > 0.17f) return P.removeGroup(P.groupOf(int(i)));
+}
+
+} // namespace
+
 void testHydro() {
     // Water + air + bodies: light bodies float, the heavy ball sinks, the flag streams downwind in
-    // the wind and hangs without it; the air stays divergence-free around the moving water.
+    // the wind; the air stays divergence-free around the moving water.
+    // The flag is compared with the flag in STILL air: the same scene without wind and without the
+    // water column. The column's collapse stirs the air of the closed box, and that motion is
+    // physical - the gas without viscous damping keeps it (advection-reflection loses almost no
+    // energy), so "no wind" with the column is not still air; the old check passed only because the
+    // numerical dissipation of the old step killed that motion (2026-09-28). The flag swings by a
+    // few cm, so its centre is averaged over the last second (frames 120-180) in both runs.
     float flagX[2] = {0, 0};
     for (int windOn = 0; windOn < 2; ++windOn) {
         Simulation sim;
         loadSample(sim, Preset::Hydro);
         sim.grid.params.inflowSpeed = windOn ? 3.0f : 0.0f;
         sim.reset();
+        if (!windOn) removeWaterColumn(sim.particles);
         float worstRel = 0;
         for (int f = 1; f <= 180; ++f) {
             sim.stepFrame();
             if (f > 5) worstRel = std::max(worstRel, sim.grid.maxDivergence() * sim.grid.dx() / std::max(sim.grid.maxVelocity(), 1e-3f));
+            if (f > 120) flagX[windOn] += flagCentreX(sim.particles) / 60.0f;
         }
         const ParticleSystem& P = sim.particles;
-        const Cloth& flag = P.cloths()[0];
-        Vector3 fc(0.0f);
-        for (int i = 0; i < flag.width * flag.height; ++i) fc += P.positions()[flag.firstParticle + i];
-        flagX[windOn] = fc.x / float(flag.width * flag.height);
         bool finite = true;
         for (const Vector3& p : P.positions()) finite &= std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
         if (!windOn) continue;
@@ -184,9 +207,9 @@ void testHydro() {
               B[1].pos.y, B[3].pos.y);
         CHECK(B[2].pos.y < 0.1f, "the heavy ball must sink (y %f)", B[2].pos.y);
     }
-    std::printf("  flag (pole at x 0.65): centre x %.2f in the wind, %.2f without%s", flagX[1], flagX[0], "\n");
-    // Both are snapshots of a swinging flag (+-2 cm); the drag acts on the flag's real area (each
-    // particle its share of the sheet, as its mass - the grid spacing squared overstated it by 30 %).
+    std::printf("  flag (pole at x 0.65), centre x over the last second: %.4f in the wind, %.4f in still air%s", flagX[1], flagX[0], "\n");
+    // The drag acts on the flag's real area (each particle its share of the sheet, as its mass - the
+    // grid spacing squared overstated it by 30 %).
     CHECK(flagX[1] > 0.75f && flagX[1] > flagX[0] + 0.03f, "the wind must stream the flag out (%f vs %f)", flagX[1], flagX[0]);
 }
 
@@ -773,4 +796,99 @@ void testPressureBenchmark() {
         std::snprintf(name, sizeof name, "%s %dx%dx%d", row.name, g.nx(), g.ny(), g.nz());
         std::printf("  %-40s %12.2f %12.2f %10.0f %10.0f %7.1fx\n", name, jm, mm, j[1].iterations, m[1].iterations, jm / std::max(mm, 1e-6));
     }
+}
+
+namespace {
+
+// Kinetic energy 1/2 rho |u|^2 of the gas, summed over the cells from the cell-centred velocity [J].
+double gasKineticEnergy(const GasSolver& g) {
+    const double volume = double(g.dx()) * g.dx() * g.dx();
+    double e = 0;
+    for (int k = 0; k < g.nz(); ++k)
+        for (int j = 0; j < g.ny(); ++j)
+            for (int i = 0; i < g.nx(); ++i) e += 0.5 * g.params.fluidDensity * double(length2(g.cellVelocity(i, j, k))) * volume;
+    return e;
+}
+
+// The Taylor-Green vortex u = sin(pi x) cos(pi y), v = -cos(pi x) sin(pi y) in the unit box with
+// free-slip walls, WITHOUT viscosity: an exact steady flow of the Euler equations, so every joule
+// it loses is lost by the numerics.
+void startInviscidTaylorGreen(GasSolver& g, bool reflection) {
+    const float dx = 1.0f / 32;
+    g.params.domainSize = {1, 1, 4 * dx};
+    g.params.resolutionX = 32;
+    g.params.inflowSpeed = 0;
+    g.params.smokeRake = false;
+    g.params.kinematicViscosity = 0;
+    g.params.wallFriction = false;
+    g.params.advectionReflection = reflection;
+    for (auto& bc : g.params.bc) bc = BoundaryType::Wall;
+    g.reset({0, 0, 0}, nullptr);
+    g.setVelocity([](const Vector3& x) {
+        return Vector3(std::sin(kPi * x.x) * std::cos(kPi * x.y), -std::cos(kPi * x.x) * std::sin(kPi * x.y), 0);
+    });
+}
+
+} // namespace
+
+// Advection-reflection against the classic projection (AdvectionReflection.cpp). The inviscid
+// Taylor-Green vortex runs 2 s in both solvers side by side, the same step dt = dx / 2: the
+// classic step loses energy to its projection every step, the reflected one keeps nearly all of it
+// (Zehnder, Narain & Thomaszewski 2018, fig. 3: "two orders of magnitude" less loss). Neither may
+// make energy. Printed: the energy kept by each and the milliseconds per step (the price of the
+// second pressure solve); with RF_PLOT_DIR, the energy over time for the chapter's graph.
+void testAdvectionReflection() {
+    GasSolver classic, mirrored;
+    startInviscidTaylorGreen(classic, false);
+    startInviscidTaylorGreen(mirrored, true);
+    const double e0 = gasKineticEnergy(classic), dt = 0.5 / 32;
+    double classicMs = 0, mirroredMs = 0, largest = 0;
+    const char* dir = std::getenv("RF_PLOT_DIR");
+    FILE* csv = dir && *dir ? std::fopen((std::string(dir) + "/advection_reflection.csv").c_str(), "w") : nullptr;
+    if (csv) std::fprintf(csv, "t_s,projection,reflection\n0,1,1\n");
+    const int steps = int(2.0 / dt + 0.5);
+    for (int s = 1; s <= steps; ++s) {
+        auto t0 = std::chrono::steady_clock::now();
+        classic.step(float(dt));
+        auto t1 = std::chrono::steady_clock::now();
+        mirrored.step(float(dt));
+        auto t2 = std::chrono::steady_clock::now();
+        classicMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
+        mirroredMs += std::chrono::duration<double, std::milli>(t2 - t1).count();
+        const double kept = gasKineticEnergy(mirrored) / e0;
+        largest = std::max(largest, kept);
+        if (csv) std::fprintf(csv, "%.6g,%.9g,%.9g\n", s * dt, gasKineticEnergy(classic) / e0, kept);
+    }
+    if (csv) std::fclose(csv);
+    const double keptClassic = gasKineticEnergy(classic) / e0, keptMirrored = gasKineticEnergy(mirrored) / e0;
+    std::printf("  inviscid Taylor-Green, 32 cells, 2 s: energy kept %.4f with the projection, %.4f with the reflection "
+                "(lost %.2f%% vs %.2f%%); %.2f vs %.2f ms per step (x%.2f)\n",
+                keptClassic, keptMirrored, 100 * (1 - keptClassic), 100 * (1 - keptMirrored), classicMs / steps, mirroredMs / steps,
+                mirroredMs / std::max(classicMs, 1e-9));
+    CHECK(1 - keptMirrored < 0.25 * (1 - keptClassic), "the reflection must lose far less energy: %f vs %f", 1 - keptMirrored, 1 - keptClassic);
+    CHECK(largest < 1.0 + 1e-3, "the reflected flow made energy: %f of the start", largest);
+
+    // A steady inflow stays what it is set to: an empty wind tunnel at 2 m/s, reflection on, 1 s.
+    // The reflection and the half-step advections must not change a uniform flow in from the inlet
+    // and out of the outlet - neither at the inlet nor anywhere downstream.
+    GasSolver tunnel;
+    tunnel.params.domainSize = {2, 1, 1};
+    tunnel.params.resolutionX = 32;
+    tunnel.params.inflowSpeed = 2.0f;
+    tunnel.params.smokeRake = false;
+    tunnel.params.advectionReflection = true;
+    tunnel.reset({0, 0, 0}, nullptr);
+    for (double t = 0; t < 1.0;) t += tunnel.step(0.05f);
+    double inlet = 0, everywhere = 0;
+    int inletCells = 0, cells = 0;
+    for (int k = 0; k < tunnel.nz(); ++k)
+        for (int j = 0; j < tunnel.ny(); ++j) {
+            inlet += tunnel.cellVelocity(0, j, k).x, ++inletCells;
+            for (int i = 0; i < tunnel.nx(); ++i) everywhere += tunnel.cellVelocity(i, j, k).x, ++cells;
+        }
+    inlet /= inletCells;
+    everywhere /= cells;
+    std::printf("  empty tunnel at 2 m/s with the reflection: mean u %.5f m/s at the inlet, %.5f m/s everywhere\n", inlet, everywhere);
+    CHECK(std::fabs(inlet / 2.0 - 1) < 1e-3 && std::fabs(everywhere / 2.0 - 1) < 1e-3, "the reflection changed a steady inflow: %f / %f m/s",
+          inlet, everywhere);
 }

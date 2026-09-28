@@ -49,7 +49,7 @@ std::vector<double> solveConjugateGradients(const PoissonGrid& grid, const std::
 В движке то же самое, только с предобуславливателем: многосеточный V-цикл подсказывает хорошее направление, и итераций становится 7–8 при любом размере сетки ([PressureSolver.cpp:256](../../src/gas/PressureSolver.cpp#L256), [глава 4 документации](../04-gas-navier-stokes.md)).
 
 Другие матрицы движка:
-- **Контакт в четырёх точках.** Решается точно: решатель перебирает, какие точки прижаты, а какие отлипли, и для каждого варианта решает малую систему до 4 × 4 исключением Гаусса ([MatrixNxN.cpp:212](../../src/math/MatrixNxN.cpp#L212), вызов в [ContactSolver.cpp:479](../../src/rigid/ContactSolver.cpp#L479), перебор в [ContactSolver.cpp:496](../../src/rigid/ContactSolver.cpp#L496)).
+- **Контакт в четырёх точках.** Решается точно: решатель перебирает, какие точки прижаты, а какие отлипли, и для каждого варианта решает малую систему до 4 × 4 исключением Гаусса ([MatrixNxN.cpp:212](../../src/math/MatrixNxN.cpp#L212), вызов в [ContactLcp.h:42](../../src/rigid/ContactLcp.h#L42), перебор в [ContactLcp.h:60](../../src/rigid/ContactLcp.h#L60)).
 - **Главные оси инерции.** Ищутся вращениями Якоби ([Matrix3x3.h:111](../../src/math/Matrix3x3.h#L111)).
 
 ## Тест

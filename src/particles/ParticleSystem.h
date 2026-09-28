@@ -43,6 +43,12 @@ struct ParticleParams {
     float restDensity = 1000.0f;    // [kg/m^3]
     int solverIterations = 4;
     int solidIterations = 2;        // passes of the soft / cloth / contact constraints per iteration
+    // Stiff stacks (Macklin et al. 2014, "Unified Particle Physics for Real-Time Applications",
+    // sec. 5.2, eq. 21): in the contacts between particles a particle counts as lighter the higher
+    // it sits, m* = m exp(-k h), with h its height along -gravity in particle spacings. A contact
+    // then lifts the upper particle and leaves the lower one where it is, so a pile of soft bodies
+    // is held up within a few passes instead of sinking into itself. 0 = off.
+    float stackMassScaling = 1.0f;
     int clothSubsteps = 8;          // small steps of the cloth inside every substep (Macklin et al. 2019)
     float clothSpacing = 1.0f;      // distance between cloth particles, in particle radii: 1 = a
                                     // particle of radius r cannot slip through the sheet (as in FleX)
@@ -116,7 +122,7 @@ public:
     const std::vector<SoftBody>& softBodies() const { return softBodies_; }
     const std::vector<Cloth>& cloths() const { return cloths_; }
     // Surface of a soft body now (its mesh skinned to the clusters).
-    void softBodySurface(size_t body, std::vector<Vector3>& out) const { skinSurface(softBodies_[body], out); }
+    void softBodySurface(size_t body, std::vector<Vector3>& out) const { skinSurface(softBodies_[body], x_, out); }
 
     // Mouse grab: the particle nearest to `point` (within 3 spacings) and its neighbours of the same
     // object (cloth: that particle alone; soft body / liquid: a small ball) follow the target
@@ -154,7 +160,10 @@ private:
     // Walls, obstacle mesh, rigid bodies. `start`: where the particle was at the start of the step
     // of length dt that moved it to p (the friction acts on that motion).
     void collide(int i, Vector3& p, const Vector3& start, bool recordImpulse, float dt);
+    void collideWallsAndMesh(Vector3& p, const Vector3& start) const; // the first two of collide's three
     void applyViscosityAndVorticity(float dt);
+    // A soft body's signed distance field at a point inside it: depth under the surface, outward normal.
+    void measureSurface(const MeshBVH& bvh, const Vector3& p, float& depth, Vector3& normal) const;
     // (Colours live on the objects: SoftBody::color, Cloth::color.)
     void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, int group, float invMass,
                      float volume = 1.0f);
@@ -163,18 +172,40 @@ private:
     std::vector<int> renumberWithout(int group) const;
     void compactParticles(const std::vector<int>& newIndex, size_t kept);
     void renumberSolids(int group, const std::vector<int>& newIndex);
-    // Particles of different phases (and non-adjacent particles of one cloth) keep 2r apart:
-    // the candidate pairs are collected once per substep, then projected Gauss-Seidel style.
+    // Particles of different phases, of different soft bodies and non-adjacent particles of one
+    // cloth keep d0 = 2r apart (ParticleContacts.cpp): the candidate pairs are collected once per
+    // substep; pairs of bodies found inside each other are pulled apart first (pre-stabilization);
+    // then every pair is projected Gauss-Seidel style in the solid passes.
     struct ParticleContact {
         int i, j;
-        Vector3 normal; // from j to i, fixed for the substep
+        Vector3 normal;    // the way i is pushed (j the other way), fixed for the substep
+        float lift;        // stack mass scaling: i's inverse mass counts x lift, j's / lift
+        float target;      // how far apart the main solve keeps them: d0, less for an intersection
+        bool intersecting; // its two bodies are inside each other: the pre-stabilization's to undo
     };
     void findParticleContacts();
+    float stackLift(int i, int j) const; // FleX's stiff-stack mass scaling (eq. 21)
+    // Pre-stabilization: bodies found inside each other at the start of the step pulled apart, x
+    // and p alike (no speed), every soft body as a whole (no dent), the way out of the bodies.
+    void preStabilizeContacts();
+    void findMovers();
+    long long moverPair(const ParticleContact& c) const;
+    int findIntersections(); // how many contacts belong to an intersection
+    void rememberUnresolved();
+    Vector3 intersectionNormal(int i, int j) const; // FleX's signed-distance normal (eq. 17, 20)
+    bool pushMoversApart();
+    void pushMoversOutOfSupports();
+    void pushOutOfSupports(Vector3& p);
+    void moveByMovers();
+    // The main solve: its normals and targets for the step, then one pass per solid iteration.
+    void setMainSolveTargets();
     void solveParticleContacts();
-    // Cloth dynamics in clothSubsteps small steps (gravity, one constraint pass, tearing each) from
-    // the start of the substep: "small steps" converge far better than more iterations, so the
-    // thread tensions - and with them the tearing - are physical, not solver lag.
+    // Cloth dynamics in small steps (gravity, one constraint pass with every thread solved exactly,
+    // tearing each) from the start of the substep: "small steps" converge far better than more
+    // iterations, so the thread tensions - and with them the tearing - are physical, not solver lag.
+    // clothSmallSteps: clothSubsteps of them, more while the threads are pulled hard.
     void stepClothsInSmallSteps(float dt);
+    int clothSmallSteps(const Cloth& c, float dt) const;
     std::vector<ParticleContact> contacts_;
     struct ParticleGrab {
         std::vector<int> particles;       // [0] = the picked one
@@ -211,6 +242,12 @@ private:
     std::vector<float> invMass_;
     std::vector<float> volume_; // volume relative to a fluid particle (cloth sheets are thinner)
     std::vector<Vector3> rest_;
+    // The signed distance field of a soft body, sampled at its particles (Macklin et al. 2014,
+    // sec. 5.1): how deep under its body's surface a particle sits at rest (-1: liquid and cloth
+    // have no surface) and the outward normal there, at rest and turned with the clusters now.
+    std::vector<float> surfaceDepth_;
+    std::vector<Vector3> restSurfaceNormal_, surfaceNormal_;
+    bool hasSurface(int i) const { return surfaceDepth_[size_t(i)] >= 0; }
     std::vector<SoftBody> softBodies_;
     std::vector<Cloth> cloths_;
     int nextObject_ = 0;
@@ -223,6 +260,16 @@ private:
     // grid
     int gx_ = 1, gy_ = 1, gz_ = 1;
     std::vector<int> cellStart_, cellOf_, sorted_;
+    // Pre-stabilization's movers: every soft body is one (numbered n + its index), every other
+    // particle is its own (numbered as the particle). Per particle its mover, its soft body (-1:
+    // none) and its push out of the supports in the current pass; per mover its inverse mass
+    // (0: held), how far this step has shifted it, and the move of the current pass with the
+    // number of pairs that asked for it. The pairs of movers inside each other (moverPair, sorted):
+    // this step's, and those the pre-stabilization has not pulled apart yet (for the next step).
+    std::vector<int> moverOf_, softBodyOf_, moverAsks_;
+    std::vector<float> moverInvMass_;
+    std::vector<Vector3> supportPush_, moverShift_, moverMove_;
+    std::vector<long long> intersections_, unresolved_;
 
     // Two-way coupling with rigid bodies inside the iterations (XPBD contacts, Mueller et al. 2020,
     // "Detailed Rigid Body Simulation with Extended Position Based Dynamics"): every contact splits
@@ -240,7 +287,7 @@ private:
     // The steps of step() (ParticleSystem.cpp).
     void beginStep(int n);
     void predictPositions(float dt);
-    void solveIteration(int it, bool solids, float dt);
+    void solveIteration(bool solids, float dt);
     void finishStep(float dt);
     // The research layers of the particles (ParticleDebugDraw.cpp): neighbours of the particle at
     // the probe point, density error, soft-body clusters, cloth tension. Only the layers that are on.
