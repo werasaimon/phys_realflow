@@ -801,7 +801,9 @@ void testSoftStackNoOverlap() {
     // fall (the iterations' residual under 53 kg); the squashed faces spread and the neighbour's
     // bottom layer settles into the widened gaps by 1.4 d0, the skin following it (1.1 d0) - it
     // was 10 d0, the barrels merged, before the mass scaling. A rise of more than 5 cm would be
-    // energy made by the scaling (k = 1.5 lifted a barrel 0.4 m, k = 2 by 1.1 m).
+    // energy made by the scaling (k = 1.5 lifted a barrel 0.4 m, k = 2 by 1.1 m). Those were the
+    // shape-matching barrels; the Neo-Hookean ones (the file's "stiffness 0.5" -> E = 1 MPa) solve
+    // their contacts in the small steps too and overlap by 0.00 d0, rising 0 mm.
     CHECK(straightFrames >= 3, "the stack fell before it could be measured (%d checks)", straightFrames);
     CHECK(stacked < 0.15f && anyTime < 0.25f, "barrels sink into each other: %.2f d0 stacked, %.2f d0 falling", stacked, anyTime);
     CHECK(layers < 2.0f && skin < 2.0f, "the faces nest too deep: layers %.2f d0, skins %.2f d0", layers, skin);
@@ -847,10 +849,13 @@ void testSoftPressedApartAndBox() {
         w.setDomain(domain);
         s.setRigidWorld(&w);
         s.reset(domain);
+        // The jelly (0.32 m, box() takes half sides) stands on the floor; the box starts 5 mm above
+        // it. (It used to start with its lower 7 cm inside the jelly, the jelly's lower quarter in
+        // the floor: the tetrahedra keep a body whole, and the box pushed in stayed wrapped in it.)
         TriMesh jelly = primitives::box(Vector3(0.16f));
-        jelly.translate({0, 0.08f, 0});
+        jelly.translate({0, 0.16f, 0});
         s.addSoftBody(jelly, 400.0f, 0.3f, Vector3(1));
-        const int box = w.addBox({0, 0.22f, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
+        const int box = w.addBox({0, 0.375f, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
         for (int k = 0; k < 360; ++k) {
             w.step(dt);
             s.step(dt);

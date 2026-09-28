@@ -55,6 +55,13 @@ void testSPH();
 void testFloating();
 void testLiquidWalls();
 void testLightBodyInWater();
+// the Neo-Hookean soft body against elasticity theory (SoftFemTests.cpp)
+void testSoftFemCantilever();       // tip deflection and first frequency vs Euler-Bernoulli, two resolutions
+void testSoftFemVolume();           // nu = 0.49: the volume kept within 1 % under load
+void testSoftFemFriction();         // Coulomb on a slope: sticks below the friction angle, slides at g (sin - mu cos)
+void testSoftFemEnergy();           // a dropped ball never gains energy
+void testSoftFemNoInvisibleWalls(); // a soft ball rolls off the floor over the ground
+void testSoftFemPerformance();      // six soft barrels: tetrahedra vs shape matching, ms per frame
 
 // gas and fire (GasTests.cpp)
 void testGasBodies();

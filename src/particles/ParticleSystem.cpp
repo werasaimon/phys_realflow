@@ -1,7 +1,8 @@
-// ParticleSystem: the particles, what is made of them (blocks of liquid, soft bodies, cloth),
-// the emitter, the step, and taking one group out again. The liquid's density solver is in
-// DensitySolver.cpp, the contacts in
-// ParticleContacts.cpp, cloth and soft bodies in Cloth.cpp and SoftBody.cpp.
+// ParticleSystem: the particles, what is made of them (blocks of liquid, cloth), the emitter, the
+// step, and taking one group out again. The liquid's density solver is in DensitySolver.cpp, the
+// contacts in ParticleContacts.cpp, the soft bodies in ParticleSoftBodies.cpp (building, small
+// steps), SoftTets.cpp (the Neo-Hookean material) and SoftBody.cpp (the legacy clusters), the
+// cloth in Cloth.cpp.
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
@@ -30,9 +31,12 @@ void ParticleSystem::reset(const AABB& domain) {
 
     x_.clear(); v_.clear(); p_.clear(); dp_.clear(); omega_.clear(); vtmp_.clear();
     phase_.clear(); object_.clear(); group_.clear(); invMass_.clear(); volume_.clear(); rest_.clear();
-    surfaceDepth_.clear(); restSurfaceNormal_.clear(); surfaceNormal_.clear();
+    surfaceDepth_.clear(); restSurfaceNormal_.clear(); surfaceNormal_.clear(); friction_.clear();
     contacts_.clear(); intersections_.clear(); unresolved_.clear();
     softBodies_.clear(); cloths_.clear();
+    walls_ = domain;
+    tetBatchesStale_ = true;
+    softSmallSteps_ = 0;
     grab_ = ParticleGrab();
     nextObject_ = 0;
     nextGroup_ = 0;
@@ -100,66 +104,8 @@ void ParticleSystem::addParticle(const Vector3& x, const Vector3& v, ParticlePha
     surfaceDepth_.push_back(-1.0f); // no surface; addSoftBody measures its own particles'
     restSurfaceNormal_.push_back(Vector3(0.0f));
     surfaceNormal_.push_back(Vector3(0.0f));
+    friction_.push_back(0.0f); // addSoftBody gives its particles the material's
     if (phase == ParticlePhase::Fluid) ++fluidCount_;
-}
-
-// A soft body's signed distance field at a point p inside its mesh (Macklin et al. 2014, sec.
-// 5.1): the depth under the surface and the outward gradient. The gradient is the central
-// difference of the signed distance over a particle radius each way, not the normal of the nearest
-// triangle. The two differ along an edge and at a corner, where the nearest face is any one of two
-// or three: the difference quotient leans out between them - the diagonal arrows at the corners
-// of the paper's Fig. 7. A particle on the rim of a face must count as "up and out", or a body
-// resting on that face is pushed sideways by the one-sided contacts at the rim (eq. 20). Where
-// the differences cancel - the middle of the body, its medial axis - the nearest face decides.
-void ParticleSystem::measureSurface(const MeshBVH& bvh, const Vector3& p, float& depth, Vector3& normal) const {
-    ClosestHit nearest;
-    bvh.closestPoint(p, kInf, nearest);
-    depth = std::max(0.0f, -nearest.signedDistance);
-    const float h = params.particleRadius;
-    auto slope = [&](const Vector3& e) { return bvh.signedDistance(p + e * h, kInf) - bvh.signedDistance(p - e * h, kInf); };
-    const Vector3 gradient(slope(Vector3(1, 0, 0)), slope(Vector3(0, 1, 0)), slope(Vector3(0, 0, 1)));
-    normal = length2(gradient) > 1e-6f * h * h ? normalize(gradient) : normalize(nearest.normal);
-}
-
-int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color, const Vector3& velocity) {
-    const float s = spacing();
-    MeshBVH bvh;
-    bvh.build(shape);
-    const AABB b = shape.bounds();
-    SoftBody body;
-    body.object = nextObject_++;
-    body.group = nextGroup_++;
-    body.stiffness = stiffness;
-    body.color = color;
-    const float invMass = 1.0f / (density * s * s * s);
-    std::vector<Vector3> rest;
-    for (float z = b.lo.z + 0.5f * s; z < b.hi.z; z += s)
-        for (float y = b.lo.y + 0.5f * s; y < b.hi.y; y += s)
-            for (float x = b.lo.x + 0.5f * s; x < b.hi.x; x += s) {
-                Vector3 p(x, y, z);
-                if (int(x_.size()) >= params.maxParticles || !domain_.contains(p) || !bvh.isInside(p)) continue;
-                body.particles.push_back(int(x_.size()));
-                rest.push_back(p);
-                addParticle(p, velocity, ParticlePhase::Soft, body.object, body.group, invMass);
-            }
-    if (body.particles.empty()) return -1;
-    // The body's signed distance field, sampled at its particles (Macklin et al. 2014, sec. 5.1,
-    // Fig. 7): how deep under the mesh's surface each one sits and which way is out. The contacts
-    // with other bodies take their normal from it, so a deep overlap comes apart the way out of
-    // the body, not along whichever neighbour happens to be nearest.
-    for (int i : body.particles)
-        measureSurface(bvh, rest_[size_t(i)], surfaceDepth_[size_t(i)], restSurfaceNormal_[size_t(i)]);
-    for (int i : body.particles) surfaceNormal_[size_t(i)] = restSurfaceNormal_[size_t(i)];
-    // Clusters every 1.5 particle spacings, each 2 spacings in radius (as FleX): a cluster spans
-    // ~4 particles, so a body a few particles thick bends and squashes between its clusters. Bigger
-    // clusters (3 / 4 spacings) covered a small body whole and made it rigid.
-    // A body must be at least 3 particles across: a cluster of a flat sheet of particles has no
-    // definite rotation, and its skin flies apart.
-    body.clusterRadius = 2.0f * s;
-    body.clusters = buildClusters(body.particles, rest, 1.5f * s, body.clusterRadius);
-    bindSurface(body, primitives::subdivided(shape, 1.5f * s), rest);
-    softBodies_.push_back(std::move(body));
-    return int(softBodies_.size()) - 1;
 }
 
 int ParticleSystem::addCloth(const Vector3& origin, const Vector3& u, const Vector3& v, const ClothMaterial& material, int pinMask,
@@ -398,6 +344,11 @@ void ParticleSystem::step(float dt) {
         preStabilizeContacts();
         setMainSolveTargets();
     }
+    {
+        // After the contacts are known: the small steps solve the ones between elastic bodies too.
+        Probe::Timer timer("particles/soft tetrahedra ms");
+        stepSoftTetsInSmallSteps(dt);
+    }
     for (int it = 0; it < params.solverIterations; ++it) solveIteration(solids, dt);
     finishStep(dt);
 }
@@ -499,10 +450,16 @@ void ParticleSystem::finishStep(float dt) {
     {
         Probe::Timer timer("particles/velocity ms"); // v = dx / dt, viscosity, vorticity, the bodies' share
         const float vmaxAllowed = 0.5f * h_ / dt;
+        const bool smallSteps = softSmallSteps_ > 0 && softStart_.size() == size_t(n) && tetParticle_.size() == size_t(n);
         float vmaxSeen = parallelMax<float>(n, 0.0f, [&](int b, int e) {
             float m = 0;
             for (int i = b; i < e; ++i) {
-                Vector3 v = (p_[i] - x_[i]) / dt;
+                // A free particle of a tetrahedral body: its last small step's velocity, plus what
+                // the main passes moved it since (a contact's push). Its mean velocity over the
+                // substep lags the true one by a dt / 2 - restarted from it, a swinging beam felt
+                // an extra push of half its spring and swung 30 % slow.
+                Vector3 v = smallSteps && tetParticle_[i] && invMass_[i] > 0 ? softVelocity_[i] + (p_[i] - softStart_[i]) / dt
+                                                                              : (p_[i] - x_[i]) / dt;
                 float l = length(v);
                 if (l > vmaxAllowed) v *= vmaxAllowed / l;
                 v_[i] = v;
@@ -567,7 +524,8 @@ void ParticleSystem::compactParticles(const std::vector<int>& newIndex, size_t k
     compact(x_); compact(v_); compact(p_); compact(dp_); compact(omega_); compact(vtmp_);
     compact(rho_); compact(lambda_); compact(phase_); compact(object_); compact(group_);
     compact(invMass_); compact(volume_); compact(rest_);
-    compact(surfaceDepth_); compact(restSurfaceNormal_); compact(surfaceNormal_);
+    compact(surfaceDepth_); compact(restSurfaceNormal_); compact(surfaceNormal_); compact(friction_);
+    softStart_.clear(); softVelocity_.clear(); softEnd_.clear(); // rebuilt by the next small steps
     compact(contactBody_); compact(contactNormal_); compact(contactPoint_); compact(contactDepth_);
     nbrCount_.clear(); nbr_.clear(); cellOf_.clear(); sorted_.clear(); contacts_.clear();
     intersections_.clear(); unresolved_.clear(); // they name soft bodies by their index
@@ -583,7 +541,10 @@ void ParticleSystem::renumberSolids(int group, const std::vector<int>& newIndex)
         for (int& i : b.particles) i = newIndex[size_t(i)];
         for (SoftCluster& c : b.clusters)
             for (int& i : c.particles) i = newIndex[size_t(i)];
+        for (SoftTet& t : b.tets)
+            for (int& i : t.v) i = newIndex[size_t(i)];
     }
+    tetBatchesStale_ = true;
     cloths_.erase(std::remove_if(cloths_.begin(), cloths_.end(), ofGroup), cloths_.end());
     for (Cloth& c : cloths_) shiftCloth(c, c.firstParticle - newIndex[size_t(c.firstParticle)]);
 }

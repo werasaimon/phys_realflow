@@ -28,6 +28,8 @@
 // back as the same float, so save -> load -> save gives the same text.
 #include "scene/SceneGraph.h"
 
+#include "particles/SoftBody.h" // youngFromStiffness (old files)
+
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
@@ -213,7 +215,12 @@ static void saveEntity(std::ostringstream& o, const Entity& e) {
           << num(e.rigid.restitution) << " fixed " << (e.rigid.fixed ? 1 : 0) << " velocity " << vec(e.rigid.velocity)
           << " spin " << vec(e.rigid.angularVelocity) << "\n";
     if (e.collider.enabled) saveCollider(o, e.collider);
-    if (e.soft.enabled) o << "  soft density " << num(e.soft.density) << " stiffness " << num(e.soft.stiffness) << "\n";
+    if (e.soft.enabled) {
+        o << "  soft density " << num(e.soft.density); // "stiffness" before "young": reading it sets E too
+        if (e.soft.shapeMatching) o << " model shape-matching stiffness " << num(e.soft.stiffness);
+        o << " young " << num(e.soft.youngModulus) << " poisson " << num(e.soft.poissonRatio) << " friction "
+          << num(e.soft.friction) << "\n";
+    }
     if (e.liquid.enabled) o << "  liquid\n";
     if (e.magnet.enabled) o << "  magnet moment " << vec(e.magnet.moment) << "\n";
     if (e.heat.enabled) o << "  heat temperature " << num(e.heat.temperature) << " smoke " << num(e.heat.smoke) << "\n";
@@ -262,6 +269,60 @@ static bool readShape(LineReader& r, Entity& e, const std::string& shapeName, st
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Soft material presets
+// ---------------------------------------------------------------------------
+SoftRole softPreset(SoftPreset preset) {
+    SoftRole r;
+    r.enabled = true;
+    auto set = [&](float density, float young, float poisson, float friction) {
+        r.density = density, r.youngModulus = young, r.poissonRatio = poisson, r.friction = friction;
+    };
+    if (preset == SoftPreset::Jelly) set(1050.0f, 1.5e4f, 0.45f, 0.5f);
+    else if (preset == SoftPreset::Rubber) set(1100.0f, 1.0e6f, 0.47f, 0.8f);
+    else if (preset == SoftPreset::SoftPlastic) set(950.0f, 5.0e6f, 0.4f, 0.4f);
+    return r;
+}
+
+SoftPreset softPresetOf(const SoftRole& role) {
+    for (SoftPreset p : {SoftPreset::Jelly, SoftPreset::Rubber, SoftPreset::SoftPlastic}) {
+        const SoftRole q = softPreset(p);
+        auto same = [](float a, float b) { return std::fabs(a - b) <= 1e-4f * std::max(std::fabs(a), std::fabs(b)); };
+        if (!role.shapeMatching && same(role.density, q.density) && same(role.youngModulus, q.youngModulus) &&
+            same(role.poissonRatio, q.poissonRatio) && same(role.friction, q.friction))
+            return p;
+    }
+    return SoftPreset::Custom;
+}
+
+const char* softPresetName(SoftPreset preset) {
+    switch (preset) {
+    case SoftPreset::Jelly: return "Желе";
+    case SoftPreset::Rubber: return "Резина";
+    case SoftPreset::SoftPlastic: return "Мягкий пластик";
+    default: return "Своё";
+    }
+}
+
+// One key of the soft role. An old file's shape-matching "stiffness" also sets Young's modulus
+// (youngFromStiffness): a file written before the tetrahedra has no "young", and a newer one
+// writes "young" after it anyway.
+static bool readSoftKey(const std::string& k, LineReader& r, SoftRole& s) {
+    if (k == "stiffness") {
+        if (!r.number(s.stiffness)) return false;
+        s.youngModulus = youngFromStiffness(s.stiffness);
+        return true;
+    }
+    if (k == "model") {
+        std::string model;
+        if (!r.text(model) || (model != "shape-matching" && model != "neo-hookean")) return false;
+        s.shapeMatching = model == "shape-matching";
+        return true;
+    }
+    return k == "density" ? r.number(s.density) : k == "young" ? r.number(s.youngModulus)
+         : k == "poisson" ? r.number(s.poissonRatio) : k == "friction" ? r.number(s.friction) : false;
+}
+
 // One "key value(s)" of a role line; false if the key is not one of that role's.
 static bool readRoleKey(const std::string& role, const std::string& k, LineReader& r, Entity& e) {
     if (role == "object") {
@@ -284,7 +345,7 @@ static bool readRoleKey(const std::string& role, const std::string& k, LineReade
             if (kind == kColliderNames[i]) { c.kind = ColliderKind(i); return true; }
         return false;
     }
-    if (role == "soft") return k == "density" ? r.number(e.soft.density) : k == "stiffness" ? r.number(e.soft.stiffness) : false;
+    if (role == "soft") return readSoftKey(k, r, e.soft);
     if (role == "magnet") return k == "moment" && r.vector(e.magnet.moment);
     if (role == "heat") return k == "temperature" ? r.number(e.heat.temperature) : k == "smoke" ? r.number(e.heat.smoke) : false;
     if (role == "cloth")

@@ -59,6 +59,7 @@ add_library(rfcore STATIC
   src/particles/DensitySolver.cpp
   src/particles/ParticleContacts.cpp
   src/particles/SoftBody.h        src/particles/SoftBody.cpp
+  src/particles/SoftTets.cpp      src/particles/ParticleSoftBodies.cpp
   src/particles/Cloth.h           src/particles/Cloth.cpp
   # gas on the MAC grid, fire
   src/gas/Field3.h                src/gas/Field3.cpp
@@ -224,6 +225,7 @@ if(RF_BUILD_TESTS)
     tests/RigidTests.cpp tests/HardContactTests.h
     tests/PileTests.cpp
     tests/ParticleTests.cpp
+    tests/SoftFemTests.cpp
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
     tests/SceneTests.cpp

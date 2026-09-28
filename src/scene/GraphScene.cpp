@@ -83,6 +83,7 @@ AABB sceneBox(const WorldSettings& w, const std::vector<Entity>& entities) {
 // walls - as in Box2D, Jolt and PhysX, which have no world walls at all: a ball rolling off the
 // table falls, it does not stop at an invisible wall. Only the ground stays: the floor grid the
 // viewer draws at the bottom of the box. (Liquid and gas keep the box's walls: it is their vessel.)
+// Soft bodies and cloth too: a soft ball rolled off the floor rolls on over the ground.
 AABB openAbove(const AABB& box) {
     constexpr float kFar = 1.0e4f; // [m] walls far beyond anything a scene holds
     return AABB({-kFar, box.lo.y, -kFar}, {kFar, kFar, kFar});
@@ -129,8 +130,9 @@ void GraphScene::build(Simulation& sim) {
     if (w.gas) sim.useGasBox({0.5f, 0.0f, 0.5f}); // floor at y = 0
     else if (hasLiquid(flat_)) sim.useLiquidTank(box_);
     else {
-        sim.useRigidArena(box_);             // soft bodies and cloth: particles in the box
-        sim.rigid.setDomain(openAbove(box_)); // rigid bodies: the ground only (openAbove)
+        sim.useRigidArena(box_);                  // soft bodies and cloth: the particles' grid in the box
+        sim.rigid.setDomain(openAbove(box_));     // rigid bodies: the ground only (openAbove)
+        sim.particles.setWalls(openAbove(box_)); // and so for the particles: no invisible walls
     }
     magnetBody_.clear();
     magnetMoment_.clear();
@@ -241,12 +243,19 @@ int GraphScene::addRigid(Simulation& sim, int index) {
     return id;
 }
 
-// Soft: the shape's surface mesh in the world, filled with particles held by shape matching.
-// Returns its particle group.
+// Soft: the shape's surface mesh in the world, filled with particles - tetrahedra of the role's
+// Neo-Hookean material (or the legacy clusters). Returns its particle group (-1: nothing fitted).
 int GraphScene::addSoft(Simulation& sim, int index) {
     const Entity& e = flat_[size_t(index)];
-    const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
-    return sim.particles.softBodyGroup(body);
+    SoftMaterial m;
+    m.model = e.soft.shapeMatching ? SoftModel::ShapeMatching : SoftModel::NeoHookean;
+    m.density = e.soft.density;
+    m.youngModulus = e.soft.youngModulus;
+    m.poissonRatio = e.soft.poissonRatio;
+    m.friction = e.soft.friction;
+    m.stiffness = e.soft.stiffness;
+    const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), m, e.color);
+    return body < 0 ? -1 : sim.particles.softBodyGroup(body);
 }
 
 // Liquid: the shape's box (turned and moved as the entity) filled with water particles. Returns

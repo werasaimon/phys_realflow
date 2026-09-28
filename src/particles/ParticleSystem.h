@@ -3,13 +3,14 @@
 // Physics for Real-Time Applications"). All particles share one neighbour grid and one constraint
 // loop; each has a phase:
 //   fluid - incompressible liquid: Position Based Fluids (Macklin & Mueller 2013), an SPH method
-//   soft  - soft body: shape matching on overlapping clusters (SoftBody.h)
+//   soft  - soft body: Neo-Hookean tetrahedra by XPBD, or (legacy) shape matching (SoftBody.h)
 //   cloth - cloth: XPBD stretch / shear / bending constraints (Cloth.h)
 // Particles of different phases (and distant particles of the same cloth) collide with each other.
 //  * poly6 density / spiky gradient kernels, uniform-grid neighbour search
 //  * unilateral density constraint (no clumping at free surfaces)
 //  * XSPH viscosity, vorticity confinement
 //  * boundaries: domain box, static meshes (BVH signed distance), two-way coupling with rigid bodies
+//  * friction: Coulomb, position based (Macklin et al. 2014, sec. 6.1), for soft-body particles
 
 #include "spatial/BVH.h"
 #include "particles/Cloth.h"
@@ -50,6 +51,13 @@ struct ParticleParams {
     // is held up within a few passes instead of sinking into itself. 0 = off.
     float stackMassScaling = 1.0f;
     int clothSubsteps = 8;          // small steps of the cloth inside every substep (Macklin et al. 2019)
+    // Small steps of the tetrahedral soft bodies inside every substep (Macklin et al. 2019): enough
+    // that one is shorter than softStepFraction / omega, omega the stiffest body's highest
+    // frequency (highestFrequency in SoftBody.h), never fewer than softSubsteps nor more than
+    // softMaxSubsteps (a material stiffer than that behaves softer than it is - docs/03).
+    int softSubsteps = 4;
+    int softMaxSubsteps = 32;
+    float softStepFraction = 1.0f;
     float clothSpacing = 1.0f;      // distance between cloth particles, in particle radii: 1 = a
                                     // particle of radius r cannot slip through the sheet (as in FleX)
     int substeps = 3;               // per frame
@@ -79,10 +87,22 @@ public:
     void reset(const AABB& domain);
     // Liquid filling the box; returns its particle group.
     int addBlock(const AABB& box, const Vector3& velocity = Vector3(0.0f));
-    // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space);
-    // stiffness 0..1 (1 = rigid). Returns the soft body index, -1 if nothing fitted.
+    // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space), held
+    // by the material's model (SoftBody.h). Returns the soft body index, -1 if nothing fitted. A
+    // Neo-Hookean body too thin for a single tetrahedron (less than two particles across) is made
+    // of clusters instead.
+    int addSoftBody(const TriMesh& shape, const SoftMaterial& material, const Vector3& color,
+                    const Vector3& velocity = Vector3(0.0f));
+    // The same with an old shape-matching "stiffness" 0..1 in place of a material: a Neo-Hookean
+    // body of that density with Young's modulus youngFromStiffness(stiffness).
     int addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color,
                     const Vector3& velocity = Vector3(0.0f));
+    // The walls the solid and liquid particles meet (reset: the domain's). A world without liquid
+    // keeps only its floor (the editor's scenes, as for the rigid bodies): the walls then reach far
+    // beyond the domain, and the neighbour grid - still the domain's - takes the particles that
+    // left it in its border cells.
+    void setWalls(const AABB& walls) { walls_ = walls; }
+    const AABB& walls() const { return walls_; }
     // Cloth: particle grid from `origin` along the edges u (warp) and v (weft), spacing
     // params.clothSpacing * r. pinMask pins corners: 1 = origin, 2 = origin + u, 4 = origin + v,
     // 8 = origin + u + v; or whole edges: 16 = the edge along u at the origin (e.g. a curtain rod),
@@ -121,8 +141,11 @@ public:
     const std::vector<float>& invMasses() const { return invMass_; }
     const std::vector<SoftBody>& softBodies() const { return softBodies_; }
     const std::vector<Cloth>& cloths() const { return cloths_; }
-    // Surface of a soft body now (its mesh skinned to the clusters).
+    // Surface of a soft body now (its mesh embedded in the tetrahedra, or skinned to the clusters).
     void softBodySurface(size_t body, std::vector<Vector3>& out) const { skinSurface(softBodies_[body], x_, out); }
+    // The elastic energy stored in the tetrahedral soft bodies now [J] (elasticEnergy, SoftBody.h).
+    double softElasticEnergy() const;
+    int softSmallStepsLast() const { return softSmallSteps_; } // the tetrahedra's small steps in the last substep
 
     // Mouse grab: the particle nearest to `point` (within 3 spacings) and its neighbours of the same
     // object (cloth: that particle alone; soft body / liquid: a small ball) follow the target
@@ -159,14 +182,34 @@ private:
     void computeDeltaP();
     // Walls, obstacle mesh, rigid bodies. `start`: where the particle was at the start of the step
     // of length dt that moved it to p (the friction acts on that motion).
-    void collide(int i, Vector3& p, const Vector3& start, bool recordImpulse, float dt);
-    void collideWallsAndMesh(Vector3& p, const Vector3& start) const; // the first two of collide's three
+    // staticOnly: the moving bodies are left out (the tetrahedra's small steps: those contacts are
+    // the main passes', two-way - pushed out in every small step instead, a particle never felt by
+    // a body let a box fall through a jelly).
+    void collide(int i, Vector3& p, const Vector3& start, bool recordImpulse, float dt, bool staticOnly = false);
+    // The first two of collide's three. friction: the particle's Coulomb coefficient (soft
+    // bodies), 0 for the old slip fraction params.wallFriction (liquid, cloth; no wall friction).
+    void collideWallsAndMesh(Vector3& p, const Vector3& start, float friction) const;
     void applyViscosityAndVorticity(float dt);
     // A soft body's signed distance field at a point inside it: depth under the surface, outward normal.
     void measureSurface(const MeshBVH& bvh, const Vector3& p, float& depth, Vector3& normal) const;
     // (Colours live on the objects: SoftBody::color, Cloth::color.)
     void addParticle(const Vector3& x, const Vector3& v, ParticlePhase phase, int object, int group, float invMass,
                      float volume = 1.0f);
+    // The steps of addSoftBody: the lattice points inside the mesh; a body of tetrahedra or of
+    // clusters on them; its particles' signed distance field.
+    SoftLattice fillLattice(const MeshBVH& bvh, const AABB& bounds) const;
+    bool addTetBody(SoftBody& body, SoftLattice& lattice, const TriMesh& skin, const Vector3& velocity);
+    void addClusterBody(SoftBody& body, const SoftLattice& lattice, const TriMesh& skin, const Vector3& velocity);
+    void addSoftParticles(SoftBody& body, const SoftLattice& lattice, const std::vector<bool>& keep,
+                          const Vector3& velocity, std::vector<int>& globalOfNode);
+    void measureSoftSurface(const SoftBody& body, const MeshBVH& bvh);
+    // Tetrahedral soft bodies in small steps (like the cloth): gravity, one XPBD pass over the
+    // tetrahedra (colour by colour, in parallel), the contacts between elastic bodies, the walls
+    // and fixed bodies, the velocity - m times per substep (ParticleSoftBodies.cpp).
+    void stepSoftTetsInSmallSteps(float dt);
+    int softSmallSteps(float dt) const;
+    void solveTetPass(float h);
+    void refreshTetBatches(); // the lists below, after soft bodies came or went
     // The steps of removeGroup: which particles stay and where they go, then the arrays, the
     // soft bodies and the cloths follow the new numbering.
     std::vector<int> renumberWithout(int group) const;
@@ -182,6 +225,8 @@ private:
         float lift;        // stack mass scaling: i's inverse mass counts x lift, j's / lift
         float target;      // how far apart the main solve keeps them: d0, less for an intersection
         bool intersecting; // its two bodies are inside each other: the pre-stabilization's to undo
+        bool smallSteps;   // a particle of a tetrahedral body against another of one or cloth: solved in
+                           // the tetrahedra's small steps too (setMainSolveTargets)
     };
     void findParticleContacts();
     float stackLift(int i, int j) const; // FleX's stiff-stack mass scaling (eq. 21)
@@ -199,7 +244,9 @@ private:
     void moveByMovers();
     // The main solve: its normals and targets for the step, then one pass per solid iteration.
     void setMainSolveTargets();
-    void solveParticleContacts();
+    // One Gauss-Seidel pass over the contacts. inSmallStep: only those of the tetrahedra's small
+    // steps, the friction measured from the small step's start (softStart_), else from x_.
+    void solveParticleContacts(bool inSmallStep = false);
     // Cloth dynamics in small steps (gravity, one constraint pass with every thread solved exactly,
     // tearing each) from the start of the substep: "small steps" converge far better than more
     // iterations, so the thread tensions - and with them the tearing - are physical, not solver lag.
@@ -250,6 +297,22 @@ private:
     bool hasSurface(int i) const { return surfaceDepth_[size_t(i)] >= 0; }
     std::vector<SoftBody> softBodies_;
     std::vector<Cloth> cloths_;
+    // Coulomb friction coefficient of every particle (a soft body's material; 0: liquid and cloth,
+    // which keep the slip fraction params.wallFriction). Two particles mix as sqrt(mu_i mu_j).
+    std::vector<float> friction_;
+    AABB walls_;
+    // The tetrahedral bodies' small steps: their particles, and per particle (global index) where
+    // the small step starts, its velocity, and where a held particle must end the substep. The
+    // cubes of every colour over all bodies (one parallel loop per colour).
+    struct TetBatch {
+        int body, cube;
+    };
+    std::vector<int> tetParticles_;
+    std::vector<uint8_t> tetParticle_; // per particle: 1 if it belongs to a tetrahedral body
+    std::vector<Vector3> softStart_, softVelocity_, softEnd_;
+    std::vector<TetBatch> tetBatches_[8];
+    bool tetBatchesStale_ = true;
+    int softSmallSteps_ = 0;
     int nextObject_ = 0;
     size_t fluidCount_ = 0;
 

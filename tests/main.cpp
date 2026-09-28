@@ -62,6 +62,12 @@ int main() {
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
     run("soft bodies: six barrels stacked do not sink into each other", testSoftStackNoOverlap);
     run("soft bodies: two thrown together bounce apart, a box rests on a jelly", testSoftPressedApartAndBox);
+    run("soft fem: cantilever vs Euler-Bernoulli (deflection, first frequency)", testSoftFemCantilever);
+    run("soft fem: a cube of nu 0.49 keeps its volume under load", testSoftFemVolume);
+    run("soft fem: Coulomb friction on a slope", testSoftFemFriction);
+    run("soft fem: a dropped ball never gains energy", testSoftFemEnergy);
+    run("soft fem: a soft ball rolls off the floor, no invisible walls", testSoftFemNoInvisibleWalls);
+    run("soft fem: six barrels, tetrahedra vs shape matching ms per frame", testSoftFemPerformance);
     run("cloth: a sheet swinging on its pinned edge loses no thread", testClothSwingNoFalseTears);
     run("cloth: threads carry the static load and tear at their strength", testClothTearsAtStrength);
     run("grid uniform flow", testGridUniform);

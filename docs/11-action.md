@@ -267,7 +267,7 @@ $$
 ### Код
 
 - Одна связь XPBD: [Cloth.cpp:200](../src/particles/Cloth.cpp#L200), `solveConstraint`.
-- Мягкое тело, притяжение к лучшей форме: [SoftBody.cpp:152](../src/particles/SoftBody.cpp#L152), `solveShapeMatching`.
+- Мягкое тело, притяжение к лучшей форме: [SoftBody.cpp:162](../src/particles/SoftBody.cpp#L162), `solveShapeMatching`.
 
 ### Графики
 

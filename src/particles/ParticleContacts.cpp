@@ -11,6 +11,8 @@
 //      (sec. 5.1), each soft body moved as a whole;
 //   3. solveParticleContacts - the main solve: every pair two hard spheres kept d0 = 2r apart,
 //      the upper particle of a pile counting as the lighter (sec. 5.2).
+// Friction of soft-body particles - against each other, the walls, the mesh and the bodies - is
+// Coulomb's, position based (sec. 6.1): coulombFriction.
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
@@ -42,6 +44,26 @@ static float pushAlong(const Vector3& r, const Vector3& n, float target) {
     return std::sqrt(target * target - across2) - along;
 }
 
+// Coulomb friction for one contact, position based (Macklin et al. 2014, sec. 6.1, eq. 24-25):
+// `slip` is how far the two sides moved against each other since the step began, `depth` how far
+// the contact just pushed them apart along the unit normal n. Friction is a force of at most mu
+// times the normal force; over one step, forces are displacements times m / dt^2, so it may undo
+// at most mu * depth of the sliding. A slip within that sticks (static friction: all of it undone),
+// a longer one slides and is shortened by mu * depth (kinetic friction). Returns the part of the
+// slip to undo (along the surface).
+static Vector3 coulombFriction(const Vector3& slip, const Vector3& n, float depth, float mu) {
+    const Vector3 along = slip - n * dot(slip, n);
+    const float length2Along = length2(along);
+    if (depth <= 0 || mu <= 0 || length2Along < 1e-24f) return Vector3(0.0f);
+    const float limit = mu * depth;
+    if (length2Along <= limit * limit) return along;       // sticks
+    return along * (limit / std::sqrt(length2Along));     // slides
+}
+
+// The friction coefficient of two surfaces in contact: sqrt(mu_a mu_b), the mixing rule of Box2D
+// (b2MixFriction) - either one slippery makes the pair slippery.
+static float mixFriction(float a, float b) { return std::sqrt(std::max(0.0f, a) * std::max(0.0f, b)); }
+
 void ParticleSystem::findParticleContacts() {
     const int n = int(p_.size());
     const float d0 = spacing(), reach2 = sqr(1.5f * d0);
@@ -60,7 +82,7 @@ void ParticleSystem::findParticleContacts() {
             }
             if (length2(p_[i] - p_[j]) >= reach2) continue; // cannot touch within this substep
             // The normal and the target come later: the pre-stabilization may still move the pair.
-            local[i].push_back({i, j, Vector3(0.0f), stackLift(i, j), d0, false});
+            local[i].push_back({i, j, Vector3(0.0f), stackLift(i, j), d0, false, false});
         }
     });
     contacts_.clear();
@@ -109,7 +131,10 @@ void ParticleSystem::preStabilizeContacts() {
     const int intersecting = findIntersections();
     Probe::set("particles/intersecting pairs", intersecting);
     if (intersecting == 0) return;
-    for (const SoftBody& body : softBodies_) turnSurfaceNormals(body, restSurfaceNormal_, surfaceNormal_);
+    for (const SoftBody& body : softBodies_) {
+        if (body.hasTets()) turnNormalsWithTets(body, x_, restSurfaceNormal_, surfaceNormal_);
+        else turnSurfaceNormals(body, restSurfaceNormal_, surfaceNormal_);
+    }
     for (ParticleContact& c : contacts_)
         if (c.intersecting) c.normal = intersectionNormal(c.i, c.j);
     // Jacobi passes, each: the contacts push the movers apart, then every shifted mover is pushed
@@ -289,7 +314,7 @@ void ParticleSystem::pushMoversOutOfSupports() {
 // The supports that never move push a point out: the domain walls, the obstacle mesh and the
 // fixed rigid bodies. A moving body is left to the main solve, where it is pushed back.
 void ParticleSystem::pushOutOfSupports(Vector3& p) {
-    collideWallsAndMesh(p, p);
+    collideWallsAndMesh(p, p, 0.0f);
     if (!rigid_) return;
     const float r = params.particleRadius;
     const auto& bodies = rigid_->bodies();
@@ -304,12 +329,15 @@ void ParticleSystem::pushOutOfSupports(Vector3& p) {
     }
 }
 
-// The shifts of the pre-stabilization into the start and the predicted positions alike.
+// The shifts of the pre-stabilization into the start and the predicted positions alike - and into
+// where the tetrahedra's last small step left a particle (its end velocity is measured from there).
 void ParticleSystem::moveByMovers() {
+    const bool smallSteps = softStart_.size() == x_.size();
     parallelFor(int(x_.size()), [&](int i) {
         const Vector3& shift = moverShift_[moverOf_[i]];
         x_[i] += shift;
         p_[i] += shift;
+        if (smallSteps) softStart_[i] += shift;
     });
 }
 
@@ -326,32 +354,53 @@ void ParticleSystem::moveByMovers() {
 // load the surface normal points sideways, and the one-sided contacts of eq. 20 turned the
 // support of the barrel above into a sideways push - a column of six toppled within 0.25 s,
 // where two hard spheres keep it standing (docs/03-particles.md, "Contacts").
+// A contact is solved in the tetrahedra's small steps as well when it holds a tetrahedral body's
+// particle against another one or against cloth: an elastic body's load must reach it within the
+// steps its elasticity is solved in - left to the main passes alone, a foam cube on a trampoline
+// and a column of barrels jittered, the push reaching the body's far side a substep late.
 void ParticleSystem::setMainSolveTargets() {
     const float d0 = spacing(), touching = (1.0f - kOverlapTolerance) * d0;
+    refreshTetBatches();
+    auto elasticOrCloth = [&](int k) { return tetParticle_[size_t(k)] || phase_[size_t(k)] == uint8_t(ParticlePhase::Cloth); };
     for (ParticleContact& c : contacts_) {
         Vector3 centres = x_[c.i] - x_[c.j];
         if (length2(centres) < 1e-12f) centres = p_[c.i] - p_[c.j];
         const float apart = length(centres);
         c.normal = apart > 1e-6f ? centres / apart : Vector3(0.0f);
         c.target = c.intersecting && apart < touching ? apart : d0;
+        c.smallSteps = (tetParticle_[size_t(c.i)] || tetParticle_[size_t(c.j)]) && elasticOrCloth(c.i) && elasticOrCloth(c.j);
     }
 }
 
 // One pass of the main solve (in every solid pass): Gauss-Seidel, each contact resolved at once,
 // so a stack of contacts (a body resting on cloth resting on ...) passes its correction through
-// within one sweep. The pair's (scaled) inverse masses share the correction.
+// within one sweep. The pair's (scaled) inverse masses share the correction, and the friction
+// between two soft bodies (coulombFriction on their relative slip over the step) likewise.
 // Limitation of all position-based solvers (FleX included): with a large mass ratio between
 // touching particles (a heavy body on a very light cloth, beyond ~1:10) the light side takes
 // almost the whole correction and the support converges too slowly - use realistic materials
 // (canvas ~1-2 kg/m^2 under foam-like bodies) or more solid iterations.
-void ParticleSystem::solveParticleContacts() {
+void ParticleSystem::solveParticleContacts(bool inSmallStep) {
+    const std::vector<Vector3>& from = inSmallStep ? softStart_ : x_; // where the friction's slip is measured from
     for (const ParticleContact& c : contacts_) {
+        if (inSmallStep && !c.smallSteps) continue;
         const float depth = pushAlong(p_[c.i] - p_[c.j], c.normal, c.target);
         if (depth <= 0) continue;
-        const float wi = invMass_[c.i] * c.lift, wj = invMass_[c.j] / c.lift;
+        // The stack's mass scaling in the main passes only: the small steps converge as the
+        // elasticity does, with the true masses - and so conserve momentum (the scaling lifted the
+        // top barrel of a column 6 cm when it was applied in every small step).
+        const float lift = inSmallStep ? 1.0f : c.lift;
+        const float wi = invMass_[c.i] * lift, wj = invMass_[c.j] / lift;
+        if (wi + wj == 0) continue;
         const Vector3 corr = c.normal * (depth / (wi + wj));
         p_[c.i] += corr * wi;
         p_[c.j] -= corr * wj;
+        const float mu = mixFriction(friction_[c.i], friction_[c.j]); // (0 against cloth: its particles have none)
+        if (mu == 0) continue;
+        const Vector3 slip = (p_[c.i] - from[c.i]) - (p_[c.j] - from[c.j]);
+        const Vector3 undo = coulombFriction(slip, c.normal, depth, mu) * (1.0f / (wi + wj));
+        p_[c.i] -= undo * wi;
+        p_[c.j] += undo * wj;
     }
 }
 
@@ -385,11 +434,13 @@ void ParticleSystem::solveBodyContacts(float dt) {
             p_[i] += n * (lambda * wp);
             bodyShift_[b] -= n * (lambda * body.invMass);
             bodyTurn_[b] -= body.applyInvInertiaWorld(rn) * lambda;
-            // Friction: the tangential slip of the particle against the body, shared the same way.
-            if (params.wallFriction > 0 && wp > 0) {
+            // Friction: the tangential slip of the particle against the body, shared the same way -
+            // Coulomb's for a soft body's particle (coulombFriction), the slip fraction for the rest.
+            const float mu = mixFriction(friction_[size_t(i)], body.friction);
+            if ((params.wallFriction > 0 || mu > 0) && wp > 0) {
                 const Vector3 bodyMove = body.velocityAt(c) * dt + (bodyShift_[b] + cross(bodyTurn_[b], rc));
                 const Vector3 slip = (p_[i] - x_[i]) - bodyMove;
-                const Vector3 t = (slip - n * dot(slip, n)) * params.wallFriction;
+                const Vector3 t = mu > 0 ? coulombFriction(slip, n, depth, mu) : (slip - n * dot(slip, n)) * params.wallFriction;
                 const Vector3 lt = t / (wp + wb);
                 p_[i] -= lt * wp;
                 bodyShift_[b] += lt * body.invMass;
@@ -415,33 +466,37 @@ void ParticleSystem::prepareBodyQuery(bool coupled) {
         bodyCandidates_.resize(size_t(ThreadPool::instance().threadCount()));
 }
 
-// Domain walls and the static obstacle mesh: the point is pushed out, and the mesh's friction
-// takes back part of the slip along it since `start`.
-void ParticleSystem::collideWallsAndMesh(Vector3& p, const Vector3& start) const {
+// The walls and the static obstacle mesh: the point is pushed out, and friction takes back part of
+// the slip along them since `start` - Coulomb's with the particle's coefficient `friction` (a
+// soft body's: the walls and the mesh have no material of their own, the particle's rules), or
+// with none the old slip fraction params.wallFriction on the mesh, the walls smooth.
+void ParticleSystem::collideWallsAndMesh(Vector3& p, const Vector3& start, float friction) const {
     const float r = params.particleRadius;
-    // Domain walls.
-    p = vmax(domain_.lo + Vector3(r), vmin(p, domain_.hi - Vector3(r)));
-
-    // Static obstacle mesh.
-    if (mesh_ && !mesh_->empty()) {
-        AABB mb = mesh_->bounds();
-        mb.lo -= Vector3(r);
-        mb.hi += Vector3(r);
-        if (mb.contains(p)) {
-            ClosestHit hit;
-            if (mesh_->closestPoint(p, 3 * r, hit) && hit.signedDistance < r) {
-                Vector3 n = hit.normal;
-                p += n * (r - hit.signedDistance);
-                Vector3 dx = p - start;
-                p -= (dx - n * dot(dx, n)) * params.wallFriction;
-            }
-        }
+    const AABB inside(walls_.lo + Vector3(r), walls_.hi - Vector3(r));
+    const Vector3 before = p;
+    p = vmax(inside.lo, vmin(p, inside.hi));
+    const float wallDepth = length(p - before);
+    if (friction > 0 && wallDepth > 0) { // a corner pushes along its diagonal: re-clamped after the friction
+        p -= coulombFriction(p - start, (p - before) / wallDepth, wallDepth, friction);
+        p = vmax(inside.lo, vmin(p, inside.hi));
     }
+    if (!mesh_ || mesh_->empty()) return;
+    AABB mb = mesh_->bounds();
+    mb.lo -= Vector3(r);
+    mb.hi += Vector3(r);
+    if (!mb.contains(p)) return;
+    ClosestHit hit;
+    if (!mesh_->closestPoint(p, 3 * r, hit) || hit.signedDistance >= r) return;
+    const Vector3 n = hit.normal;
+    const float depth = r - hit.signedDistance;
+    p += n * depth;
+    const Vector3 dx = p - start;
+    p -= friction > 0 ? coulombFriction(dx, n, depth, friction) : (dx - n * dot(dx, n)) * params.wallFriction;
 }
 
-void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool record, float dt) {
+void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool record, float dt, bool staticOnly) {
     const float r = params.particleRadius;
-    collideWallsAndMesh(p, start);
+    collideWallsAndMesh(p, start, friction_[size_t(i)]);
 
     // Rigid bodies. Fixed ones (and every body in the cloth's small steps, record = false): the
     // particle is pushed out. Movable ones in the main passes: the contact is only recorded here
@@ -456,6 +511,7 @@ void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool recor
         rigid_->queryBodies(AABB(p - Vector3(bodyReach_), p + Vector3(bodyReach_)), candidates);
         for (int b : candidates) {
             const RigidBody& body = bodies[b];
+            if (staticOnly && body.invMass > 0) continue;
             const Vector3 shift = coupled ? bodyShift_[b] : Vector3(0.0f), turn = coupled ? bodyTurn_[b] : Vector3(0.0f);
             const Vector3 centre = body.pos + shift;
             if (length2(p - centre) > sqr(body.boundingRadius() + r)) continue;
@@ -472,7 +528,8 @@ void ParticleSystem::collide(int i, Vector3& p, const Vector3& start, bool recor
             }
             p += n * (r - sd);
             const Vector3 rel = (p - start) - body.velocityAt(p) * dt;
-            p -= (rel - n * dot(rel, n)) * params.wallFriction;
+            const float mu = mixFriction(friction_[size_t(i)], body.friction);
+            p -= mu > 0 ? coulombFriction(rel, n, r - sd, mu) : (rel - n * dot(rel, n)) * params.wallFriction;
         }
     }
 }

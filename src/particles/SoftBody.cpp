@@ -1,6 +1,7 @@
-// Soft bodies by shape matching (Müller et al. 2005) on overlapping clusters of particles: every
-// cluster pulls its particles towards its best-fit rigid pose; the skin is a mesh bound to the
-// clusters by smooth weights. The data layout is in SoftBody.h.
+// Soft bodies by shape matching (Müller et al. 2005) on overlapping clusters of particles - the
+// legacy model, kept for comparison: every cluster pulls its particles towards its best-fit rigid
+// pose; the skin is a mesh bound to the clusters by smooth weights. The data layout is in
+// SoftBody.h; the default model, the Neo-Hookean tetrahedra, is in SoftTets.cpp.
 #include "particles/SoftBody.h"
 
 namespace rf {
@@ -124,6 +125,15 @@ void skinSurface(const SoftBody& body, const std::vector<Vector3>& positions, st
     // "centre + F (rest - rest centre)" evaluated at the vertex and at the anchor, subtracted - the
     // cluster centres cancel.)
     out.resize(body.surface.positions.size());
+    if (body.hasTets()) { // tetrahedra: x_v = sum_k w_k x_k over the corners of its tetrahedron
+        for (size_t v = 0; v < out.size(); ++v) {
+            const SkinBinding& b = body.skin[v];
+            const SoftTet& t = body.tets[size_t(b.tet)];
+            out[v] = Vector3(0.0f);
+            for (int k = 0; k < 4; ++k) out[v] += positions[size_t(t.v[k])] * b.weight[k];
+        }
+        return;
+    }
     for (size_t v = 0; v < out.size(); ++v) {
         Matrix3x3 blend = Matrix3x3::zero();
         for (size_t n = 0; n < body.vertexClusters[v].size(); ++n)
@@ -153,8 +163,9 @@ void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, 
     std::vector<Vector3> goalSum;
     std::vector<int> goalCount;
     for (SoftBody& body : bodies) {
+        if (body.hasTets()) continue; // the Neo-Hookean model (SoftTets.cpp)
         // The pass's share of the substep's stiffness: n passes of k' leave (1 - k') ^ n = 1 - k.
-        const float k = std::clamp(body.stiffness, 0.0f, 1.0f);
+        const float k = std::clamp(body.material.stiffness, 0.0f, 1.0f);
         const float kPass = k >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - k, 1.0f / float(std::max(1, passesPerStep)));
         // Goals of every particle, summed over the clusters it belongs to.
         goalSum.assign(body.particles.size(), Vector3(0.0f));

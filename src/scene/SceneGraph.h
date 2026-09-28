@@ -68,11 +68,29 @@ struct RigidRole {
     Vector3 velocity{0.0f};     // initial, m/s
     Vector3 angularVelocity{0.0f};
 };
+// A soft body's material (particles/SoftBody.h, SoftMaterial). The defaults are the editor's
+// «Желе» preset. rfscene: `soft density D young E poisson NU friction MU`; an old file's
+// `stiffness K` (the shape-matching fraction) still loads and sets E = youngFromStiffness(K);
+// `model shape-matching` selects the legacy clusters (for comparison).
 struct SoftRole {
     bool enabled = false;
-    float density = 150;
-    float stiffness = 0.3f;     // shape-matching stiffness per pass, 0..1
+    float density = 1050;        // kg/m^3
+    float youngModulus = 1.5e4f; // E [Pa]
+    float poissonRatio = 0.45f;  // nu
+    float friction = 0.5f;       // Coulomb coefficient
+    bool shapeMatching = false;  // the legacy model
+    float stiffness = 0.3f;      // shape matching only: fraction back to the rest shape per substep, 0..1
 };
+
+// The soft materials the editor offers at one click (handbook values, rounded; Custom = the
+// numbers typed in). Jelly: gelatin dessert, E 15 kPa, nu 0.45, 1050 kg/m^3, friction 0.5.
+// Rubber: soft natural rubber, E 1 MPa, nu 0.47, 1100 kg/m^3, friction 0.8. Soft plastic: a
+// flexible plastic, E 5 MPa, nu 0.4, 950 kg/m^3, friction 0.4 (stiffer plastics are beyond the
+// small steps: they would behave like this one, docs/03-particles.md).
+enum class SoftPreset { Jelly, Rubber, SoftPlastic, Custom };
+SoftRole softPreset(SoftPreset preset);           // the preset's material (the role enabled; Custom: the defaults)
+SoftPreset softPresetOf(const SoftRole& role);    // which preset the role's numbers are, Custom if none
+const char* softPresetName(SoftPreset preset);    // «Желе», «Резина», «Мягкий пластик», «Своё»
 struct LiquidRole {
     bool enabled = false;       // the shape's box is filled with liquid particles
 };

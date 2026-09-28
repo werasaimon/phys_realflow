@@ -32,6 +32,7 @@ const std::vector<ChannelInfo>& sceneChannelCatalog() {
         {"rigid/deepest penetration", "м", "Твёрдые тела: самое глубокое проникновение", ChannelGroup::Scene},
         {"particles/kinetic energy", "Дж", "Частицы: энергия движения", ChannelGroup::Scene},
         {"particles/potential energy", "Дж", "Частицы: энергия высоты над дном сцены", ChannelGroup::Scene},
+        {"particles/elastic energy", "Дж", "Мягкие тела: упругая энергия, запасённая в деформации", ChannelGroup::Scene},
         {"liquid/density error mean", "%", "Жидкость: средняя ошибка плотности (сжатие)", ChannelGroup::Scene},
         {"liquid/density error max", "%", "Жидкость: наибольшая ошибка плотности (сжатие)", ChannelGroup::Scene},
         {"gas/kinetic energy", "Дж", "Газ: энергия течения", ChannelGroup::Scene},
@@ -171,11 +172,13 @@ double addParticleChannels(const Simulation& sim, std::vector<Measurement>& out)
     const ParticleSums s = sumParticles(sim);
     put(out, "particles/kinetic energy", s.kinetic);
     put(out, "particles/potential energy", s.potential);
+    const double elastic = sim.particles.softElasticEnergy(); // the soft bodies' squashed tetrahedra
+    put(out, "particles/elastic energy", elastic);
     if (s.liquid > 0) {
         put(out, "liquid/density error mean", 100.0 * s.error / double(s.liquid));
         put(out, "liquid/density error max", 100.0 * s.errorMax);
     }
-    return s.kinetic + s.potential;
+    return s.kinetic + s.potential + elastic;
 }
 
 // ---------------------------------------------------------------------------------------------
