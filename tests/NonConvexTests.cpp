@@ -127,9 +127,12 @@ Energy energyOf(const RigidWorld& w) {
 // A chain of eight steel rings hanging from a fixed one, each at right angles to the next, let go
 // 6 mm short of taut: it drops, jerks taut and swings. Two interlocked rings hang with their
 // centres 2 (R - r) apart when the tubes touch: 76 mm; the parts of each ring reach up to 3 mm
-// into its hole, a pair up to 6 mm. The chain may only lose energy - the rotational lock of a
-// resting face held two rings touching on both sides of a tube as one and let go with a kick, and
-// the chain gained up to 18 J in bursts before - and in 10 s it loses nearly all the drop gave it.
+// into its hole, a pair up to 6 mm, and a resting contact may sink by the solver's slop (4 mm,
+// RigidParams::slop) and a little more under the weight of seven rings - a ring pulled through
+// its neighbour would be 20 mm and more past. The chain may only lose energy - the rotational
+// lock of a resting face held two rings touching on both sides of a tube as one and let go with
+// a kick, and the chain gained up to 18 J in bursts before - and in 10 s it loses nearly all the
+// drop gave it.
 void testChainOfRings() {
     World s;
     const auto link = compoundOf(primitives::torus(kRingR, kRingTube));
@@ -154,7 +157,7 @@ void testChainOfRings() {
     }
     std::printf("  chain of %d rings after 10 s: neighbours %.1f..%.1f mm apart (tubes touching: %.1f mm); energy never above the start by more than %.4f J; "
                 "of the %.3f J the drop gave, %.4f J still moving\n", n, 1000 * nearest, 1000 * farthest, 1000 * taut, gained, released, end.kinetic);
-    CHECK(farthest < taut + 0.003f, "rings pulled through each other: %.1f mm apart", 1000 * farthest);
+    CHECK(farthest < taut + s.w.params.slop + 0.003f, "rings pulled through each other: %.1f mm apart", 1000 * farthest);
     CHECK(nearest > taut - 0.007f, "a ring hangs on another %.1f mm short of the metal", 1000 * (taut - nearest));
     CHECK(gained < 0.01, "the chain gained %.3f J", gained);
     CHECK(end.kinetic < 0.05 * released, "the chain keeps %.3f J of the %.3f J the drop gave", end.kinetic, released);
