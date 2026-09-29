@@ -183,9 +183,9 @@ void testBarrelTouchesFloor() {
 //                      editor scene whose rigid domain is open above the floor);
 //   not yet taken     - the floor touches a barrel at the face turned to it, not at every vertex
 //                      within the contact margin (RigidWorld::collideWalls), and the shock pass
-//                      holds a support frozen only while it does not move into the body above it
-//                      (solveManifoldShock): the value on MinGW is still to be taken; on Linux
-//                      (glibc) the hash went 1c7a78e7bc19fef7 -> afbb0b88ffee8731.
+//                      holds a support frozen only while it neither moves into the body above it
+//                      nor slides along it (solveManifoldShock): the value on MinGW is still to be
+//                      taken; on Linux (glibc) the hash went 1c7a78e7bc19fef7 -> f19778233088d409.
 void testBarrelPileSettles() {
     constexpr uint64_t kGolden = 0xa374657c2625233bull; // RF_STRICT_FP=ON, MinGW (GCC 11.2), Release
     const PileReport asleep = measureBarrelPile(true);

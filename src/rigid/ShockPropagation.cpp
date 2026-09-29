@@ -157,8 +157,8 @@ void RigidWorld::computeLevels() {
     }
 }
 
-// A contact is solved one-sided only while its support does not move into the upper body faster
-// than this, along the normal at the contact [m/s].
+// A contact is solved one-sided only while its support, at the contact, neither moves into the
+// upper body nor slides along the contact faster than this [m/s].
 constexpr float kRestingSupport = 0.1f;
 
 void RigidWorld::solveManifoldShock(Manifold& m) {
@@ -167,16 +167,20 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
     const int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
     const bool upperIsA = la > lb;
     // Shock propagation is for resting support. A support frozen while it moves into the upper
-    // body throws it off like a moving wall, with momentum the support never gives: a chain let go
-    // stretched out sideways gained 171 J in the first second of its fall. A support that sinks
-    // away (a stack under a cascade of landings) only takes the upper body's approach away. So a
-    // support moving into the upper body gets the ordinary two-sided solve.
+    // body throws it off like a moving wall, and one sliding along the contact drags it along (the
+    // friction of this pass) - both with momentum the support never gives: a chain let go stretched
+    // out sideways gained 171 J in the first second of its fall, and a hanging one wriggled like a
+    // snake, taking in 21 J in 20 s. A support that sinks away (a stack under a cascade of landings)
+    // only takes the upper body's approach away. Any other moving support gets the ordinary
+    // two-sided solve.
     const int support = upperIsA ? m.b : m.a;
     bool resting = true;
     if (support >= 0 && bodies_[size_t(support)].invMass > 0) {
         const RigidBody& s = bodies_[size_t(support)];
         const Vector3 toUpper = upperIsA ? m.normal : -m.normal; // m.normal points from b to a
-        resting = dot(s.vel + cross(s.angVel, m.center - s.pos), toUpper) < kRestingSupport;
+        const Vector3 v = s.vel + cross(s.angVel, m.center - s.pos);
+        const float into = dot(v, toUpper);
+        resting = into < kRestingSupport && length2(v - toUpper * into) < kRestingSupport * kRestingSupport;
     }
     if (la == lb || !resting) { // two-sided - except for an impact, whose separation (applied by
         // applyRestitution just before) a two-sided re-solve would take back; shock propagation
