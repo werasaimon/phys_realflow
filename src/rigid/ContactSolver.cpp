@@ -539,8 +539,9 @@ void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cel
     m.jt1 = dot(old.friction, m.t1);
     m.jt2 = dot(old.friction, m.t2);
     m.jtwist = old.twist;
-    // A locked manifold solves the lock instead of the rolling resistance (solveFriction), so only an
-    // unlocked one takes its rolling impulse back: whatever is warm started must be solved again.
+    // A locked manifold solves the rolling resistance too (across the normal, solveFriction), but
+    // from zero: warm started, its impulse stayed in on the bounce, where the resistance is skipped
+    // for want of load (total = 0) - a cube dropped flat at e = 0.5 got a spin of 2-3 rad/s.
     if (!m.locked) m.jroll = old.roll;
     if (m.locked && old.locked) m.jlock = old.lock;
     Vector3 J = m.t1 * m.jt1 + m.t2 * m.jt2;
@@ -735,10 +736,7 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
     old = m.jtwist;
     m.jtwist = clampv(old - m.massTwist * dot(wRel, m.normal), -maxTwist, maxTwist);
     applyPairAngularImpulse(m, m.normal * (m.jtwist - old));
-    if (m.locked) {
-        solveRotationalLock(m, total, maxF);
-        return;
-    }
+    if (m.locked) solveRotationalLock(m, maxF);
     // Rolling resistance: damps the remaining relative rotation (tilting / rolling). Still skipped
     // with no load: running it there too (the same clamp as the lock) made the 200 m/s cube of the
     // CCD test go through its thin mesh plate - that path is not understood yet, so it stays.
@@ -761,33 +759,22 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
 // Coherence"), so a bound that collapses removes the warm start with it. Skipped at total = 0,
 // last step's lock stayed in as a free angular kick: a cube bouncing flat got a spin on every
 // bounce until it tumbled.
-// Angular constraint on SO(3) at velocity level: the relative angular velocity is driven to zero
-// (angular part of a fixed joint). About the normal it holds as far as the friction moment of the
-// patch reaches. Across the normal (tipping) it holds what the patch can - the load moved to its
-// edge in the direction of the tipping, total x that reach - and breaks when asked for more: the
-// body tips or rolls as its normal
-// impulses let it. Held there with the friction moment as the limit, as before, a wheel of 48
-// flat segments stood on a 15 degree slope, its centre of mass 8 cm past the 4 cm segment under
-// it; without the lock across, a pile of barrels crept 18 mm in 3 s. No position-level term: the
-// flush orientation is defined by the contact geometry itself. Released in prepareManifold() once
-// log(E) shows a real relative rotation.
-void RigidWorld::solveRotationalLock(Manifold& m, float total, float maxF) {
+// Angular constraint at velocity level about the normal only, as far as the friction moment of the
+// patch reaches; across the normal the normal impulses of the points hold what the patch can (the
+// block solver) and the rolling resistance damps the rest, as on an unlocked manifold. Held across
+// the normal too, as before, the lock carried a tipping moment no face can: a wheel of 48 flat
+// segments stood on a 15 degree slope, its centre of mass 8 cm past the 4 cm segment under it; and
+// a stack of five tables, their legs on the tops, walked the top one off - made breakable, the lock
+// let its impulse go at once and kicked it. Released in prepareManifold() once log(E) shows a real
+// relative rotation.
+void RigidWorld::solveRotationalLock(Manifold& m, float maxF) {
     const RigidBody& A = bodies_[m.a];
     const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
     const Vector3& n = m.normal;
-    const float twistLimit = maxF * std::max(m.patchRadius, 0.25f * m.lever);
+    const float limit = maxF * std::max(m.patchRadius, 0.25f * m.lever);
     const Vector3 wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
     const Vector3 oldL = m.jlock;
-    const Vector3 jl = oldL - m.rollMass * wRel;
-    Vector3 across = jl - n * dot(jl, n);
-    // A moment about the axis `across` is held by the load moving along n x axis, as far as the
-    // patch reaches that way: a line contact holds nothing about its own line (a barrel rolls).
-    const float size = length(across);
-    float reach = 0;
-    if (size > 0)
-        for (const SolverPoint& p : m.points) reach = std::max(reach, std::fabs(dot(p.position - m.center, cross(n, across / size))));
-    if (size > total * reach) across = Vector3(0.0f), m.locked = false; // broken: it tips or rolls
-    m.jlock = n * clampv(dot(jl, n), -twistLimit, twistLimit) + across;
+    m.jlock = n * clampv(dot(oldL - m.rollMass * wRel, n), -limit, limit);
     applyPairAngularImpulse(m, m.jlock - oldL);
 }
 

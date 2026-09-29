@@ -363,7 +363,7 @@ private:
     float solveNormalImpulses(Manifold& m);
     void solveSplitImpulse(Manifold& m);
     void solveFriction(Manifold& m, float total);
-    void solveRotationalLock(Manifold& m, float total, float maxF); // breakable: what the patch can carry
+    void solveRotationalLock(Manifold& m, float maxF); // about the normal, within the friction moment
     // Sleeping: frozen bodies act as static during the step.
     void freezeSleepers();
     void unfreezeAll(bool onlyAwake = false);

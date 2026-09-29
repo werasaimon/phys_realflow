@@ -199,9 +199,9 @@ $M\dot{\mathbf v} = \mathbf f - J^{\mathsf T}\boldsymbol\lambda$ вместе с
 
 ### Код
 
-- Одно многообразие, импульсы по точкам и трение: [ContactSolver.cpp:647](../src/rigid/ContactSolver.cpp#L647), `solveManifold`.
-- Точный LCP для нормальных импульсов многообразия: [ContactSolver.cpp:559](../src/rigid/ContactSolver.cpp#L559), `blockNormalSolve`.
-- Отскок отдельным проходом: [ContactSolver.cpp:601](../src/rigid/ContactSolver.cpp#L601), `applyRestitution`.
+- Одно многообразие, импульсы по точкам и трение: [ContactSolver.cpp:648](../src/rigid/ContactSolver.cpp#L648), `solveManifold`.
+- Точный LCP для нормальных импульсов многообразия: [ContactSolver.cpp:560](../src/rigid/ContactSolver.cpp#L560), `blockNormalSolve`.
+- Отскок отдельным проходом: [ContactSolver.cpp:602](../src/rigid/ContactSolver.cpp#L602), `applyRestitution`.
 - Суставы, ограничение на скорости: [Joints.cpp:101](../src/rigid/Joints.cpp#L101), `Joint::solveVelocity`; коррекция положения: [Joints.cpp:120](../src/rigid/Joints.cpp#L120), `Joint::correctPoint`.
 
 ### Графики
