@@ -250,10 +250,20 @@ bool ParticleSystem::grab(const Vector3& point) {
         invMass_[i] = 0; // kinematic while held
     }
     grab_.target = x_[picked];
+    for (SoftBody& b : softBodies_)
+        if (b.object == object_[picked]) b.asleep = false, b.stillTime = 0; // a hand wakes what it takes
     return true;
 }
 
+void ParticleSystem::addVelocity(int i, const Vector3& dv) {
+    v_[size_t(i)] += dv;
+    if (size_t(i) < softAsleep_.size() && softAsleep_[size_t(i)] && length2(dv) > sqr(0.5f * params.softSleepSpeed) &&
+        (softWakeObjects_.empty() || softWakeObjects_.back() != object_[size_t(i)]))
+        softWakeObjects_.push_back(object_[size_t(i)]);
+}
+
 int ParticleSystem::pinParticles(const std::function<bool(const Vector3&)>& region) {
+    wakeSoftBodies();
     int pinned = 0;
     for (size_t i = 0; i < x_.size(); ++i) {
         if (isFluid(int(i)) || invMass_[i] == 0 || !region(x_[i])) continue;
@@ -441,11 +451,10 @@ void ParticleSystem::step(float dt) {
         b.touchesOthers = false;
         for (int i : b.particles)
             for (int k = 0; k < nbrCount_[size_t(i)] && !b.touchesOthers; ++k) b.touchesOthers = !isSoft(nbr_[size_t(i) * kMaxNeighbors + size_t(k)]);
-        if (b.touchesOthers) scaleSoftMultipliers(b, m2), softTouching_.push_back(&b);
+        if (b.touchesOthers && !b.asleep) scaleSoftMultipliers(b, m2), softTouching_.push_back(&b); // a sleeper wakes next step
     }
     for (int it = 0; it < params.solverIterations; ++it) solveIteration(solids, dt);
-    for (SoftBody& b : softBodies_)
-        if (b.touchesOthers) scaleSoftMultipliers(b, 1.0f / m2);
+    for (SoftBody* b : softTouching_) scaleSoftMultipliers(*b, 1.0f / m2);
     finishStep(dt);
 }
 
@@ -458,6 +467,7 @@ void ParticleSystem::beginStep(int n) {
     contactDepth_.resize(n);
     softFlight_.resize(n);
     softMove_.resize(n);
+    softAsleep_.resize(n);
     const size_t nb = rigid_ ? rigid_->bodies().size() : 0;
     bodyShift_.assign(nb, Vector3(0.0f));
     bodyTurn_.assign(nb, Vector3(0.0f));
@@ -638,6 +648,7 @@ void ParticleSystem::finishStep(float dt) {
         maxSpeed_ = vmaxSeen;
         keepFreeSpin(dt);
         for (const SoftBody& b : softBodies_) dampSoftBody(b, v_, p_, invMass_, dt);
+        sleepStillSoftBodies(dt);
         Probe::set("particles/count", n);
         Probe::set("particles/fluid", double(fluidCount_));
         Probe::set("particles/max speed", maxSpeed_);
@@ -664,6 +675,7 @@ size_t ParticleSystem::groupSize(int group) const {
 void ParticleSystem::removeGroup(int group) {
     if (group < 0 || std::find(group_.begin(), group_.end(), group) == group_.end()) return;
     releaseGrab(); // the grabbed particles may be among the removed ones
+    wakeSoftBodies(); // what held a sleeping body up may go
     const std::vector<int> newIndex = renumberWithout(group);
     size_t kept = 0;
     for (int k : newIndex) kept += k >= 0 ? 1 : 0;

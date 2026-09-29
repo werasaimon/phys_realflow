@@ -62,6 +62,12 @@ struct ParticleParams {
     float softCourant = 1.0f;
     int softSubsteps = 2;
     int maxSoftSubsteps = 32;
+    // Sleeping soft bodies (as the rigid world's islands): a body whose particles all move slower
+    // than softSleepSpeed for softSleepTime sleeps - it is not stepped - until an awake body, liquid,
+    // cloth or the mouse reaches it (SoftBodyStep.cpp). false: never.
+    bool softSleeping = true;
+    float softSleepSpeed = 0.01f; // [m/s]
+    float softSleepTime = 0.5f;   // [s]
     float clothSpacing = 1.0f;      // distance between cloth particles, in particle radii: 1 = a
                                     // particle of radius r cannot slip through the sheet (as in FleX)
     int substeps = 3;               // per frame
@@ -124,6 +130,8 @@ public:
     // Advances one substep of length dt.
     void step(float dt);
     int lastSoftSmallSteps() const { return lastSoftSmallSteps_; } // of the soft bodies in the last step
+    size_t sleepingSoftBodies() const;
+    void wakeSoftBodies(); // all of them (an edit of the scene: what held one up may be gone)
     // Fire (cloths whose material burns): heating by the gas and the flame's radiation (gas(x)),
     // ignition, burning, charring. The fabric loses mass as it burns. What the cloths give to the
     // gas is appended to `out` (only particles with something to give).
@@ -156,7 +164,9 @@ public:
     int pinParticles(const std::function<bool(const Vector3&)>& region);
     size_t fluidCount() const { return fluidCount_; }
     bool hasSolids() const { return fluidCount_ < x_.size(); } // soft bodies or cloth
-    void addVelocity(int i, const Vector3& dv) { v_[i] += dv; } // external forces (e.g. gas drag)
+    // External forces (the gas's drag and pressure, an edit during play). A push on a sleeping soft
+    // body faster than half the sleep speed wakes it next step; a smaller one is dropped.
+    void addVelocity(int i, const Vector3& dv);
     size_t particleContactCount() const { return contacts_.size(); } // candidate pairs of the last substep
     float kernelRadius() const { return h_; }
     float particleMass() const { return mass_; }
@@ -231,6 +241,7 @@ private:
         int particle, body;
         Vector3 normal, point; // the plane of the body's surface nearest to the particle
         bool touching = false; // in the current small step
+        float depth = 0;       // how deep a sleeping particle is in the body (it is not pushed out)
     };
     struct SoftPair {
         int i, j;
@@ -244,8 +255,10 @@ private:
     void softBodyBoxes(float dt);
     void findRigidPlanes(float dt);
     void softBodiesThatMeet();
+    void wakeSleepingSoftBodies(float dt);
+    void sleepStillSoftBodies(float dt);
     void findSoftPairs(float dt);
-    void solveSoftContacts();
+    void solveSoftContacts(float dt);
     void softFlight(const SoftBody& b, int s, int m, float h);
     void softWalls(const SoftBody& b, float h);
     // The bodies of a pass (all of them in the small steps, those next to liquid or cloth in the
@@ -262,6 +275,9 @@ private:
     std::vector<std::vector<int>> softNearRigid_;
     std::vector<int> softOrder_, softSearch_, softSearchBody_, softCount_, softCellStart_, softCellFill_, softCellItems_;
     std::vector<uint8_t> softMeets_;
+    std::vector<uint8_t> softAsleep_; // per particle: its soft body sleeps (it meets the others as a fixed one)
+    std::vector<int> softRigidNow_;
+    std::vector<int> softWakeObjects_; // objects of sleeping soft bodies pushed from outside (addVelocity)
     // Per soft particle: how far the soft step has moved it (the soft step works on x_ + softMove_,
     // SoftBodySolver.cpp: why; what the passes add afterwards is their push), and its flight in the
     // current small step - a held one's: where it ends the step; in the passes, a material pass's moves.

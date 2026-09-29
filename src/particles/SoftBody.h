@@ -95,6 +95,11 @@ struct SoftBody {
     SoftMaterial material;
     Vector3 color{0.9f, 0.4f, 0.4f};
     float multiplierStep = 0;       // the small step the multipliers belong to (0: none yet)
+    // Sleeping (SoftBodyStep.cpp): how long the body has been still, whether it sleeps, and the rigid
+    // bodies its box met when it fell asleep (a change among them wakes it).
+    float stillTime = 0;
+    bool asleep = false;
+    std::vector<int> sleepRigid;
     bool touchesOthers = false;     // next to liquid or cloth in this step: its material is solved in the passes too
     // Work space of a pass (SoftBodySolver.cpp): its constants, the moves it found the particles at,
     // the warm start's moves.

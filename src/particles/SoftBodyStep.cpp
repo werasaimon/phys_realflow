@@ -7,6 +7,7 @@
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
+#include "core/Probe.h"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,6 @@ int ParticleSystem::softSmallSteps(const SoftBody& b, float dt) const {
 void ParticleSystem::findSoftContacts(float dt) {
     softBodyContacts_.clear();
     softPairs_.clear();
-    softBodyBoxes(dt);
     findRigidPlanes(dt);
     findSoftPairs(dt);
 }
@@ -79,7 +79,8 @@ void ParticleSystem::findRigidPlanes(float dt) {
     softNearRigid_.resize(softBodies_.size());
     softSearch_.clear(), softSearchBody_.clear();
     for (size_t b = 0; b < softBodies_.size(); ++b) {
-        rigid_->queryBodies(softBoxes_[b], softNearRigid_[b]);
+        softNearRigid_[b].clear();
+        rigid_->queryBodies(softBoxes_[b], softNearRigid_[b]); // a sleeping body too: it still holds what lies on it
         if (softNearRigid_[b].empty()) continue;
         for (int i : softBodies_[b].particles)
             if (invMass_[size_t(i)] != 0) softSearch_.push_back(i), softSearchBody_.push_back(int(b));
@@ -170,6 +171,7 @@ void ParticleSystem::findSoftPairs(float dt) {
             for (int e = softCellStart_[size_t(seen[k])]; e < softCellStart_[size_t(seen[k]) + 1]; ++e) {
                 const int j = softCellItems_[size_t(e)];
                 if (j <= i || object_[size_t(j)] == object_[size_t(i)] || invMass_[size_t(i)] + invMass_[size_t(j)] == 0) continue;
+                if (softAsleep_[size_t(i)] && softAsleep_[size_t(j)]) continue; // two fixed ones
                 const Vector3 centres = x_[size_t(i)] - x_[size_t(j)];
                 const float apart = length(centres), reach = d0 + softTravel(i, dt) + softTravel(j, dt) + 0.25f * r;
                 if (apart < reach && apart >= 1e-9f) emit(found++, i, j, centres, apart);
@@ -229,14 +231,14 @@ constexpr int kPairSweeps = 4;
 // in kPairSweeps sweeps), then the velocities (contactImpulse). A rigid body keeps its pose; its velocity changes in the step's copy
 // (bodyV_, bodyW_), and what the step gave it is added to the body at the end (bodyDv_, bodyDw_) -
 // Jolt's way. The lever arm runs to the contact point on the plane, r below the particle's centre.
-void ParticleSystem::solveSoftContacts() {
+void ParticleSystem::solveSoftContacts(float dt) {
     const float r = params.particleRadius, mu = params.solidFriction;
     std::vector<Vector3>& u = softMove_; // the particles are at x_ + u (stepSoftBodies)
     for (SoftBodyContact& c : softBodyContacts_) {
         const size_t i = size_t(c.particle);
-        const float depth = r - dot((x_[i] - c.point) + u[i], c.normal);
-        c.touching = depth > 0;
-        if (c.touching) u[i] += c.normal * depth;
+        c.depth = r - dot((x_[i] - c.point) + u[i], c.normal);
+        c.touching = c.depth > 0;
+        if (c.touching && !softAsleep_[i]) u[i] += c.normal * c.depth, c.depth = 0;
     }
     const int np = int(softPairs_.size());
     for (SoftPair& c : softPairs_) c.touching = false;
@@ -244,7 +246,8 @@ void ParticleSystem::solveSoftContacts() {
         for (int q = 0; q < np; ++q) {
             SoftPair& c = softPairs_[size_t(sweep % 2 ? np - 1 - q : q)];
             const size_t i = size_t(c.i), j = size_t(c.j);
-            const float depth = pushAlong((x_[i] - x_[j]) + (u[i] - u[j]), c.normal, c.target), wi = invMass_[i], wj = invMass_[j];
+            const float depth = pushAlong((x_[i] - x_[j]) + (u[i] - u[j]), c.normal, c.target);
+        const float wi = softAsleep_[i] ? 0.0f : invMass_[i], wj = softAsleep_[j] ? 0.0f : invMass_[j];
             if (depth <= 0) continue;
             c.touching = true;
             u[i] += c.normal * (depth * wi / (wi + wj));
@@ -256,8 +259,11 @@ void ParticleSystem::solveSoftContacts() {
             const size_t i = size_t(c.particle), k = size_t(c.body);
             const RigidBody& body = rigid_->bodies()[k];
             const Vector3 arm = (x_[i] - body.pos) + u[i] - c.normal * r;
-            const float wp = invMass_[i];
-            contactImpulse(v_[i] - (bodyV_[k] + cross(bodyW_[k], arm)), c.normal, mu,
+            // A sleeping particle is a fixed one: not pushed out, it pushes the body out instead, to
+            // leave by the next step (a box lying on a sleeping jelly stays on top: without it, it
+            // would sink by g dt^2 every step, nothing in a sleeping body pushing back).
+            const float wp = softAsleep_[i] ? 0.0f : invMass_[i];
+            contactImpulse(v_[i] - (bodyV_[k] + cross(bodyW_[k], arm)) - c.normal * (c.depth / dt), c.normal, mu,
                            [&](const Vector3& d) { const Vector3 rd = cross(arm, d); return wp + body.invMass + dot(rd, body.applyInvInertiaWorld(rd)); },
                            [&](const Vector3& J) {
                                v_[i] += J * wp;
@@ -268,7 +274,7 @@ void ParticleSystem::solveSoftContacts() {
     for (const SoftPair& c : softPairs_) {
         if (!c.touching) continue;
         const size_t i = size_t(c.i), j = size_t(c.j);
-        const float wi = invMass_[i], wj = invMass_[j];
+        const float wi = softAsleep_[i] ? 0.0f : invMass_[i], wj = softAsleep_[j] ? 0.0f : invMass_[j];
         contactImpulse(v_[i] - v_[j], c.normal, mu, [&](const Vector3&) { return wi + wj; },
                        [&](const Vector3& J) { v_[i] += J * wi, v_[j] -= J * wj; });
     }
@@ -324,10 +330,23 @@ void ParticleSystem::softWalls(const SoftBody& b, float h) {
 
 void ParticleSystem::stepSoftBodies(float dt) {
     if (softBodies_.empty()) return;
+    softBodyBoxes(dt);
+    wakeSleepingSoftBodies(dt);
     int m = 1;
-    for (const SoftBody& b : softBodies_) m = std::max(m, softSmallSteps(b, dt));
+    softAll_.clear();
+    for (SoftBody& b : softBodies_)
+        if (!b.asleep) softAll_.push_back(&b), m = std::max(m, softSmallSteps(b, dt));
     lastSoftSmallSteps_ = m;
+    Probe::set("particles/soft bodies asleep", double(softBodies_.size() - softAll_.size()));
     const float h = dt / float(m);
+    std::vector<Vector3>& u = softMove_; // every soft particle is at x_ + u (SoftBodySolver.cpp: why)
+    for (SoftBody& b : softBodies_)
+        for (int i : b.particles) {
+            u[size_t(i)] = Vector3(0.0f);
+            softAsleep_[size_t(i)] = uint8_t(b.asleep);
+            if (b.asleep) v_[size_t(i)] = Vector3(0.0f); // what pushed it too softly to wake it is dropped
+            if (invMass_[size_t(i)] == 0) softFlight_[size_t(i)] = p_[size_t(i)] - x_[size_t(i)]; // where the held ones end
+        }
     findSoftContacts(dt);
     if (rigid_) {
         const auto& bodies = rigid_->bodies();
@@ -335,30 +354,93 @@ void ParticleSystem::stepSoftBodies(float dt) {
         bodyW_.resize(bodies.size());
         for (size_t k = 0; k < bodies.size(); ++k) bodyV_[k] = bodies[k].vel, bodyW_[k] = bodies[k].angVel;
     }
-    std::vector<Vector3>& u = softMove_; // every soft particle is at x_ + u (SoftBodySolver.cpp: why)
-    for (SoftBody& b : softBodies_) {
-        for (int i : b.particles) {
-            u[size_t(i)] = Vector3(0.0f);
-            if (invMass_[size_t(i)] == 0) softFlight_[size_t(i)] = p_[size_t(i)] - x_[size_t(i)]; // where the held ones end
-        }
-        // The multipliers are force x h^2: carried from the last small step, rescaled if h changed.
-        const float scale = b.multiplierStep > 0 ? sqr(h / b.multiplierStep) : 0.0f;
-        if (scale != 1.0f) scaleSoftMultipliers(b, scale);
-        b.multiplierStep = h;
+    if (softAll_.empty()) { // everything sleeps (p_ = x_ already), but still holds up what lies on it
+        solveSoftContacts(dt);
+        return;
     }
-    softAll_.clear();
-    for (SoftBody& b : softBodies_) softAll_.push_back(&b);
-    const int bodies = int(softBodies_.size());
+    for (SoftBody* b : softAll_) {
+        // The multipliers are force x h^2: carried from the last small step, rescaled if h changed.
+        const float scale = b->multiplierStep > 0 ? sqr(h / b->multiplierStep) : 0.0f;
+        if (scale != 1.0f) scaleSoftMultipliers(*b, scale);
+        b->multiplierStep = h;
+    }
+    const int awake = int(softAll_.size());
     for (int s = 0; s < m; ++s) {
         // The bodies share no particle: their flights and walls run a body per thread, their material
         // one colour of all of them per parallel loop.
-        parallelFor(bodies, [&](int b) { softFlight(softBodies_[size_t(b)], s, m, h); }, 1);
+        parallelFor(awake, [&](int b) { softFlight(*softAll_[size_t(b)], s, m, h); }, 1);
         solveSoftBodies(softAll_, x_, u, invMass_, h, true, softRuns_);
-        parallelFor(bodies, [&](int b) { softWalls(softBodies_[size_t(b)], h); }, 1);
-        solveSoftContacts(); // 3. the rigid bodies and the other soft bodies
+        parallelFor(awake, [&](int b) { softWalls(*softAll_[size_t(b)], h); }, 1);
+        solveSoftContacts(dt); // 3. the rigid bodies and the other soft bodies
     }
-    for (const SoftBody& b : softBodies_)
-        for (int i : b.particles) p_[size_t(i)] = x_[size_t(i)] + u[size_t(i)];
+    for (const SoftBody* b : softAll_)
+        for (int i : b->particles) p_[size_t(i)] = x_[size_t(i)] + u[size_t(i)];
+}
+
+// Sleeping, as the rigid world's islands do it: a soft body whose particles have all moved slower
+// than params.softSleepSpeed (by their move in the step) for params.softSleepTime - not held by the mouse, not in liquid or cloth -
+// sleeps: it is not stepped, its particles hold still and meet the other bodies as fixed ones. Its
+// multipliers keep the forces that held it, so it wakes exactly in the balance it fell asleep in,
+// without a jolt. A lying jelly costs nothing; a scene that has come to rest, next to nothing.
+void ParticleSystem::sleepStillSoftBodies(float dt) {
+    for (size_t k = 0; k < softBodies_.size(); ++k) {
+        SoftBody& b = softBodies_[k];
+        if (!params.softSleeping) b.asleep = false, b.stillTime = 0;
+        if (b.asleep || !params.softSleeping) continue;
+        // How far the particles went in the step, not their velocities: under a rigid body lying on
+        // it a still jelly's top particles carry the body's g dt of every step (it gets gravity in
+        // its own step, the support in this one) and would never count as still.
+        float farthest = 0;
+        for (int i : b.particles) farthest = std::max(farthest, length2(p_[size_t(i)] - x_[size_t(i)]));
+        const bool held = grabbing() && object_[size_t(grab_.particles[0])] == b.object;
+        const bool still = farthest < sqr(params.softSleepSpeed * dt) && !held && !b.touchesOthers;
+        b.stillTime = still ? b.stillTime + dt : 0.0f;
+        if (b.stillTime < params.softSleepTime) continue;
+        b.asleep = true;
+        for (int i : b.particles) v_[size_t(i)] = Vector3(0.0f);
+        b.sleepRigid.clear();
+        if (rigid_ && k < softBoxes_.size()) rigid_->queryBodies(softBoxes_[k], b.sleepRigid);
+    }
+}
+
+// What wakes a sleeping body: liquid or cloth reaching it (last step), an awake soft body that moved
+// in its last step and whose box meets its box, a rigid body in its box moving faster than the
+// sleep speed plus twice gravity's kick of a step (what lies on the body at rest moves by g dt
+// between its own step and the support), or a change among the rigid bodies in its box (one that
+// held it up is gone). Woken, it counts as moving for a step, so it wakes a sleeping stack one body
+// per step from where it was touched.
+void ParticleSystem::wakeSleepingSoftBodies(float dt) {
+    const size_t count = softBodies_.size();
+    for (size_t k = 0; k < count; ++k) {
+        SoftBody& b = softBodies_[k];
+        if (!b.asleep) continue;
+        bool wake = b.touchesOthers || !params.softSleeping ||
+                    std::find(softWakeObjects_.begin(), softWakeObjects_.end(), b.object) != softWakeObjects_.end();
+        for (size_t a = 0; a < count && !wake; ++a)
+            wake = !softBodies_[a].asleep && softBodies_[a].stillTime == 0 && softBoxes_[a].overlaps(softBoxes_[k]);
+        if (!wake && rigid_) {
+            rigid_->queryBodies(softBoxes_[k], softRigidNow_);
+            wake = softRigidNow_ != b.sleepRigid;
+            const float quick = params.softSleepSpeed + 2.0f * length(params.gravity) * dt;
+            for (int r : softRigidNow_) {
+                const RigidBody& body = rigid_->bodies()[size_t(r)];
+                const float speed = length(body.vel) + length(body.angVel) * body.boundingRadius();
+                wake = wake || (body.invMass > 0 && !body.sleeping && speed > quick);
+            }
+        }
+        if (wake) b.asleep = false, b.stillTime = 0;
+    }
+    softWakeObjects_.clear();
+}
+
+size_t ParticleSystem::sleepingSoftBodies() const {
+    size_t n = 0;
+    for (const SoftBody& b : softBodies_) n += b.asleep ? 1 : 0;
+    return n;
+}
+
+void ParticleSystem::wakeSoftBodies() {
+    for (SoftBody& b : softBodies_) b.asleep = false, b.stillTime = 0;
 }
 
 } // namespace rf

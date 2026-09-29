@@ -499,3 +499,52 @@ void testSoftTimeStepAndEnergy() {
     std::printf("  undamped beam: total energy %+.6f J after 1.5 s (the swing trades up to %.5f J of kinetic energy)\n", end - start, swing);
     CHECK(end - start < 0.01 * swing, "the energy grew by %.6f J", end - start);
 }
+
+// 10. Sleeping (as the rigid world's islands): a jelly lying still falls asleep and then does not
+//     move by a single bit; a box dropped on it wakes it and comes to rest on it (a sleeping body
+//     must not let a load through); both fall asleep again; the mouse wakes it.
+void testSoftSleep() {
+    ParticleSystem s;
+    RigidWorld w;
+    const AABB domain({-0.5f, 0, -0.5f}, {0.5f, 1.0f, 0.5f});
+    w.setDomain(domain);
+    s.setRigidWorld(&w);
+    s.reset(domain);
+    TriMesh jelly = primitives::box(Vector3(0.1f));
+    jelly.translate({0, 0.1f, 0});
+    s.addSoftBody(jelly, SoftMaterial{400.0f, 3e4f, 0.45f, 3.0f}, Vector3(1));
+    auto run = [&](float seconds) {
+        for (int k = 0; k < int(seconds / kDt); ++k) w.step(kDt), s.step(kDt);
+    };
+    run(2.0f);
+    const bool asleep = s.sleepingSoftBodies() == 1;
+    const std::vector<Vector3> before = s.positions();
+    run(0.5f);
+    bool frozen = true;
+    for (size_t i = 0; i < before.size(); ++i) {
+        const Vector3& a = before[i], & b = s.positions()[i];
+        frozen = frozen && a.x == b.x && a.y == b.y && a.z == b.z;
+    }
+    float top = -kInf;
+    for (const Vector3& p : s.positions()) top = std::max(top, p.y + s.params.particleRadius);
+    const int box = w.addBox({0, top + 0.05f + 0.3f, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
+    run(0.4f);
+    const bool wokeByBox = s.sleepingSoftBodies() == 0;
+    run(3.0f);
+    float jellyTop = -kInf;
+    for (const Vector3& p : s.positions())
+        if (std::fabs(p.x) < 0.04f && std::fabs(p.z) < 0.04f) jellyTop = std::max(jellyTop, p.y + s.params.particleRadius);
+    const float gap = (w.bodies()[size_t(box)].pos.y - 0.05f) - jellyTop;
+    const bool asleepAgain = s.sleepingSoftBodies() == 1;
+    s.grab(s.positions()[0]);
+    run(0.1f);
+    const bool wokeByHand = s.sleepingSoftBodies() == 0;
+    s.releaseGrab();
+    std::printf("  jelly asleep after 2 s %d, still to the bit %d; a box dropped on it wakes it %d and rests on it: gap %.1f mm; "
+                "asleep again %d; the mouse wakes it %d\n",
+                int(asleep), int(frozen), int(wokeByBox), 1000 * gap, int(asleepAgain), int(wokeByHand));
+    CHECK(asleep && frozen, "the resting jelly does not sleep (asleep %d, frozen %d)", int(asleep), int(frozen));
+    CHECK(wokeByBox && std::fabs(gap) < 0.5f * s.params.particleRadius, "the box on the sleeping jelly: woke %d, gap %.1f mm", int(wokeByBox),
+          1000 * gap);
+    CHECK(asleepAgain && wokeByHand, "asleep again %d, woken by the mouse %d", int(asleepAgain), int(wokeByHand));
+}

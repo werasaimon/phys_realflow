@@ -137,6 +137,7 @@ void testSoftDragThrough();
 void testSoftVirtualWork();
 void testSoftRest();
 void testSoftTimeStepAndEnergy();
+void testSoftSleep();
 void testMagnetForce();
 void testMagnetsAttract();
 void testGraphSceneBuilds();

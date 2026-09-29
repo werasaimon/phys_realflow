@@ -70,6 +70,7 @@ int main() {
     run("soft benchmark: a cube dragged inside out through its clamped half comes back to its shape", testSoftDragThrough);
     run("soft benchmark: a jelly at rest on the floor neither jitters nor creeps", testSoftRest);
     run("soft benchmark: the static answer does not depend on the step; energy never grows", testSoftTimeStepAndEnergy);
+    run("soft bodies sleep: still to the bit, woken by a box dropped on them and by the mouse", testSoftSleep);
     run("cloth: a sheet swinging on its pinned edge loses no thread", testClothSwingNoFalseTears);
     run("cloth: threads carry the static load and tear at their strength", testClothTearsAtStrength);
     run("grid uniform flow", testGridUniform);
