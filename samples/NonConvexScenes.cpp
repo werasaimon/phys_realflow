@@ -77,7 +77,7 @@ public:
 class CupsScene : public Scene {
 public:
     void build(Simulation& sim) override {
-        sim.useRigidArena(AABB({-1.0f, 0.0f, -1.0f}, {1.0f, 2.0f, 1.0f}));
+        sim.useRigidArena(AABB({-0.3f, 0.0f, -0.3f}, {0.3f, 0.9f, 0.3f})); // tight: the camera frames the arena
         for (int i = 0; i < 6; ++i)
             sim.rigid.addCompound(cupShape(), {0.002f * float(i % 2), 0.15f + 0.12f * float(i), 0}, Quaternion(), 1000.0f,
                                   {0.95f, 0.9f - 0.1f * float(i % 4), 0.4f + 0.1f * float(i)});
