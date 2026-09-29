@@ -6,6 +6,7 @@
 
 #include "core/Parallel.h"
 #include "core/Probe.h"
+#include "math/ElementaryFunctions.h"
 
 #include <algorithm>
 #include <bitset>
@@ -205,7 +206,28 @@ void RigidWorld::collideStaticMesh(int i, std::vector<Manifold>& out) const {
         for (const ContactPoint& p : local.points)
             if (dot(p.normal, fn) > 0.2f) cm.points.push_back(p); // one-sided: never pull through the surface
     });
-    addManifold(out, i, -7, cm);
+    // The points in patches by normal, each a manifold of its own (as two compounds' contacts,
+    // collideCompoundPair): all in one, as before, a bunny on a hillside had one normal, one friction
+    // and one lock for the points of its feet on two slopes, and bunnies, teapots and rings jittered
+    // on the terrain for good (21 of 45 still awake after 24 s). A patch is cached under the
+    // direction of its normal (the mesh does not move): the triangles under a body change as it
+    // settles, its normals hardly.
+    size_t used = 0;
+    for (const ContactPoint& q : cm.points) {
+        size_t k = 0;
+        while (k < used && dot(S.patchNormals[k], q.normal) < kPatchNormalCos) ++k;
+        if (k == used) {
+            if (used == S.patches.size()) S.patches.emplace_back(), S.patchNormals.emplace_back(), S.patchSubs.push_back(0);
+            S.patches[k].points.clear();
+            S.patchNormals[k] = q.normal;
+            const int polar = std::min(31, int(rf::acos(clampv(q.normal.y, -1.0f, 1.0f)) * (32.0f / kPi)));
+            const int around = polar == 0 ? 0 : (int(std::floor((rf::atan2(q.normal.z, q.normal.x) + kPi) * (64.0f / (2 * kPi)))) & 63);
+            S.patchSubs[k] = 1 + polar * 64 + around;
+            ++used;
+        }
+        S.patches[k].points.push_back(q);
+    }
+    for (size_t k = 0; k < used; ++k) addManifold(out, i, -7, S.patches[k], S.patchSubs[k]);
 }
 
 void RigidWorld::collide() {
