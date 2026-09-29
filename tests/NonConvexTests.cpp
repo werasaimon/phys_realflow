@@ -2,11 +2,13 @@
 // chains of rings, a ring tossed over a peg, things dropped into a cup, a ring lying on the floor -
 // and the convex decomposition behind them held to the geometry: a hole stays a hole, a hollow
 // stays hollow. Every number is checked against the shape: the distance two interlocked rings hang
-// apart, the height of the floor a body rests on.
+// apart, the height of the floor a body rests on. The standard scenes of samples/NonConvexScenes.cpp
+// (32-36) are held each to its own number: a law of rolling, a height of a stack, the surface.
 #include "TestRunner.h"
 #include "Tests.h"
 
 #include "rigid/ConvexDecomposition.h"
+#include "rigid/GjkEpa.h"
 
 #include <chrono>
 #include <cmath>
@@ -194,42 +196,182 @@ void testDropIntoCup() {
     CHECK(worst < 0.003f, "a body dropped into the cup rests %.1f mm off its bottom", 1000 * worst);
 }
 
-// A wheel of boxes - a hub, six spokes and a rim of 48 flat segments - let go on a 15 degree slope
-// rolls down without slipping. A round wheel would reach v^2 = 2 s g sin(t) / (1 + I / (m R^2)); a
-// 48-gon loses about 1 % of its energy at every corner it rolls over, so it is somewhat slower,
-// never faster. The rotational lock of a resting face held it standing before: its centre of mass
-// 8 cm past the 4 cm segment it stood on, the lock carried the tipping moment as if friction could.
-void testWheelRollsDownSlope() {
-    const int n = 48;
-    const float R = 0.3f, rim = 0.03f, width = 0.08f, theta = 15.0f * kPi / 180.0f;
-    auto boxAt = [](const Vector3& half, float angle, const Vector3& at) {
-        TriMesh b = primitives::box(half);
-        b.transform(Quaternion::fromAxisAngle({0, 0, 1}, angle).toMatrix3x3(), Vector3(1.0f), at);
-        return b;
+// The race of sample 32: a ball, a solid cylinder (a hull of 48 sides) and a wheel of boxes (a rim
+// of 48 flat segments) let go side by side on a 15 degree slope. The ball is round: with the
+// rolling resistance c (a moment c N rho, rho the lever of RigidParams::rollingResistance, the
+// bounding radius) it rolls with v^2 = 2 s g (sin t - c cos t rho / R) / (1 + I / (m R^2)). A 48-gon
+// rolls over its corners: between two corners it gains m g L sin t (L the side) less the rolling
+// resistance, at each corner it turns about the next one keeping its angular momentum about it,
+//     w' = w (k + cos a) / (k + 1),   k = I / (m R^2), a = 2 pi / 48,
+// and loses 1 - (w'/w)^2 of its energy - 1.1 % for the cylinder: it runs a third slower than a
+// round one would after 2.6 m. Each body is held to its own law, and they must finish in the order
+// of their k: ball (0.4), cylinder (0.5), wheel (0.73). The rotational lock of a resting face held
+// the wheel standing before: its centre of mass 8 cm past the 4 cm segment it stood on.
+void testRollingRace() {
+    Simulation sim;
+    loadSample(sim, Preset::RigidRace);
+    const RigidWorld& w = sim.rigid;
+    const float theta = 15.0f * kPi / 180.0f, g = 9.81f, c = w.params.rollingResistance, R = 0.3f;
+    const Vector3 down(std::cos(theta), -std::sin(theta), 0);
+    std::vector<Vector3> start;
+    for (const RigidBody& b : w.bodies()) start.push_back(b.pos);
+    for (int f = 0; f < 120; ++f) sim.stepFrame(); // 2 s
+    const char* names[] = {"ball", "cylinder of 48 sides", "wheel of 48 segments"};
+    float travelled[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        const RigidBody& b = w.bodies()[size_t(i + 1)]; // body 0 is the slope
+        const Matrix3x3 invI = b.rotation() * Matrix3x3::diag(b.invInertiaLocal) * b.rotation().transposed();
+        const float corner = i == 2 ? R / std::cos(kPi / 48) : R; // the wheel's segments touch R out, its corners are farther
+        const float k = 1 / (invI.m[2][2] * b.mass * corner * corner), rho = b.boundingRadius();
+        const float s = dot(b.pos - start[size_t(i + 1)], down), v = dot(b.vel, down);
+        const float slope = std::sin(theta) - c * std::cos(theta) * rho / corner;
+        float expected;
+        if (i == 0) {
+            expected = std::sqrt(2 * g * s * slope / (1 + k));
+        } else { // corner by corner: the energy per unit mass, E = (1 + k) v^2 / 2
+            const float a = 2 * kPi / 48, side = 2 * corner * std::sin(kPi / 48), keep = sqr((k + std::cos(a)) / (k + 1));
+            double E = 0;
+            for (float x = side; x <= s; x += side) E = (E + g * side * slope) * keep;
+            expected = float(std::sqrt(2 * E / (1 + k)));
+        }
+        const float slip = std::fabs(v - std::fabs(b.angVel.z) * R) / v;
+        std::printf("  %-21s k %.3f: 2 s down the slope %.3f m at %.3f m/s, its law %.3f m/s (%+.1f %%), slip %.1f %%\n", names[i], k, s, v, expected,
+                    100 * (v / expected - 1), 100 * slip);
+        CHECK(std::fabs(v / expected - 1) < (i == 0 ? 0.03f : 0.05f), "%s: %.3f m/s, its law gives %.3f", names[i], v, expected);
+        CHECK(slip < 0.03f, "%s slides: slip %.1f %%", names[i], 100 * slip);
+        travelled[i] = s;
+    }
+    CHECK(travelled[0] > travelled[1] && travelled[1] > travelled[2], "the order is not ball, cylinder, wheel: %.3f %.3f %.3f m", travelled[0], travelled[1],
+          travelled[2]);
+}
+
+// Sample 33: 60 boxes, balls and capsules poured into a bowl (a half shell 1.2 m across, 4 cm
+// thick, 48 convex parts). Every one stays inside, none sinks into the shell, the pile falls
+// asleep, and the energy never exceeds what the pour started with.
+void testBowlHoldsPour() {
+    Simulation sim;
+    loadSample(sim, Preset::RigidBowl);
+    const RigidWorld& w = sim.rigid;
+    const Energy e0 = energyOf(w);
+    double gain = 0;
+    for (int f = 0; f < 360; ++f) {
+        sim.stepFrame();
+        const Energy e = energyOf(w);
+        gain = std::max(gain, e.kinetic + e.potential - e0.kinetic - e0.potential);
+    }
+    int outside = 0, awake = 0;
+    float lowest = kInf;
+    for (size_t i = 1; i < w.bodies().size(); ++i) {
+        const RigidBody& b = w.bodies()[i];
+        outside += std::hypot(b.pos.x, b.pos.z) > 0.6f || b.pos.y > 0.6f;
+        awake += !b.sleeping;
+        lowest = std::min(lowest, b.posed().support(Vector3(0, -1, 0)).y);
+    }
+    std::printf("  bowl, 6 s: %d of 60 outside, %d awake, the lowest point %.1f mm above the floor (the inner bottom 40 mm), energy gain %.4f J\n",
+                outside, awake, 1000 * lowest, gain);
+    CHECK(outside == 0, "%d bodies left the bowl", outside);
+    CHECK(awake == 0, "%d bodies still awake after 6 s", awake);
+    CHECK(lowest > 0.04f - 0.004f, "a body sank into the bowl's bottom: %.1f mm", 1000 * lowest);
+    CHECK(gain < 1e-3, "the pour gained %.4f J", gain);
+}
+
+// Sample 34: eight tables, each a top on four legs (five boxes), dropped 5 cm onto one another,
+// shifted up to 1 cm and turned up to 1.6 degrees, every leg over the top below. They stack as high
+// as eight tables are, 3.52 m, stay where they landed and sleep. Of such stacks (other shifts and
+// turns of the same size) 12 of 12 stand with 5 tables and with 8, 9 of 12 with 6: there a table
+// rocks on its four legs within the slop and walks off the one below (an open question). With a leg
+// past the edge of the top below (shifts of 3 cm, turns of 5 degrees) a table stands on three legs,
+// its centre of mass on their diagonal, and the stack topples, as it should.
+void testStackOfTables() {
+    Simulation sim;
+    loadSample(sim, Preset::RigidTables);
+    const RigidWorld& w = sim.rigid;
+    std::vector<Vector3> start;
+    for (const RigidBody& b : w.bodies()) start.push_back(b.pos);
+    for (int f = 0; f < 240; ++f) sim.stepFrame();
+    float drift = 0;
+    int awake = 0;
+    for (size_t i = 0; i < w.bodies().size(); ++i) {
+        const Vector3 d = w.bodies()[i].pos - start[i];
+        drift = std::max(drift, std::hypot(d.x, d.z));
+        awake += !w.bodies()[i].sleeping;
+    }
+    const float top = w.bodies().back().posed().support(Vector3(0, 1, 0)).y, stacked = 0.44f * float(w.bodies().size());
+    std::printf("  %zu tables, 4 s: top %.4f m (stacked %.4f m), sideways at most %.1f mm, %d awake\n", w.bodies().size(), top, stacked, 1000 * drift, awake);
+    CHECK(w.bodies().size() == 8, "the sample holds %zu tables, not 8", w.bodies().size());
+    CHECK(std::fabs(top - stacked) < 0.002f, "the stack is %.4f m tall, %zu tables are %.2f m", top, w.bodies().size(), stacked);
+    CHECK(drift < 0.005f, "a table moved %.1f mm sideways", 1000 * drift);
+    CHECK(awake == 0, "%d tables awake after 4 s", awake);
+}
+
+// Sample 35: six tapered cups (8 to 12 cm across, 10 cm tall, wall 4 mm) dropped into one another.
+// Exact cups would nest 20.4 mm apart (the wall's horizontal thickness over the taper, 1:5); the
+// convex parts reach up to about 2 mm into the cup (the decomposition's tolerance), five times
+// that along the axis, so the parts nest farther apart - how far is found here from the parts
+// alone: the upper cup lowered, coaxial, until two parts meet. The stack must come to rest that
+// high and sleep. Before, a contact across the seam between two parts of a wall pushed the upper
+// cup down into the lower one, the stack sank 38 mm into itself, rocked and never slept (60 ms a
+// frame); and a speculative contact through the wall of the cup between made the shock pass lift
+// the stack in bursts.
+void testNestedCups() {
+    const auto cup = cupShape();
+    const Vector3 up = cup->principalRotation().transposed() * Vector3(0, 1, 0);
+    auto overlap = [&](float d) {
+        for (const auto& a : cup->children())
+            for (const auto& b : cup->children())
+                if (gjk({a.shape.get(), a.R, a.t}, {b.shape.get(), b.R, b.t + up * d}, 0.0f).intersect) return true;
+        return false;
     };
-    std::vector<TriMesh> parts;
-    for (int k = 0; k < n; ++k) {
-        const float a = 2 * kPi * float(k) / n, r = R - 0.5f * rim;
-        parts.push_back(boxAt({R * std::sin(kPi / n) + 0.002f, 0.5f * rim, 0.5f * width}, a + 0.5f * kPi, {r * std::cos(a), r * std::sin(a), 0}));
+    float lo = 0.0f, hi = 0.1f; // overlap at lo, clear at hi
+    while (hi - lo > 1e-5f) (overlap(0.5f * (lo + hi)) ? lo : hi) = 0.5f * (lo + hi);
+    const float pitch = hi, expected = 0.1f + 5 * pitch;
+    Simulation sim;
+    loadSample(sim, Preset::RigidCups);
+    const RigidWorld& w = sim.rigid;
+    double kinetic = 0;
+    for (int f = 0; f < 300; ++f) {
+        sim.stepFrame();
+        if (f >= 90) kinetic = std::max(kinetic, energyOf(w).kinetic);
     }
-    for (int k = 0; k < 6; ++k) {
-        const float a = 2 * kPi * float(k) / 6, r = 0.5f * (R - rim + 0.05f);
-        parts.push_back(boxAt({0.5f * (R - rim - 0.05f), 0.012f, 0.012f}, a, {r * std::cos(a), r * std::sin(a), 0}));
+    float bottom = kInf, top = -kInf;
+    int awake = 0;
+    for (const RigidBody& b : w.bodies()) {
+        bottom = std::min(bottom, b.posed().support(Vector3(0, -1, 0)).y);
+        top = std::max(top, b.posed().support(Vector3(0, 1, 0)).y);
+        awake += !b.sleeping;
     }
-    parts.push_back(primitives::box({0.05f, 0.05f, 0.5f * width}));
-    RigidWorld w;
-    w.setDomain(AABB({-6, -4, -1}, {6, 4, 1}));
-    w.addBox({0, 0, 0}, {5.0f, 0.1f, 0.5f}, Quaternion::fromAxisAngle({0, 0, 1}, -theta), 0.0f, Vector3(0.5f));
-    const Vector3 down(std::cos(theta), -std::sin(theta), 0), up(std::sin(theta), std::cos(theta), 0);
-    const Vector3 start = down * -3.5f + up * (0.1f + R + 0.001f);
-    const int b = w.addCompound(std::make_shared<const CompoundShape>(parts, primitives::merge(parts)), start, Quaternion(), 1000.0f, Vector3(0.8f));
-    const RigidBody& wheel = w.bodies()[size_t(b)];
-    const Matrix3x3 invI = wheel.rotation() * Matrix3x3::diag(wheel.invInertiaLocal) * wheel.rotation().transposed();
-    const float a = 9.81f * std::sin(theta) / (1 + 1 / (invI.m[2][2] * wheel.mass * R * R));
-    for (int f = 0; f < 90; ++f) w.step(kDt);
-    const float s = dot(wheel.pos - start, down), v = dot(wheel.vel, down), round = std::sqrt(2 * a * std::max(s, 0.0f));
-    const float slip = std::fabs(v - std::fabs(wheel.angVel.z) * R) / std::max(v, 1e-3f);
-    std::printf("  wheel of %d segments on a 15 deg slope, 1.5 s: rolled %.2f m at %.3f m/s (a round wheel: %.3f), slip %.1f %%\n", n, s, v, round, 100 * slip);
-    CHECK(s > 0.8f && v > 0.75f * round && v <= round, "the wheel does not roll: %.2f m, %.3f of %.3f m/s", s, v, round);
-    CHECK(slip < 0.03f, "the wheel slides: slip %.1f %%", 100 * slip);
+    std::printf("  six cups: the parts nest %.1f mm apart (exact cups 20.4 mm), stack %.1f mm (from the parts %.1f mm), %d awake, "
+                "kinetic energy after 1.5 s at most %.2e J\n", 1000 * pitch, 1000 * (top - bottom), 1000 * expected, awake, kinetic);
+    CHECK(std::fabs(top - bottom - expected) < 0.005f, "the stack is %.1f mm tall, the parts nest to %.1f mm", 1000 * (top - bottom), 1000 * expected);
+    CHECK(awake == 0, "%d cups awake after 5 s", awake);
+    CHECK(kinetic < 1e-4, "the nested stack moves again: %.2e J", kinetic);
+}
+
+// Sample 36: 45 teapots, bunnies and steel rings dropped on the terrain (a static mesh of 51 200
+// triangles). None ends up under the surface - no point of a body lower than the surface under it
+// by more than the solver's slop - and all sleep by 10 s. Before, all the contact points of a
+// body with the mesh were one manifold: a bunny on two slopes had one normal for both, and 21 of
+// the 45 still jittered after 24 s.
+void testModelsOnTerrain() {
+    Simulation sim;
+    loadSample(sim, Preset::TerrainModels);
+    const RigidWorld& w = sim.rigid;
+    for (int f = 0; f < 600; ++f) sim.stepFrame();
+    const MeshBVH* mesh = w.staticMesh();
+    CHECK(mesh != nullptr, "the terrain is not the world's static mesh");
+    if (!mesh) return;
+    int awake = 0, under = 0;
+    float deepest = 0;
+    for (const RigidBody& b : w.bodies()) {
+        awake += !b.sleeping;
+        const Vector3 low = b.posed().support(Vector3(0, -1, 0));
+        RayHit hit;
+        if (!mesh->raycast(Vector3(low.x, 10.0f, low.z), Vector3(0, -1, 0), 20.0f, hit)) continue;
+        const float below = (10.0f - hit.t) - low.y;
+        deepest = std::max(deepest, below);
+        under += below > w.params.slop;
+    }
+    std::printf("  45 models on the terrain, 10 s: %d awake, %d under the surface, the deepest point %.1f mm below it\n", awake, under, 1000 * deepest);
+    CHECK(under == 0, "%d models sank into the terrain (deepest %.1f mm)", under, 1000 * deepest);
+    CHECK(awake == 0, "%d models awake after 10 s", awake);
 }

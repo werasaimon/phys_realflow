@@ -131,6 +131,9 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
 // Normals of two parts' contacts closer than this (5 degrees) make one patch - Jolt's manifold
 // reduction threshold.
 constexpr float kPatchNormalCos = 0.9962f;
+// How far outside a part the seam test of collideCompoundPair looks for another part of the body [m]:
+// neighbouring parts of a decomposition share their faces or overlap.
+constexpr float kSeamProbe = 0.5e-3f;
 
 // Two bodies of which one is non-convex: every pair of their convex parts whose boxes meet makes
 // its contact, as Bullet's compound algorithms and Jolt's sub-shape pairs do, and the contacts whose
@@ -152,16 +155,32 @@ void RigidWorld::collideCompoundPair(int i, int j, std::vector<Manifold>& out) c
     };
     partsOf(bodies_[size_t(i)].posed(), S.partsA);
     partsOf(bodies_[size_t(j)].posed(), S.partsB);
+    S.boundsA.clear();
     S.boundsB.clear();
+    for (const PosedShape& q : S.partsA) S.boundsA.push_back(boundsOf(q));
     for (const PosedShape& q : S.partsB) S.boundsB.push_back(boundsOf(q));
+    auto inOtherPart = [](const std::vector<PosedShape>& parts, const std::vector<AABB>& bounds, size_t skip, const Vector3& x) {
+        for (size_t k = 0; k < parts.size(); ++k)
+            if (k != skip && bounds[k].contains(x) && parts[k].shape->contains(parts[k].R.transposed() * (x - parts[k].p))) return true;
+        return false;
+    };
     size_t used = 0;
     for (size_t u = 0; u < S.partsA.size(); ++u) {
-        const AABB ab = boundsOf(S.partsA[u]);
+        const AABB& ab = S.boundsA[u];
         for (size_t v = 0; v < S.partsB.size(); ++v) {
             ContactManifold& part = S.pair;
             part.points.clear();
             if (!ab.overlaps(S.boundsB[v]) || !narrow_.collide(S.partsA[u], S.partsB[v], part) || part.points.empty()) continue;
             const Vector3 n = part.points.front().normal;
+            // A seam: the contact leaves a part through a face it shares with another part of the
+            // same body (a step outwards from the surface point lands in that other part), a face
+            // inside the body. Two wall parts of nested cups, one a little into the other across
+            // such a face, got its normal - along the wall, pushing the upper cup down into the
+            // lower one - and a stack of six cups sank, rocked and never slept. The parts across
+            // the seam give the contact its true normal (Jolt's active edges do this for meshes).
+            const ContactPoint& c = part.points.front(); // the deepest (reduceManifold)
+            const Vector3 onA = c.position - n * (0.5f * c.depth), onB = c.position + n * (0.5f * c.depth);
+            if (inOtherPart(S.partsA, S.boundsA, u, onA - n * kSeamProbe) || inOtherPart(S.partsB, S.boundsB, v, onB + n * kSeamProbe)) continue;
             size_t p = 0;
             while (p < used && dot(S.patchNormals[p], n) < kPatchNormalCos) ++p;
             if (p == used) { // a new patch, named by this pair of parts (1 + u * 512 + v: 20 bits for 512 parts)

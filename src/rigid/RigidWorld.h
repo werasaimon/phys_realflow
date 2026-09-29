@@ -114,6 +114,7 @@ public:
     const AABB& domain() const { return domain_; }
     void setDomain(const AABB& d) { domain_ = d; }
     void setStaticMesh(const MeshBVH* bvh) { mesh_ = bvh; }
+    const MeshBVH* staticMesh() const { return mesh_; }
     void setBroadPhase(std::unique_ptr<BroadPhase> bp) { broadphase_ = std::move(bp); }
     const BroadPhase& broadPhase() const { return *broadphase_; }
     // The world tree: one dynamic AABB tree with every body in it (Bullet's btDbvtBroadphase, the
@@ -471,7 +472,7 @@ private:
         ContactManifold wall, mesh, triangle;   // one wall; the whole mesh; one of its triangles
         ContactManifold pair;                   // a body pair
         std::vector<PosedShape> partsA, partsB; // two compounds: their convex parts
-        std::vector<AABB> boundsB;
+        std::vector<AABB> boundsA, boundsB;
         std::vector<ContactManifold> patches;   // the parts' contacts grouped by normal
         std::vector<Vector3> patchNormals;
         std::vector<int> patchSubs;

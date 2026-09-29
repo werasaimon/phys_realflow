@@ -115,6 +115,7 @@ add_library(rfsamples STATIC
   samples/LiquidScenes.cpp
   samples/SoftBodyScenes.cpp
   samples/RigidScenes.cpp
+  samples/NonConvexScenes.cpp
   samples/WindTunnelScenes.cpp
   samples/SmokeScenes.cpp
   samples/FireScene.cpp

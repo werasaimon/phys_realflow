@@ -2,6 +2,7 @@
 // polyhedra, the 100-cube tower, the five joint types, CCD bullets, 100 teapots, and a terrain of
 // 50 000 static triangles. Each is a Scene on the Simulation facade (see Scene.h).
 #include "samples/Samples.h"
+#include "samples/SamplesInternal.h"
 #include "samples/Models.h"
 
 #include <cmath>
@@ -285,22 +286,7 @@ public:
 // down the slopes and collect in the bowl. The measured ms/frame goes into the docs table.
 class TerrainScene : public Scene {
 public:
-    void configure(Simulation& sim) override {
-        // Hills of 0.3-0.8 m from a few waves, in a shallow bowl so that the bodies stay on the
-        // terrain instead of leaving over its edge.
-        TriMesh ground = primitives::heightfield(12.0f, 12.0f, 160, 160, [](float x, float z) {
-            return 0.4f * std::sin(0.8f * x) * std::cos(0.6f * z) + 0.2f * std::sin(1.5f * x + 0.4f * z) +
-                   0.1f * std::cos(2.1f * z - 0.9f * x) + 0.3f * (x * x + z * z) / 36.0f;
-        });
-        // Obstacle.cpp fits a custom mesh to `size` about the origin: the size is the mesh's own
-        // largest extent (scale 1), and the position lifts it so that its lowest point is at y = 0.
-        const AABB b = ground.bounds();
-        sim.obstacle.shape = ObstacleShape::Custom;
-        sim.obstacle.size = maxComp(b.extent());
-        sim.obstacle.position = {0.0f, 0.5f * b.extent().y, 0.0f};
-        sim.obstacle.customName = "рельеф";
-        sim.obstacle.customMesh = std::make_shared<TriMesh>(std::move(ground));
-    }
+    void configure(Simulation& sim) override { configureTerrain(sim); }
     void build(Simulation& sim) override {
         sim.useRigidArena(AABB({-6.0f, -1.0f, -6.0f}, {6.0f, 8.0f, 6.0f}));
         Random rnd;
@@ -322,6 +308,23 @@ public:
 };
 
 } // namespace
+
+// Hills of 0.3-0.8 m from a few waves, in a shallow bowl so that the bodies stay on the terrain
+// instead of leaving over its edge.
+void configureTerrain(Simulation& sim) {
+    TriMesh ground = primitives::heightfield(12.0f, 12.0f, 160, 160, [](float x, float z) {
+        return 0.4f * std::sin(0.8f * x) * std::cos(0.6f * z) + 0.2f * std::sin(1.5f * x + 0.4f * z) + 0.1f * std::cos(2.1f * z - 0.9f * x) +
+               0.3f * (x * x + z * z) / 36.0f;
+    });
+    // Obstacle.cpp fits a custom mesh to `size` about the origin: the size is the mesh's own
+    // largest extent (scale 1), and the position lifts it so that its lowest point is at y = 0.
+    const AABB b = ground.bounds();
+    sim.obstacle.shape = ObstacleShape::Custom;
+    sim.obstacle.size = maxComp(b.extent());
+    sim.obstacle.position = {0.0f, 0.5f * b.extent().y, 0.0f};
+    sim.obstacle.customName = "рельеф";
+    sim.obstacle.customMesh = std::make_shared<TriMesh>(std::move(ground));
+}
 
 void addRigidSamples(std::vector<SampleEntry>& out) {
     out.push_back({Preset::RigidFalling, "Твёрдые тела", "Твёрдые тела: падение на меш", [] { return std::unique_ptr<Scene>(new RigidFallingScene); }});

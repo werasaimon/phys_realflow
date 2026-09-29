@@ -136,7 +136,20 @@ void RigidWorld::computeLevels() {
     auto dynamicPair = [&](const Manifold& m) {
         return m.b >= 0 && bodies_[m.a].invMass > 0 && bodies_[m.b].invMass > 0;
     };
+    // Only a touch carries weight. A body resting on a speculative contact hovers at most
+    // slop * (1 - baumgarte) above its support (the gap the contact lets close in a step, section
+    // 2.7 of the docs); a contact farther apart than that is no support. Counted as one, the bottom
+    // cup of a nested stack, 5 mm from the third through the wall of the second, put the second and
+    // the third on one level, and with the seam contacts of the cups (collideCompoundPair) the stack
+    // took in energy until it rocked from side to side.
+    const float resting = params.slop * (1 - params.baumgarte);
+    auto touching = [&](const Manifold& m) {
+        for (const SolverPoint& p : m.points)
+            if (p.depth > -resting) return true;
+        return false;
+    };
     for (const Manifold& m : manifolds_) {
+        if (!touching(m)) continue;
         bool bStatic = m.b < 0 || bodies_[m.b].invMass == 0;
         bool aStatic = bodies_[m.a].invMass == 0;
         if (bStatic && !aStatic && levels_[m.a] != 0) { levels_[m.a] = 0; queue.push_back(m.a); }
@@ -147,7 +160,7 @@ void RigidWorld::computeLevels() {
     adj.resize(start[n]);
     fill.assign(start.begin(), start.end() - 1);
     for (const Manifold& m : manifolds_)
-        if (dynamicPair(m)) adj[fill[m.a]++] = m.b, adj[fill[m.b]++] = m.a;
+        if (dynamicPair(m) && touching(m)) adj[fill[m.a]++] = m.b, adj[fill[m.b]++] = m.a;
     for (size_t h = 0; h < queue.size(); ++h) {
         int u = queue[h];
         for (int e = start[u]; e < start[u + 1]; ++e) {

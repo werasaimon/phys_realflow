@@ -10,4 +10,8 @@ namespace rf {
 // velocity arrows drawn (smoke only, 3/4 view). Defined in SmokeScenes.cpp.
 void configureClosedSmokeBox(Simulation& sim, bool bodiesInside);
 
+// The terrain of the Terrain and TerrainModels scenes: a 12 x 12 m height field of 51 200
+// triangles as the static obstacle, its lowest point at y = 0. Defined in RigidScenes.cpp.
+void configureTerrain(Simulation& sim);
+
 } // namespace rf

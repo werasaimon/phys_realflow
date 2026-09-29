@@ -19,6 +19,7 @@ const std::vector<SampleEntry>& samples() {
         addFireSamples(v);
         addPlasmaSamples(v);
         addLessonSamples(v);
+        addNonConvexSamples(v);
         std::sort(v.begin(), v.end(), [](const SampleEntry& a, const SampleEntry& b) { return a.id < b.id; });
         for (size_t i = 0; i < v.size(); ++i)
             if (int(v[i].id) != int(i)) throw std::logic_error("samples(): a Preset without a scene, or registered twice");

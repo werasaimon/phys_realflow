@@ -62,7 +62,11 @@ int main() {
     run("non-convex: a chain of rings hangs interlocked", testChainOfRings);
     run("non-convex: a ring dropped over a peg slides down to the floor", testRingOverPeg);
     run("non-convex: a ball and boxes dropped into a cup land on its bottom", testDropIntoCup);
-    run("non-convex: a wheel of 48 flat segments rolls down a slope", testWheelRollsDownSlope);
+    run("non-convex: a ball, a cylinder and a wheel of boxes roll down a slope, each by its law", testRollingRace);
+    run("non-convex: 60 bodies poured into a bowl stay in it and sleep", testBowlHoldsPour);
+    run("non-convex: a stack of eight tables stands and sleeps", testStackOfTables);
+    run("non-convex: six cups nest as their parts allow and sleep", testNestedCups);
+    run("non-convex: teapots, bunnies and rings on the terrain mesh", testModelsOnTerrain);
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
