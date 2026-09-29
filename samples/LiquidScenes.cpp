@@ -96,7 +96,7 @@ public:
                               {0.95f, 0.95f, 0.92f});
         TriMesh foam = primitives::box(Vector3(0.06f));
         foam.translate({0.75f, 0.35f, -0.2f});
-        sim.particles.addSoftBody(foam, 300.0f, 0.4f, {0.4f, 0.85f, 0.4f});
+        sim.particles.addSoftBody(foam, SoftMaterial{300.0f, 6e4f, 0.3f}, {0.4f, 0.85f, 0.4f}); // foam, 60 kPa
         sim.particles.addBlock(AABB(d.lo, {d.hi.x, 0.2f, d.hi.z}));                      // the pool
         sim.particles.addBlock(AABB({d.lo.x, 0.2f, d.lo.z}, {d.lo.x + 0.45f, 0.75f, d.hi.z})); // the column
     }

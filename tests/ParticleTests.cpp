@@ -32,7 +32,7 @@ void testSoftBodyAndCloth() {
         s.reset(AABB({-1, 0, -1}, {1, 2, 1}));
         TriMesh cube = primitives::box(Vector3(0.12f));
         cube.translate({0, 0.8f, 0});
-        int sb = s.addSoftBody(cube, 400.0f, 0.1f, Vector3(1));
+        int sb = s.addSoftBody(cube, SoftMaterial{400.0f, 1.58e+04f}, Vector3(1));
         std::vector<Vector3> rest;
         for (int i : s.softBodies()[sb].particles) rest.push_back(s.positions()[i]);
         float peak = 0;
@@ -46,8 +46,8 @@ void testSoftBodyAndCloth() {
         s.params.gravity = Vector3(0.0f);
         for (int k = 0; k < 180; ++k) s.step(dt);
         const float unloaded = softShapeError(s, s.softBodies()[sb], rest);
-        std::printf("  soft cube (%zu particles, %zu clusters): deformation at impact %.1f%%, sag under its weight %.2f%%, unloaded %.2f%%\n",
-                    s.softBodies()[sb].particles.size(), s.softBodies()[sb].clusters.size(), 100 * peak, 100 * sag, 100 * unloaded);
+        std::printf("  soft cube (%zu particles, %zu tetrahedra): deformation at impact %.1f%%, sag under its weight %.2f%%, unloaded %.2f%%\n",
+                    s.softBodies()[sb].particles.size(), s.softBodies()[sb].tets.size(), 100 * peak, 100 * sag, 100 * unloaded);
         CHECK(peak > 0.03f, "a soft cube must squash on impact (%.1f%%)", 100 * peak);
         CHECK(sag < 0.15f, "a soft cube must carry its own weight (%.1f%% sag)", 100 * sag);
         CHECK(unloaded < 0.02f, "a soft cube must spring back once unloaded (%.1f%% left)", 100 * unloaded);
@@ -64,7 +64,7 @@ void testSoftBodyAndCloth() {
         s.addCloth({-0.4f, 0.8f, -0.4f}, {0.8f, 0, 0}, {0, 0, 0.8f}, canvas, 15, Vector3(1));
         TriMesh cube = primitives::box(Vector3(0.1f));
         cube.translate({0, 1.0f, 0});
-        int sb = s.addSoftBody(cube, 150.0f, 0.5f, Vector3(1));
+        int sb = s.addSoftBody(cube, SoftMaterial{150.0f, 1e+05f}, Vector3(1));
         for (int k = 0; k < 360; ++k) s.step(dt);
         float ylo = 1e9f, vmax = 0;
         for (int i : s.softBodies()[sb].particles) {
@@ -82,7 +82,7 @@ void testSoftBodyAndCloth() {
         s.addBlock(AABB({-0.4f, 0, -0.3f}, {0.4f, 0.3f, 0.3f}));
         TriMesh cube = primitives::box(Vector3(0.09f));
         cube.translate({0, 0.7f, 0});
-        int sb = s.addSoftBody(cube, 500.0f, 0.6f, Vector3(1));
+        int sb = s.addSoftBody(cube, SoftMaterial{500.0f, 1.58e+05f}, Vector3(1));
         for (int k = 0; k < 720; ++k) s.step(dt);
         Vector3 c(0.0f);
         for (int i : s.softBodies()[sb].particles) c += s.positions()[i];
@@ -174,7 +174,7 @@ void testSoftBodyAndCloth() {
         q.reset(AABB({-1, 0, -1}, {1, 2, 1}));
         TriMesh ball = primitives::sphere(0.08f, 16, 8);
         ball.translate({0, 0.1f, 0});
-        int b = q.addSoftBody(ball, 150.0f, 0.4f, Vector3(1));
+        int b = q.addSoftBody(ball, SoftMaterial{150.0f, 6.31e+04f}, Vector3(1));
         std::vector<Vector3> surf;
         q.softBodySurface(b, surf);
         float skinErr = 0;
@@ -202,8 +202,8 @@ void testSoftBodyAndCloth() {
         TriMesh a = primitives::box(Vector3(0.08f)), b = primitives::box(Vector3(0.06f));
         a.translate({-0.3f, 0, 0});
         b.translate({0.3f, 0, 0});
-        int ia = s.addSoftBody(a, 300.0f, 0.5f, Vector3(1), {2.0f, 0, 0});
-        int ib = s.addSoftBody(b, 600.0f, 0.5f, Vector3(1), {-1.0f, 0, 0});
+        int ia = s.addSoftBody(a, SoftMaterial{300.0f, 1e+05f}, Vector3(1), {2.0f, 0, 0});
+        int ib = s.addSoftBody(b, SoftMaterial{600.0f, 1e+05f}, Vector3(1), {-1.0f, 0, 0});
         auto momentum = [&]() {
             Vector3 P(0.0f);
             for (int k : {ia, ib})
@@ -625,7 +625,7 @@ void testRemoveParticleGroup() {
     const int liquid = s.addBlock(AABB({-0.5f, 0, -0.3f}, {0.5f, 0.15f, 0.3f}));
     TriMesh cube = primitives::box(Vector3(0.06f));
     cube.translate({-0.2f, 0.4f, 0});
-    const int soft = s.softBodyGroup(s.addSoftBody(cube, 400.0f, 0.3f, Vector3(1)));
+    const int soft = s.softBodyGroup(s.addSoftBody(cube, SoftMaterial{400.0f, 3.98e+04f}, Vector3(1)));
     const int cloth = s.clothGroup(s.addCloth({0.05f, 1.0f, -0.2f}, {0.4f, 0, 0}, {0, -0.4f, 0}, ClothMaterial(), 16, Vector3(1)));
     for (int k = 0; k < 90; ++k) s.step(dt);
     const size_t before = s.size(), softCount = s.groupSize(soft), liquidCount = s.groupSize(liquid);
@@ -651,7 +651,7 @@ void testRemoveParticleGroup() {
     CHECK(allFinite(s), "NaN after removing the liquid");
     TriMesh ball = primitives::sphere(0.05f, 12, 6);
     ball.translate({-0.2f, 0.3f, 0});
-    const int body = s.addSoftBody(ball, 400.0f, 0.3f, Vector3(1));
+    const int body = s.addSoftBody(ball, SoftMaterial{400.0f, 3.98e+04f}, Vector3(1));
     for (int k = 0; k < 180; ++k) s.step(dt);
     float lowest = 1e9f;
     for (int i : s.softBodies()[size_t(body)].particles) lowest = std::min(lowest, s.positions()[size_t(i)].y);
@@ -820,8 +820,8 @@ void testSoftPressedApartAndBox() {
         TriMesh a = primitives::box(Vector3(0.12f)), b = primitives::box(Vector3(0.12f));
         a.translate({-0.12f, 0, 0});
         b.translate({0.12f, 0, 0});
-        s.addSoftBody(a, 400.0f, 0.3f, Vector3(1), {1.0f, 0, 0});
-        s.addSoftBody(b, 400.0f, 0.3f, Vector3(1), {-1.0f, 0, 0});
+        s.addSoftBody(a, SoftMaterial{400.0f, 3.98e+04f}, Vector3(1), {1.0f, 0, 0});
+        s.addSoftBody(b, SoftMaterial{400.0f, 3.98e+04f}, Vector3(1), {-1.0f, 0, 0});
         float deepest = 0;
         for (int k = 0; k < 180; ++k) {
             s.step(dt);
@@ -840,20 +840,32 @@ void testSoftPressedApartAndBox() {
         CHECK(deepest < 0.1f && end.pairs == 0, "the cubes sank into each other (%.2f d0, %d pairs left)", deepest, end.pairs);
         CHECK(cb.x - ca.x > 0.12f && vb.x - va.x > 0.1f, "the cubes did not bounce apart (%.3f m apart, %.2f m/s)", cb.x - ca.x, vb.x - va.x);
     }
-    {
+    // A rigid box on a jelly cube: laid on it, and dropped on it from 0.5 m above. It must come to
+    // rest on the particles' surface, and the drop must not bounce back faster than it came.
+    // (Until the tetrahedra the box started 5.5 cm inside the jelly: shape matching yanked the
+    // particles pushed out through its top back under it. A tetrahedral body keeps them tied to
+    // their neighbours, and the box stays wrapped in the jelly - two solids cannot start one inside
+    // the other, so the scene starts them touching.)
+    for (const float drop : {0.0f, 0.5f}) {
         ParticleSystem s;
         RigidWorld w;
-        const AABB domain({-0.5f, 0, -0.5f}, {0.5f, 1, 0.5f});
+        const AABB domain({-0.5f, 0, -0.5f}, {0.5f, 1.5f, 0.5f});
         w.setDomain(domain);
         s.setRigidWorld(&w);
         s.reset(domain);
         TriMesh jelly = primitives::box(Vector3(0.16f));
         jelly.translate({0, 0.08f, 0});
-        s.addSoftBody(jelly, 400.0f, 0.3f, Vector3(1));
-        const int box = w.addBox({0, 0.22f, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
-        for (int k = 0; k < 360; ++k) {
+        const int sb = s.addSoftBody(jelly, SoftMaterial{400.0f, 3.98e+04f}, Vector3(1));
+        float surface = -kInf;
+        for (int i : s.softBodies()[size_t(sb)].particles) surface = std::max(surface, s.positions()[size_t(i)].y + s.params.particleRadius);
+        const int box = w.addBox({0, surface + 0.05f + drop, 0}, Vector3(0.05f), Quaternion(), 500.0f, Vector3(1));
+        float impact = 0, rebound = 0;
+        for (int k = 0; k < 540; ++k) {
+            const float before = w.bodies()[size_t(box)].vel.y;
             w.step(dt);
             s.step(dt);
+            impact = std::max(impact, -before);
+            if (impact > 0.5f && w.bodies()[size_t(box)].vel.y > 0) rebound = std::max(rebound, w.bodies()[size_t(box)].vel.y);
         }
         float top = -kInf; // the jelly's surface under the box
         for (int i : s.softBodies()[0].particles) {
@@ -863,9 +875,12 @@ void testSoftPressedApartAndBox() {
                 top = std::max(top, x.y);
         }
         const float gap = (w.bodies()[size_t(box)].pos.y - 0.05f) - (top + s.params.particleRadius);
-        std::printf("  rigid box on a soft cube after 2 s: box bottom %.1f mm above the jelly's surface, box at y %.3f m\n",
-                    1000 * gap, w.bodies()[size_t(box)].pos.y);
+        std::printf("  rigid box %s a soft cube: after 3 s its bottom is %.1f mm above the jelly's surface (box at y %.3f m)",
+                    drop > 0 ? "dropped from 0.5 m on" : "laid on", 1000 * gap, w.bodies()[size_t(box)].pos.y);
+        if (drop > 0) std::printf("; hit at %.2f m/s, rebounded at %.2f m/s (restitution %.2f)", impact, rebound, rebound / std::max(impact, 1e-6f));
+        std::printf("\n");
         // The box rests on the particles' surface (their centres + one radius) to within half a radius.
         CHECK(std::isfinite(gap) && gap > -0.5f * s.params.particleRadius && gap < 0.01f, "the box is not resting on the jelly (%.1f mm)", 1000 * gap);
+        if (drop > 0) CHECK(rebound < impact, "the box bounced off the jelly faster than it hit it (%.2f > %.2f m/s)", rebound, impact);
     }
 }

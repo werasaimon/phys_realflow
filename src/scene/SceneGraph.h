@@ -14,6 +14,7 @@
 // makes geometry only: without roles it is drawn but takes no part in the simulation.
 #include "core/Mesh.h"
 #include "math/Math.h"
+#include "particles/SoftBody.h"
 #include "scene/Scene.h"
 
 #include <cstdint>
@@ -70,8 +71,7 @@ struct RigidRole {
 };
 struct SoftRole {
     bool enabled = false;
-    float density = 150;
-    float stiffness = 0.3f;     // shape-matching stiffness per pass, 0..1
+    SoftMaterial material;      // density, Young's modulus, Poisson's ratio, damping (particles/SoftBody.h)
 };
 struct LiquidRole {
     bool enabled = false;       // the shape's box is filled with liquid particles

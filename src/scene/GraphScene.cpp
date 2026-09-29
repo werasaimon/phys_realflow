@@ -241,12 +241,12 @@ int GraphScene::addRigid(Simulation& sim, int index) {
     return id;
 }
 
-// Soft: the shape's surface mesh in the world, filled with particles held by shape matching.
-// Returns its particle group.
+// Soft: the shape's surface mesh in the world, filled with particles and the tetrahedra between
+// them, made of the entity's material. Returns its particle group (-1: too thin for a tetrahedron).
 int GraphScene::addSoft(Simulation& sim, int index) {
     const Entity& e = flat_[size_t(index)];
-    const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.density, e.soft.stiffness, e.color);
-    return sim.particles.softBodyGroup(body);
+    const int body = sim.particles.addSoftBody(entityMesh(e, graph_.baseDirectory), e.soft.material, e.color);
+    return body < 0 ? -1 : sim.particles.softBodyGroup(body);
 }
 
 // Liquid: the shape's box (turned and moved as the entity) filled with water particles. Returns

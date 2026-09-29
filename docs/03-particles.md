@@ -62,7 +62,7 @@ $m_i\ddot{\mathbf x}_i = -\nabla_i U + m_i\mathbf g$. Сила SPH симмет�
 
 ## 3.1 Шаг решателя
 
-`ParticleSystem::step` ([ParticleSystem.cpp:369](../src/particles/ParticleSystem.cpp#L369)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
+`ParticleSystem::step` ([ParticleSystem.cpp:397](../src/particles/ParticleSystem.cpp#L397)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
 
 ```mermaid
 flowchart TB
@@ -124,7 +124,7 @@ W_{poly6}(\mathbf r) = \frac{315}{64\pi h^9}\,(h^2 - |\mathbf r|^2)^3, \qquad
 \nabla W_{spiky}(\mathbf r) = -\frac{45}{\pi h^6}\,(h - |\mathbf r|)^2\,\frac{\mathbf r}{|\mathbf r|}, \qquad |\mathbf r| < h.
 $$
 
-[src/particles/ParticleSystem.h:218](../src/particles/ParticleSystem.h#L218)
+[src/particles/ParticleSystem.h:277](../src/particles/ParticleSystem.h#L277)
 ```cpp
 inline float W(float r2) const {
     if (r2 >= h2_) return 0.0f;
@@ -286,7 +286,7 @@ float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
 
 ## 3.4 Столкновения частиц
 
-`collide(i, p, start, record, dt)` ([ParticleContacts.cpp:442](../src/particles/ParticleContacts.cpp#L442); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
+`collide(i, p, start, record, dt)` ([ParticleContacts.cpp:462](../src/particles/ParticleContacts.cpp#L462); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
 
 1. **Стенки домена** — отсечение положения в бокс, уменьшенный на $r$.
 2. **Статический меш** — ближайшая точка через `MeshBVH` (гл. 1.7); если знаковое расстояние $< r$, частица выталкивается вдоль псевдонормали, касательное смещение гасится на долю `wallFriction`.
@@ -500,7 +500,7 @@ $$
 
 И главное — контакты одного тела решаются **по очереди** (Гаусс–Зейдель). Каждый следующий контакт видит тело, уже сдвинутое предыдущими: текущая глубина равна исходной минус то, насколько тело с тех пор ушло от частицы.
 
-[src/particles/ParticleContacts.cpp:369](../src/particles/ParticleContacts.cpp#L369)
+[src/particles/ParticleContacts.cpp:389](../src/particles/ParticleContacts.cpp#L389)
 ```cpp
 for (size_t b = 0; b < bodies.size(); ++b) {
     if (contacts[b].empty()) continue;
@@ -642,7 +642,7 @@ float ParticleSystem::stackLift(int i, int j) const {
 
 Основной решатель делит толчок по масштабированным обратным массам:
 
-[src/particles/ParticleContacts.cpp:347](../src/particles/ParticleContacts.cpp#L347)
+[src/particles/ParticleContacts.cpp:353](../src/particles/ParticleContacts.cpp#L353)
 ```cpp
 void ParticleSystem::solveParticleContacts() {
     for (const ParticleContact& c : contacts_) {
@@ -738,7 +738,7 @@ $$
 
 где $\sigma$ = `areaDensity` [кг/м²]. Через ту же $A_p$ = `Cloth::particleArea` считаются тепло и топливо при горении и сопротивление ткани в газе ([Cloth.cpp:262](../src/particles/Cloth.cpp#L262)). Масса, горение и сопротивление поэтому согласованы, а сумма масс частиц в точности равна массе листа. Раньше масса считалась по $A_p$, а тепло и топливо — по $s^2$ с шагом сетки $s = |\mathbf u|/(W-1)$. Для квадратного листа из 11×11 частиц это $1/100$ против $1/121$ площади листа, то есть расхождение 21 %.
 
-[src/particles/ParticleSystem.cpp:180](../src/particles/ParticleSystem.cpp#L180)
+[src/particles/ParticleSystem.cpp:208](../src/particles/ParticleSystem.cpp#L208)
 ```cpp
     c.particleArea = length(cross(u, v)) / float(c.width * c.height);
     const float invMass = 1.0f / (material.areaDensity * c.particleArea);
@@ -780,7 +780,7 @@ $$
 
 ### Малые шаги (Macklin et al. 2019)
 
-*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:296](../src/particles/ParticleSystem.cpp#L296)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
+*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:324](../src/particles/ParticleSystem.cpp#L324)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
 
 ### Нити — цепочки: точное решение прогонкой
 
@@ -854,7 +854,7 @@ $$
 
 Каждое `add*` создаёт **группу**: блок жидкости, мягкое тело, полотно ткани; всё, что выпускает сопло, — ещё одна группа. `removeGroup` убирает одну группу, не трогая остальные (мета-объекты редактора: объект был мягким телом, стал водой — заменяется только его группа, и из **источника** — геометрии объекта — строится новая). Частицы группы уходят, массивы смыкаются **с сохранением порядка**, поэтому оставшаяся система — та же самая, только без дыр: мягкие тела переписывают номера своих частиц и кластеров, полотно ткани (его частицы идут одним блоком) сдвигается целиком на число удалённых перед ним частиц — нити, тросы и индекс нитей следуют за ним.
 
-[src/particles/ParticleSystem.cpp:536](../src/particles/ParticleSystem.cpp#L536)
+[src/particles/ParticleSystem.cpp:662](../src/particles/ParticleSystem.cpp#L662)
 ```cpp
 void ParticleSystem::removeGroup(int group) {
     if (group < 0 || std::find(group_.begin(), group_.end(), group) == group_.end()) return;
@@ -874,7 +874,7 @@ void ParticleSystem::removeGroup(int group) {
 
 ## 3.8 Параметры
 
-### `ParticleParams` ([ParticleSystem.h:41](../src/particles/ParticleSystem.h#L41))
+### `ParticleParams` ([ParticleSystem.h:45](../src/particles/ParticleSystem.h#L45))
 
 | Параметр | Смысл | Ед. | По умолчанию |
 |---|---|---|---|

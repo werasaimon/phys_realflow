@@ -34,7 +34,7 @@ constexpr int kPreStabilizationPasses = 8;
 // solved for t: with a = r . n the part of r along n and s^2 = |r|^2 - a^2 the part across,
 // t = sqrt(target^2 - s^2) - a. Along the line of centres (n = r / |r|) it is the familiar
 // target - |r|; a pair side by side needs less, a pair that has swapped sides along n needs more.
-static float pushAlong(const Vector3& r, const Vector3& n, float target) {
+float pushAlong(const Vector3& r, const Vector3& n, float target) {
     const float r2 = length2(r);
     if (r2 >= target * target) return 0.0f;
     const float along = dot(r, n);
@@ -109,7 +109,7 @@ void ParticleSystem::preStabilizeContacts() {
     const int intersecting = findIntersections();
     Probe::set("particles/intersecting pairs", intersecting);
     if (intersecting == 0) return;
-    for (const SoftBody& body : softBodies_) turnSurfaceNormals(body, restSurfaceNormal_, surfaceNormal_);
+    for (const SoftBody& body : softBodies_) turnSurfaceNormals(body, x_, restSurfaceNormal_, surfaceNormal_);
     for (ParticleContact& c : contacts_)
         if (c.intersecting) c.normal = intersectionNormal(c.i, c.j);
     // Jacobi passes, each: the contacts push the movers apart, then every shifted mover is pushed
@@ -344,14 +344,34 @@ void ParticleSystem::setMainSolveTargets() {
 // touching particles (a heavy body on a very light cloth, beyond ~1:10) the light side takes
 // almost the whole correction and the support converges too slowly - use realistic materials
 // (canvas ~1-2 kg/m^2 under foam-like bodies) or more solid iterations.
+// Two solid particles (soft body, cloth) in contact also rub (Macklin et al. 2014, sec. 6.1, after
+// Coulomb): their relative slide along the contact over the step is taken back whole while it is
+// under mu times the push the contact just gave - they stick - and by mu times the push otherwise.
+// Without it the lattices of two bodies nest like eggs in a tray and slide off each other on the
+// slopes of the hollows: the top barrel of a stack of six rubber barrels (10 MPa) slid 0.3 m sideways
+// in a second and fell. Liquid particles do not rub (their viscosity is XSPH's).
 void ParticleSystem::solveParticleContacts() {
+    const float mu = params.solidFriction;
     for (const ParticleContact& c : contacts_) {
+        if (isSoft(c.i) && isSoft(c.j)) continue; // two soft bodies: their own step's (SoftBodySolver.cpp)
         const float depth = pushAlong(p_[c.i] - p_[c.j], c.normal, c.target);
         if (depth <= 0) continue;
         const float wi = invMass_[c.i] * c.lift, wj = invMass_[c.j] / c.lift;
         const Vector3 corr = c.normal * (depth / (wi + wj));
         p_[c.i] += corr * wi;
         p_[c.j] -= corr * wj;
+        if (mu <= 0 || isFluid(c.i) || isFluid(c.j)) continue;
+        const Vector3 slide = (p_[c.i] - x_[c.i]) - (p_[c.j] - x_[c.j]);
+        const Vector3 tangent = slide - c.normal * dot(slide, c.normal);
+        const float length = std::sqrt(length2(tangent)), limit = mu * depth;
+        if (length < 1e-12f) continue;
+        // By the true masses: the stack's mass scaling is for the support along the normal. Rubbing
+        // by the scaled ones moved the upper particle more than the lower one's share, sideways
+        // momentum out of nothing - the stack of barrels gained 23 J and threw the top one up 0.29 m.
+        const float ui = invMass_[c.i], uj = invMass_[c.j];
+        const Vector3 back = tangent * (length <= limit ? 1.0f : limit / length) * (1.0f / (ui + uj));
+        p_[c.i] -= back * ui;
+        p_[c.j] += back * uj;
     }
 }
 

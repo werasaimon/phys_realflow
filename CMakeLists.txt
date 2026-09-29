@@ -29,7 +29,7 @@ add_library(rfcore STATIC
   src/math/Tensor.h          src/math/Tensor.cpp
   src/core/Parallel.h        src/core/Parallel.cpp
   src/core/Mesh.h            src/core/Mesh.cpp
-  src/core/Format.h
+  src/core/Format.h          src/core/Format.cpp
   src/core/Probe.h           src/core/Probe.cpp
   src/spatial/BVH.h          src/spatial/BVH.cpp
   src/spatial/AABBTree.h     src/spatial/AABBTree.cpp
@@ -59,6 +59,7 @@ add_library(rfcore STATIC
   src/particles/DensitySolver.cpp
   src/particles/ParticleContacts.cpp
   src/particles/SoftBody.h        src/particles/SoftBody.cpp
+  src/particles/SoftBodySolver.cpp src/particles/SoftBodyStep.cpp
   src/particles/Cloth.h           src/particles/Cloth.cpp
   # gas on the MAC grid, fire
   src/gas/Field3.h                src/gas/Field3.cpp
@@ -224,6 +225,7 @@ if(RF_BUILD_TESTS)
     tests/RigidTests.cpp tests/HardContactTests.h
     tests/PileTests.cpp
     tests/ParticleTests.cpp
+    tests/SoftBodyTests.cpp
     tests/GasTests.cpp
     tests/PlasmaTests.cpp
     tests/SceneTests.cpp

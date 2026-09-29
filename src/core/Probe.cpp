@@ -69,7 +69,7 @@ const char* Probe::layerName(DrawLayer l) {
     static const char* names[] = {"Misc", "ContactPoints", "ContactNormals", "ContactImpulses", "PenetrationDepth",
                                   "BodyAabbs", "WorldTree", "MeshBvh", "CentreOfMass", "InertiaAxes", "Velocities",
                                   "Islands", "Sleeping", "JointFrames", "GjkSimplex", "EpaPolytope", "WitnessPoints",
-                                  "ParticleNeighbours", "DensityError", "SoftClusters", "ClothTension", "GasGrid",
+                                  "ParticleNeighbours", "DensityError", "SoftTetrahedra", "ClothTension", "GasGrid",
                                   "GasVelocity", "PressureGradient", "Divergence", "Vorticity", "FieldLinesB",
                                   "CurrentDensity"};
     static_assert(sizeof(names) / sizeof(names[0]) == size_t(DrawLayer::Count), "a name per layer");

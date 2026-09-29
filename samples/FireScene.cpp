@@ -57,7 +57,7 @@ public:
         rigid.bodies()[ball].vel = {-1.2f, 1.0f, 0.0f};
         TriMesh jelly = primitives::box(Vector3(0.06f));
         jelly.translate({-0.4f, 0.3f, 0.2f});
-        particles.addSoftBody(jelly, 150.0f, 0.3f, {0.55f, 0.9f, 0.35f});
+        particles.addSoftBody(jelly, SoftMaterial{150.0f, 4e4f, 0.45f}, {0.55f, 0.9f, 0.35f}); // jelly, 40 kPa
     }
 };
 

@@ -62,6 +62,14 @@ int main() {
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
     run("soft bodies: six barrels stacked do not sink into each other", testSoftStackNoOverlap);
     run("soft bodies: two thrown together bounce apart, a box rests on a jelly", testSoftPressedApartAndBox);
+    run("soft benchmark: cantilever under its own weight vs Timoshenko, three grids", testSoftCantilever);
+    run("soft benchmark: virtual work - the rest state balances the weight and is an energy minimum", testSoftVirtualWork);
+    run("soft benchmark: first bending frequency of the cantilever", testSoftBeamFrequency);
+    run("soft benchmark: hanging bar - extension, Poisson, no volume locking at nu 0.49", testSoftHangingBar);
+    run("soft benchmark: a spinning box keeps its momentum and angular momentum", testSoftSpinMomentum);
+    run("soft benchmark: a cube dragged inside out through its clamped half comes back to its shape", testSoftDragThrough);
+    run("soft benchmark: a jelly at rest on the floor neither jitters nor creeps", testSoftRest);
+    run("soft benchmark: the static answer does not depend on the step; energy never grows", testSoftTimeStepAndEnergy);
     run("cloth: a sheet swinging on its pinned edge loses no thread", testClothSwingNoFalseTears);
     run("cloth: threads carry the static load and tear at their strength", testClothTearsAtStrength);
     run("grid uniform flow", testGridUniform);
@@ -130,6 +138,7 @@ int main() {
     run("symplectic geodesics: order 2 (midpoint, Tao-2) and 4 (Tao-4, RK4)", testSymplecticOrder);
     run("symplectic geodesics: forward then back returns to the start", testSymplecticReversibility);
     run("scene graph: save -> load -> save gives the same text", testSceneGraphRoundTrip);
+    run("scene graph: the file does not depend on the locale (decimal comma)", testSceneGraphLocale);
     run("magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998)", testMagnetForce);
     run("magnets: two free magnets pull together, momentum conserved", testMagnetsAttract);
     run("scene graph: every role and shape builds and runs", testGraphSceneBuilds);

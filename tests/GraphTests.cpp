@@ -3,6 +3,8 @@
 // every kind of entity runs.
 #include "TestRunner.h"
 
+#include <clocale>
+
 #include "scene/Magnets.h"
 #include "scene/SceneGraph.h"
 #include "scene/Simulation.h"
@@ -93,6 +95,33 @@ SceneGraph everyRoleGraph() {
 }
 
 } // namespace
+
+// A program may switch the C library to its user's locale (Qt does on Linux): in Russian or German
+// the decimal point is a comma, and printf / strtof follow it. The scene file must not: the same
+// text is written, and a file written elsewhere still loads. Skipped where no such locale is installed.
+void testSceneGraphLocale() {
+    const std::string text = everyRoleGraph().save();
+    const char* chosen = nullptr;
+    for (const char* name : {"ru_RU.UTF-8", "ru_UA.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8", "Russian_Russia.1251", "German_Germany.1252", "de-DE"})
+        if (std::setlocale(LC_NUMERIC, name) && std::localeconv()->decimal_point[0] == ',') {
+            chosen = name;
+            break;
+        }
+    if (!chosen) {
+        std::setlocale(LC_NUMERIC, "C");
+        std::printf("  no locale with a decimal comma installed here: skipped\n");
+        return;
+    }
+    const std::string there = everyRoleGraph().save();
+    SceneGraph back;
+    std::string error;
+    const bool loaded = back.load(text, error);
+    std::setlocale(LC_NUMERIC, "C");
+    std::printf("  C library in %s: the file %s, it %s\n", chosen, there == text ? "is the same" : "CHANGED",
+                loaded ? "loads" : "does not load");
+    CHECK(there == text, "the scene file depends on the locale %s:\n%s", chosen, there.c_str());
+    CHECK(loaded && back.save() == text, "a file does not load in the locale %s: %s", chosen, error.c_str());
+}
 
 void testSceneGraphRoundTrip() {
     const std::string text = everyRoleGraph().save();

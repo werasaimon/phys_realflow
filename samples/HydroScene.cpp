@@ -45,7 +45,7 @@ public:
                           {0.8f, 0.55f, 0.85f});
         TriMesh foam = primitives::box(Vector3(0.06f));
         foam.translate({0.3f, 0.45f, 0.2f});
-        particles.addSoftBody(foam, 150.0f, 0.4f, {0.3f, 0.75f, 0.95f});
+        particles.addSoftBody(foam, SoftMaterial{150.0f, 6e4f, 0.3f}, {0.3f, 0.75f, 0.95f}); // foam, 60 kPa
         // A flag on a pole downwind: its left edge is fixed, the wind makes it flutter.
         ClothMaterial flag;
         flag.areaDensity = 0.15f;

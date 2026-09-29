@@ -3,7 +3,7 @@
 // Physics for Real-Time Applications"). All particles share one neighbour grid and one constraint
 // loop; each has a phase:
 //   fluid - incompressible liquid: Position Based Fluids (Macklin & Mueller 2013), an SPH method
-//   soft  - soft body: shape matching on overlapping clusters (SoftBody.h)
+//   soft  - soft body: tetrahedra between the particles, corotated elasticity, XPBD (SoftBody.h)
 //   cloth - cloth: XPBD stretch / shear / bending constraints (Cloth.h)
 // Particles of different phases (and distant particles of the same cloth) collide with each other.
 //  * poly6 density / spiky gradient kernels, uniform-grid neighbour search
@@ -24,6 +24,10 @@ namespace rf {
 
 enum class ParticlePhase : uint8_t { Fluid, Soft, Cloth };
 
+// How far two hard spheres whose centres are r apart must move apart along the unit direction n
+// until they are `target` apart; 0 if they already are (ParticleContacts.cpp).
+float pushAlong(const Vector3& r, const Vector3& n, float target);
+
 // The hot gas around a point as a burning cloth feels it: its temperature [K above ambient] and the
 // thermal radiation of the flame arriving there [W/m^2].
 struct GasHeat {
@@ -42,14 +46,22 @@ struct ParticleParams {
     float particleRadius = 0.015f;  // [m], spacing = 2r, kernel radius h = 4r   (*reset)
     float restDensity = 1000.0f;    // [kg/m^3]
     int solverIterations = 4;
-    int solidIterations = 2;        // passes of the soft / cloth / contact constraints per iteration
+    int solidIterations = 2;        // passes of the cloth and the contacts of the passes per iteration
     // Stiff stacks (Macklin et al. 2014, "Unified Particle Physics for Real-Time Applications",
-    // sec. 5.2, eq. 21): in the contacts between particles a particle counts as lighter the higher
-    // it sits, m* = m exp(-k h), with h its height along -gravity in particle spacings. A contact
-    // then lifts the upper particle and leaves the lower one where it is, so a pile of soft bodies
-    // is held up within a few passes instead of sinking into itself. 0 = off.
-    float stackMassScaling = 1.0f;
+    // sec. 5.2, eq. 21): in the contacts of the passes a particle counts as lighter the higher it
+    // sits, m* = m exp(-k h), with h its height along -gravity in particle spacings. A contact then
+    // lifts the upper particle and leaves the lower one where it is, so a pile of cloth-covered
+    // things is held up within a few passes. 0 = off. The scaling is not momentum-conserving along
+    // the normal (it props the upper particle up). Two soft bodies meet in their own small steps
+    // (SoftBodyStep.cpp), with true masses; this is for the rest.
+    float stackMassScaling = 0.5f;
     int clothSubsteps = 8;          // small steps of the cloth inside every substep (Macklin et al. 2019)
+    // The soft bodies take small steps of their own inside every substep, with their contacts
+    // (SoftBodyStep.cpp): enough that a shear wave of the body, c = sqrt(mu / rho), crosses at
+    // most softCourant lattice cells in one, at least softSubsteps, at most maxSoftSubsteps.
+    float softCourant = 1.0f;
+    int softSubsteps = 2;
+    int maxSoftSubsteps = 32;
     float clothSpacing = 1.0f;      // distance between cloth particles, in particle radii: 1 = a
                                     // particle of radius r cannot slip through the sheet (as in FleX)
     int substeps = 3;               // per frame
@@ -57,7 +69,10 @@ struct ParticleParams {
     float vorticity = 0.0f;         // confinement strength [m/s^2 scale]
     float relaxation = 0.1f;        // constraint-force-mixing term (scaled by 1/h^2)
     float tensileK = 0.03f;         // artificial pressure k (Macklin & Muller 2013: 0.1), dimensionless, x h^2 inside
-    float wallFriction = 0.1f;      // 0 = free slip, 1 = no slip on obstacles
+    float wallFriction = 0.1f;      // liquid and cloth on the walls, obstacles, bodies: 0 = free slip, 1 = no slip
+    // Coulomb's friction coefficient of the solid particles: soft bodies and cloth against each
+    // other (FleX, sec. 6.1), and a soft body against everything - walls, obstacle, rigid bodies.
+    float solidFriction = 0.5f;
     Vector3 gravity{0, -9.81f, 0};
     int maxParticles = 250000;
 };
@@ -79,9 +94,10 @@ public:
     void reset(const AABB& domain);
     // Liquid filling the box; returns its particle group.
     int addBlock(const AABB& box, const Vector3& velocity = Vector3(0.0f));
-    // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space);
-    // stiffness 0..1 (1 = rigid). Returns the soft body index, -1 if nothing fitted.
-    int addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color,
+    // Soft body: particles on a lattice (spacing 2r) filling the closed mesh (world space), the
+    // tetrahedra between them made of `material`. Returns the soft body index, -1 if nothing fitted
+    // (a body must be at least two particles across in every direction to have a tetrahedron).
+    int addSoftBody(const TriMesh& shape, const SoftMaterial& material, const Vector3& color,
                     const Vector3& velocity = Vector3(0.0f));
     // Cloth: particle grid from `origin` along the edges u (warp) and v (weft), spacing
     // params.clothSpacing * r. pinMask pins corners: 1 = origin, 2 = origin + u, 4 = origin + v,
@@ -107,6 +123,7 @@ public:
 
     // Advances one substep of length dt.
     void step(float dt);
+    int lastSoftSmallSteps() const { return lastSoftSmallSteps_; } // of the soft bodies in the last step
     // Fire (cloths whose material burns): heating by the gas and the flame's radiation (gas(x)),
     // ignition, burning, charring. The fabric loses mass as it burns. What the cloths give to the
     // gas is appended to `out` (only particles with something to give).
@@ -121,7 +138,7 @@ public:
     const std::vector<float>& invMasses() const { return invMass_; }
     const std::vector<SoftBody>& softBodies() const { return softBodies_; }
     const std::vector<Cloth>& cloths() const { return cloths_; }
-    // Surface of a soft body now (its mesh skinned to the clusters).
+    // Surface of a soft body now (its mesh riding in the tetrahedra).
     void softBodySurface(size_t body, std::vector<Vector3>& out) const { skinSurface(softBodies_[body], x_, out); }
 
     // Mouse grab: the particle nearest to `point` (within 3 spacings) and its neighbours of the same
@@ -134,8 +151,8 @@ public:
     Vector3 grabAnchor() const { return grabbing() ? x_[grab_.particles[0]] : Vector3(0.0f); }
     Vector3 grabTarget() const { return grab_.target; }
     // Pins every solid particle (soft body, cloth) inside `region` (world point -> true): its inverse
-    // mass becomes 0 and it stays put - a beam clamped in a wall, a sheet nailed to a board. Shape
-    // matching treats pinned particles as an outside support. Returns how many were pinned.
+    // mass becomes 0 and it stays put - a beam clamped in a wall, a sheet nailed to a board.
+    // Returns how many were pinned.
     int pinParticles(const std::function<bool(const Vector3&)>& region);
     size_t fluidCount() const { return fluidCount_; }
     bool hasSolids() const { return fluidCount_ < x_.size(); } // soft bodies or cloth
@@ -175,7 +192,8 @@ private:
     // Particles of different phases, of different soft bodies and non-adjacent particles of one
     // cloth keep d0 = 2r apart (ParticleContacts.cpp): the candidate pairs are collected once per
     // substep; pairs of bodies found inside each other are pulled apart first (pre-stabilization);
-    // then every pair is projected Gauss-Seidel style in the solid passes.
+    // then every pair is projected Gauss-Seidel style in the solid passes - except the pairs of two
+    // soft bodies, which their own small steps solve (SoftBodyStep.cpp).
     struct ParticleContact {
         int i, j;
         Vector3 normal;    // the way i is pushed (j the other way), fixed for the substep
@@ -206,6 +224,47 @@ private:
     // clothSmallSteps: clothSubsteps of them, more while the threads are pulled hard.
     void stepClothsInSmallSteps(float dt);
     int clothSmallSteps(const Cloth& c, float dt) const;
+    // The soft bodies' own step (SoftBodyStep.cpp): small steps, each the material and every
+    // contact that holds the body up - the walls, the obstacle, the rigid bodies (a plane per
+    // particle, found once per step), the other soft bodies (pairs, found once per step).
+    struct SoftBodyContact {
+        int particle, body;
+        Vector3 normal, point; // the plane of the body's surface nearest to the particle
+        bool touching = false; // in the current small step
+    };
+    struct SoftPair {
+        int i, j;
+        Vector3 normal; // the way i is pushed, the line of centres at the step's start
+        float target;   // how far apart: d0, or the start distance for bodies inside each other
+        bool touching = false;
+    };
+    int softSmallSteps(const SoftBody& b, float dt) const;
+    float softTravel(int i, float dt) const;
+    void findSoftContacts(float dt);
+    void findRigidPlanes(float dt);
+    void findSoftPairs(float dt);
+    void solveSoftContacts();
+    void stepSoftBodies(float dt);
+    std::vector<SoftBodyContact> softBodyContacts_;
+    std::vector<SoftPair> softPairs_;
+    std::vector<std::pair<long long, int>> softCells_;
+    // Per soft particle: how far the soft step has moved it (the soft step works on x_ + softMove_,
+    // SoftBodySolver.cpp: why; what the passes add afterwards is their push), and its flight in the
+    // current small step - a held one's: where it ends the step; in the passes, a material pass's moves.
+    std::vector<Vector3> softMove_, softFlight_;
+    // The rigid bodies' velocities while the soft step pushes them, and what it gave them.
+    std::vector<Vector3> bodyV_, bodyW_, bodyDv_, bodyDw_;
+    int lastSoftSmallSteps_ = 0;
+    bool isSoft(int i) const { return phase_[size_t(i)] == uint8_t(ParticlePhase::Soft); }
+    // The free soft bodies' momenta before the step, and their spin kept through it (ParticleSystem.cpp).
+    struct SoftMomenta {
+        Vector3 momentum{0.0f}, angular{0.0f};
+        float mass = 0;
+        bool free = false; // no particle held
+    };
+    void measureSoftMomenta();
+    void keepFreeSpin(float dt);
+    std::vector<SoftMomenta> softBefore_;
     std::vector<ParticleContact> contacts_;
     struct ParticleGrab {
         std::vector<int> particles;       // [0] = the picked one
@@ -244,7 +303,7 @@ private:
     std::vector<Vector3> rest_;
     // The signed distance field of a soft body, sampled at its particles (Macklin et al. 2014,
     // sec. 5.1): how deep under its body's surface a particle sits at rest (-1: liquid and cloth
-    // have no surface) and the outward normal there, at rest and turned with the clusters now.
+    // have no surface) and the outward normal there, at rest and carried by the tetrahedra now.
     std::vector<float> surfaceDepth_;
     std::vector<Vector3> restSurfaceNormal_, surfaceNormal_;
     bool hasSurface(int i) const { return surfaceDepth_[size_t(i)] >= 0; }
@@ -290,11 +349,11 @@ private:
     void solveIteration(bool solids, float dt);
     void finishStep(float dt);
     // The research layers of the particles (ParticleDebugDraw.cpp): neighbours of the particle at
-    // the probe point, density error, soft-body clusters, cloth tension. Only the layers that are on.
+    // the probe point, density error, soft-body tetrahedra, cloth tension. Only the layers that are on.
     void drawDebug(float dt) const;
     void drawNeighbours() const;
     void drawDensityError() const;
-    void drawSoftClusters() const;
+    void drawSoftTetrahedra() const;
     void drawClothTension(float dt) const;
 
     const MeshBVH* mesh_ = nullptr;

@@ -1,206 +1,233 @@
-// Soft bodies by shape matching (Müller et al. 2005) on overlapping clusters of particles: every
-// cluster pulls its particles towards its best-fit rigid pose; the skin is a mesh bound to the
-// clusters by smooth weights. The data layout is in SoftBody.h.
+// Soft bodies: the tetrahedra cut from the particle lattice, their colours, the skin riding in them
+// and the surface normals they carry. The material itself is solved in SoftBodySolver.cpp; the data
+// layout is in SoftBody.h.
 #include "particles/SoftBody.h"
+
+#include <algorithm>
 
 namespace rf {
 
-// A_qq^-1 = (sum q q^T)^-1 over a cluster's rest offsets q: the fixed half of its linear fit. A
-// flat cluster (all offsets in one plane) has no inverse; it gets the zero matrix, and its skin
-// then follows the rotation alone.
-static Matrix3x3 restSpreadInverse(const std::vector<Vector3>& offsets) {
-    Matrix3x3 spread = Matrix3x3::zero();
-    for (const Vector3& q : offsets) spread += Matrix3x3::outer(q, q);
-    const float scale = spread.m[0][0] + spread.m[1][1] + spread.m[2][2]; // for a size-free test
-    return spread.inverse(1e-6f * scale * scale * scale);
+std::vector<std::array<int, 4>> latticeTetrahedra(const std::vector<std::array<int, 3>>& cells) {
+    std::vector<std::array<int, 4>> tets;
+    if (cells.empty()) return tets;
+    std::array<int, 3> lo = cells[0], hi = cells[0];
+    for (const auto& c : cells)
+        for (int a = 0; a < 3; ++a) lo[a] = std::min(lo[a], c[a]), hi[a] = std::max(hi[a], c[a]);
+    const int nx = hi[0] - lo[0] + 1, ny = hi[1] - lo[1] + 1, nz = hi[2] - lo[2] + 1;
+    std::vector<int> at(size_t(nx) * size_t(ny) * size_t(nz), -1); // lattice point -> its index, -1: none
+    auto slot = [&](int i, int j, int k) -> int {
+        i -= lo[0], j -= lo[1], k -= lo[2];
+        if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) return -1;
+        return at[size_t(i) + size_t(nx) * (size_t(j) + size_t(ny) * size_t(k))];
+    };
+    for (size_t p = 0; p < cells.size(); ++p)
+        at[size_t(cells[p][0] - lo[0]) + size_t(nx) * (size_t(cells[p][1] - lo[1]) + size_t(ny) * size_t(cells[p][2] - lo[2]))] = int(p);
+    // Every cube with its lowest corner at a point: the six tetrahedra around one of its diagonals,
+    // one per order of the axes: the diagonal's start, then one step along an axis, then two, then
+    // its end. The diagonal alternates: a cube odd along an axis is mirrored along it. With the same
+    // diagonal everywhere (Kuhn's plain lattice) the material is anisotropic - squeezed along y it
+    // also shears along x = z - and a column of six soft barrels leaned over along that diagonal
+    // and fell within a quarter of a second. Mirrored, neighbouring cubes still cut their shared
+    // face along the same diagonal (both are mirrored alike along the face's two axes), and the
+    // shear of one cube is undone by its neighbour's.
+    static const int orders[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    for (const auto& c : cells) {
+        auto corner = [&](int dx, int dy, int dz) { // local corner (0/1 per axis) of the mirrored cube
+            const int d[3] = {dx, dy, dz};
+            int g[3];
+            for (int a = 0; a < 3; ++a) g[a] = c[a] + ((c[a] & 1) ? 1 - d[a] : d[a]);
+            return slot(g[0], g[1], g[2]);
+        };
+        const int start = corner(0, 0, 0), end = corner(1, 1, 1);
+        if (start < 0 || end < 0) continue;
+        for (const auto& o : orders) {
+            int one[3] = {0, 0, 0}, two[3] = {0, 0, 0};
+            one[o[0]] = two[o[0]] = two[o[1]] = 1;
+            const int second = corner(one[0], one[1], one[2]), third = corner(two[0], two[1], two[2]);
+            if (second >= 0 && third >= 0) tets.push_back({start, second, third, end});
+        }
+    }
+    return tets;
 }
 
-// The linear map a skin vertex follows for one cluster: the cluster's linear deformation F while
-// it is sound, else its rotation. "Sound": the volume ratio det F between 1/4 and 4 - a cluster
-// squashed flat, blown up or turned inside out gives the skin nonsense, and the rotation is the
-// honest fallback.
-static Matrix3x3 skinMap(const SoftCluster& cl) {
-    const float volumeRatio = cl.deformation.determinant();
-    if (volumeRatio > 0.25f && volumeRatio < 4.0f) return cl.deformation;
-    return cl.rotation.toMatrix3x3();
-}
-
-std::vector<SoftCluster> buildClusters(const std::vector<int>& ids, const std::vector<Vector3>& rest, float spacing,
-                                       float radius) {
-    AABB box;
-    for (const Vector3& r : rest) box.expand(r);
-    std::vector<SoftCluster> clusters;
-    const Vector3 e = box.extent();
-    const int nx = std::max(1, int(std::ceil(e.x / spacing))), ny = std::max(1, int(std::ceil(e.y / spacing))),
-              nz = std::max(1, int(std::ceil(e.z / spacing)));
-    for (int k = 0; k < nz; ++k)
-        for (int j = 0; j < ny; ++j)
-            for (int i = 0; i < nx; ++i) {
-                // Centre of this lattice cell of the body's bounding box.
-                Vector3 c = box.lo + Vector3((i + 0.5f) * e.x / nx, (j + 0.5f) * e.y / ny, (k + 0.5f) * e.z / nz);
-                std::vector<size_t> members; // local indices within the radius
-                for (size_t m = 0; m < ids.size(); ++m)
-                    if (length2(rest[m] - c) <= radius * radius) members.push_back(m);
-                if (members.size() < 4) continue; // too few particles to define a rotation
-                Vector3 com(0.0f);
-                for (size_t m : members) com += rest[m];
-                com /= float(members.size());
-                SoftCluster cl;
-                cl.restCentre = cl.centre = com;
-                for (size_t m : members) {
-                    cl.particles.push_back(ids[m]);
-                    cl.restOffsets.push_back(rest[m] - com);
-                }
-                cl.restInverseQQ = restSpreadInverse(cl.restOffsets);
-                clusters.push_back(std::move(cl));
+// Greedy colouring: every tetrahedron takes the lowest colour none of the tetrahedra sharing one of
+// its particles has. A lattice point belongs to at most 24 tetrahedra; the colours come out 30-40.
+static std::vector<int> colourTetrahedra(const std::vector<SoftTet>& tets, int firstParticle, size_t particleCount) {
+    std::vector<std::vector<int>> taken(particleCount); // colours already used at every particle
+    std::vector<int> colour(tets.size());
+    for (size_t t = 0; t < tets.size(); ++t) {
+        int c = 0;
+        for (;; ++c) {
+            bool used = false;
+            for (int v : tets[t].v) {
+                const auto& list = taken[size_t(v - firstParticle)];
+                used = used || std::find(list.begin(), list.end(), c) != list.end();
             }
-    if (clusters.empty()) { // small body: one cluster with everything
-        SoftCluster cl;
-        Vector3 com(0.0f);
-        for (const Vector3& r : rest) com += r;
-        com /= float(rest.size());
-        cl.restCentre = cl.centre = com;
-        cl.particles = ids;
-        for (const Vector3& r : rest) cl.restOffsets.push_back(r - com);
-        cl.restInverseQQ = restSpreadInverse(cl.restOffsets);
-        clusters.push_back(std::move(cl));
+            if (!used) break;
+        }
+        colour[t] = c;
+        for (int v : tets[t].v) taken[size_t(v - firstParticle)].push_back(c);
     }
-    return clusters;
+    return colour;
 }
 
-// The rest particle nearest to x (its slot in the body).
-static int nearestSlot(const std::vector<Vector3>& particleRest, const Vector3& x) {
-    int nearest = 0;
-    float best = kInf;
-    for (size_t m = 0; m < particleRest.size(); ++m) {
-        const float d = length2(particleRest[m] - x);
-        if (d < best) { best = d; nearest = int(m); }
+void buildTetrahedra(SoftBody& body, const std::vector<std::array<int, 4>>& quads, const std::vector<Vector3>& rest) {
+    std::vector<SoftTet> tets;
+    for (std::array<int, 4> q : quads) {
+        auto edges = [&] {
+            const Vector3& x0 = rest[size_t(q[0])];
+            return Matrix3x3::fromColumns(rest[size_t(q[1])] - x0, rest[size_t(q[2])] - x0, rest[size_t(q[3])] - x0);
+        };
+        Matrix3x3 D = edges();
+        if (D.determinant() < 0) {
+            std::swap(q[2], q[3]);
+            D = edges();
+        }
+        const float det = D.determinant();
+        if (det <= 0) continue; // degenerate
+        SoftTet t;
+        t.v = q;
+        t.restVolume = det / 6.0f;
+        t.restInverse = D.inverse();
+        tets.push_back(t);
     }
-    return nearest;
+    const int first = body.particles.empty() ? 0 : body.particles.front();
+    const std::vector<int> colour = colourTetrahedra(tets, first, body.particles.size());
+    const int colours = colour.empty() ? 0 : *std::max_element(colour.begin(), colour.end()) + 1;
+    body.colourStart.assign(size_t(colours) + 1, 0);
+    for (int c : colour) ++body.colourStart[size_t(c) + 1];
+    for (int c = 0; c < colours; ++c) body.colourStart[size_t(c) + 1] += body.colourStart[size_t(c)];
+    body.tets.assign(tets.size(), SoftTet());
+    std::vector<int> next(body.colourStart.begin(), body.colourStart.end() - 1);
+    for (size_t t = 0; t < tets.size(); ++t) body.tets[size_t(next[size_t(colour[t])]++)] = tets[t];
+    buildNodes(body);
 }
 
-void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& particleRest) {
-    // 1. Every vertex rides on its nearest particle (the anchor): drawn, it stays next to the
-    //    particles it covers however much they are squashed where the body presses on another.
-    // 2. Its offset from the anchor turns and stretches with the clusters around it - those whose
-    //    rest centre lies within 1.5 cluster radii, weighted (1 - d / R)^2, a smooth blend, so
-    //    neighbouring vertices do not tear apart where the clusters turn differently. A vertex with
-    //    no cluster in reach (a thin spike of the mesh) takes its anchor's clusters.
+// Every particle's star (the tetrahedra around it) and rest volume, and the nodes' colours: greedy,
+// the lowest colour no node whose star shares a particle with this one's has (27 on a lattice).
+void buildNodes(SoftBody& body) {
+    const size_t n = body.particles.size();
+    const int first = n ? body.particles.front() : 0;
+    body.nodes.assign(n, SoftNode());
+    std::vector<std::vector<int>> star(n);
+    for (int t = 0; t < int(body.tets.size()); ++t)
+        for (int v : body.tets[size_t(t)].v) {
+            star[size_t(v - first)].push_back(t);
+            body.nodes[size_t(v - first)].restVolume += 0.25f * body.tets[size_t(t)].restVolume;
+        }
+    body.nodeStar.clear();
+    for (size_t k = 0; k < n; ++k) {
+        body.nodes[k].starBegin = int(body.nodeStar.size());
+        body.nodeStar.insert(body.nodeStar.end(), star[k].begin(), star[k].end());
+        body.nodes[k].starEnd = int(body.nodeStar.size());
+    }
+    std::vector<std::vector<int>> taken(n); // colours of the nodes whose star holds the particle
+    std::vector<int> colour(n, 0);
+    int colours = 0;
+    for (size_t k = 0; k < n; ++k) {
+        if (star[k].empty()) continue;
+        std::vector<int> particles;
+        for (int t : star[k])
+            for (int v : body.tets[size_t(t)].v) particles.push_back(v - first);
+        int c = 0;
+        for (;; ++c) {
+            bool used = false;
+            for (int q : particles) used = used || std::find(taken[size_t(q)].begin(), taken[size_t(q)].end(), c) != taken[size_t(q)].end();
+            if (!used) break;
+        }
+        colour[k] = c;
+        colours = std::max(colours, c + 1);
+        for (int q : particles) taken[size_t(q)].push_back(c);
+    }
+    body.nodeColourStart.assign(size_t(colours) + 1, 0);
+    for (size_t k = 0; k < n; ++k)
+        if (!star[k].empty()) ++body.nodeColourStart[size_t(colour[k]) + 1];
+    for (int c = 0; c < colours; ++c) body.nodeColourStart[size_t(c) + 1] += body.nodeColourStart[size_t(c)];
+    body.nodeOrder.assign(size_t(body.nodeColourStart.back()), 0);
+    std::vector<int> slot(body.nodeColourStart.begin(), body.nodeColourStart.end() - 1);
+    for (size_t k = 0; k < n; ++k)
+        if (!star[k].empty()) body.nodeOrder[size_t(slot[size_t(colour[k])]++)] = int(k);
+}
+
+Matrix3x3 deformationGradient(const SoftTet& t, const std::vector<Vector3>& x) {
+    const Vector3& x0 = x[size_t(t.v[0])];
+    return Matrix3x3::fromColumns(x[size_t(t.v[1])] - x0, x[size_t(t.v[2])] - x0, x[size_t(t.v[3])] - x0) * t.restInverse;
+}
+
+Matrix3x3 deformationGradient(const SoftTet& t, const std::vector<Vector3>& base, const std::vector<Vector3>& u) {
+    auto edge = [&](int c) {
+        const size_t a = size_t(t.v[size_t(c)]), o = size_t(t.v[0]);
+        return (base[a] - base[o]) + (u[a] - u[o]);
+    };
+    return Matrix3x3::fromColumns(edge(1), edge(2), edge(3)) * t.restInverse;
+}
+
+// Barycentric weights of x in a tetrahedron at rest (of corners 1, 2, 3; corner 0 takes the rest)
+// and how far outside it lies: the most negative of the four weights, 0 inside.
+static Vector3 restWeights(const SoftTet& t, const std::vector<Vector3>& rest, const Vector3& x, float& outside) {
+    const Vector3 w = t.restInverse * (x - rest[size_t(t.v[0])]);
+    outside = std::max({0.0f, -w.x, -w.y, -w.z, w.x + w.y + w.z - 1.0f});
+    return w;
+}
+
+void bindSurface(SoftBody& body, const TriMesh& restSurface, const std::vector<Vector3>& rest) {
+    // A vertex rides in the tetrahedron around it. Outside the lattice (the particles sit half a
+    // spacing inside the mesh) it takes the tetrahedron it is least outside of among those at its
+    // nearest particle: the extrapolation then stays within a spacing.
     body.surface = restSurface;
     const size_t vertices = restSurface.positions.size();
-    body.vertexClusters.assign(vertices, {});
-    body.vertexWeights.assign(vertices, {});
-    body.vertexAnchor.assign(vertices, 0);
-    body.vertexAnchorOffset.assign(vertices, Vector3(0.0f));
+    body.vertexTet.assign(vertices, 0);
+    body.vertexWeights.assign(vertices, Vector3(0.0f));
+    if (body.tets.empty()) return;
     const int first = body.particles.front();
-    std::vector<std::vector<int>> clustersOf(body.particles.size());
-    for (int k = 0; k < int(body.clusters.size()); ++k)
-        for (int i : body.clusters[k].particles) clustersOf[size_t(i - first)].push_back(k);
-    const float R = 1.5f * std::max(body.clusterRadius, 1e-6f);
-    for (size_t v = 0; v < vertices; ++v) {
-        const Vector3& x = restSurface.positions[v];
-        const int anchor = nearestSlot(particleRest, x);
-        body.vertexAnchor[v] = anchor;
-        body.vertexAnchorOffset[v] = x - particleRest[size_t(anchor)];
-        for (int k = 0; k < int(body.clusters.size()); ++k) {
-            const float d = length(body.clusters[k].restCentre - x);
-            if (d >= R) continue;
-            body.vertexClusters[v].push_back(k);
-            body.vertexWeights[v].push_back(sqr(1.0f - d / R));
+    std::vector<std::vector<int>> tetsAt(body.particles.size());
+    for (int t = 0; t < int(body.tets.size()); ++t)
+        for (int v : body.tets[size_t(t)].v) tetsAt[size_t(v - first)].push_back(t);
+    for (size_t k = 0; k < vertices; ++k) {
+        const Vector3& x = restSurface.positions[k];
+        int nearest = first;
+        float best = kInf;
+        for (int i : body.particles)
+            if (!tetsAt[size_t(i - first)].empty() && length2(rest[size_t(i)] - x) < best) best = length2(rest[size_t(i)] - x), nearest = i;
+        float leastOutside = kInf;
+        for (int t : tetsAt[size_t(nearest - first)]) {
+            float outside = 0;
+            const Vector3 w = restWeights(body.tets[size_t(t)], rest, x, outside);
+            if (outside < leastOutside) leastOutside = outside, body.vertexTet[k] = t, body.vertexWeights[k] = w;
         }
-        if (body.vertexClusters[v].empty()) {
-            body.vertexClusters[v] = clustersOf[size_t(anchor)];
-            body.vertexWeights[v].assign(body.vertexClusters[v].size(), 1.0f);
-        }
-        float total = 0;
-        for (float w : body.vertexWeights[v]) total += w;
-        for (float& w : body.vertexWeights[v]) w /= std::max(total, 1e-12f);
     }
 }
 
-void skinSurface(const SoftBody& body, const std::vector<Vector3>& positions, std::vector<Vector3>& out) {
-    // vertex = its anchor particle now + the blend of its clusters' linear maps applied to the rest
-    // offset from that particle: x_v = x_a + sum_n w_n F_n (v_rest - a_rest). (The same blend of
-    // "centre + F (rest - rest centre)" evaluated at the vertex and at the anchor, subtracted - the
-    // cluster centres cancel.)
+void skinSurface(const SoftBody& body, const std::vector<Vector3>& x, std::vector<Vector3>& out) {
     out.resize(body.surface.positions.size());
-    for (size_t v = 0; v < out.size(); ++v) {
-        Matrix3x3 blend = Matrix3x3::zero();
-        for (size_t n = 0; n < body.vertexClusters[v].size(); ++n)
-            blend += skinMap(body.clusters[size_t(body.vertexClusters[v][n])]) * body.vertexWeights[v][n];
-        const Vector3& anchor = positions[size_t(body.particles[size_t(body.vertexAnchor[v])])];
-        out[v] = anchor + blend * body.vertexAnchorOffset[v];
+    if (body.tets.empty()) {
+        out = body.surface.positions;
+        return;
+    }
+    for (size_t k = 0; k < out.size(); ++k) {
+        const SoftTet& t = body.tets[size_t(body.vertexTet[k])];
+        const Vector3& w = body.vertexWeights[k];
+        const Vector3& x0 = x[size_t(t.v[0])];
+        out[k] = x0 + (x[size_t(t.v[1])] - x0) * w.x + (x[size_t(t.v[2])] - x0) * w.y + (x[size_t(t.v[3])] - x0) * w.z;
     }
 }
 
-void turnSurfaceNormals(const SoftBody& body, const std::vector<Vector3>& restNormal, std::vector<Vector3>& normal) {
-    // A particle's surface direction turns as the body around it turns: with the rotations the
-    // last shape matching found for its clusters (the same rotations its goals are made of).
+// cof(F) = det(F) F^-T, column by column: [f2 x f3, f3 x f1, f1 x f2]. It carries area normals.
+static Matrix3x3 cofactor(const Matrix3x3& F) {
+    const Vector3 f1 = F.col(0), f2 = F.col(1), f3 = F.col(2);
+    return Matrix3x3::fromColumns(cross(f2, f3), cross(f3, f1), cross(f1, f2));
+}
+
+void turnSurfaceNormals(const SoftBody& body, const std::vector<Vector3>& x, const std::vector<Vector3>& restNormal,
+                        std::vector<Vector3>& normal) {
     for (int i : body.particles) normal[size_t(i)] = Vector3(0.0f);
-    for (const SoftCluster& cl : body.clusters) {
-        const Matrix3x3 R = cl.rotation.toMatrix3x3();
-        for (int i : cl.particles) normal[size_t(i)] += R * restNormal[size_t(i)];
+    for (const SoftTet& t : body.tets) {
+        const Matrix3x3 C = cofactor(deformationGradient(t, x)) * t.restVolume;
+        for (int i : t.v) normal[size_t(i)] += C * restNormal[size_t(i)];
     }
-    // The average of unit vectors is shorter than one: back to unit length. A particle in no
-    // cluster keeps its rest normal.
     for (int i : body.particles) {
         Vector3& n = normal[size_t(i)];
-        n = length2(n) > 1e-12f ? normalize(n) : restNormal[size_t(i)];
-    }
-}
-
-void solveShapeMatching(std::vector<SoftBody>& bodies, std::vector<Vector3>& p, const std::vector<float>& invMass, int passesPerStep) {
-    std::vector<Vector3> goalSum;
-    std::vector<int> goalCount;
-    for (SoftBody& body : bodies) {
-        // The pass's share of the substep's stiffness: n passes of k' leave (1 - k') ^ n = 1 - k.
-        const float k = std::clamp(body.stiffness, 0.0f, 1.0f);
-        const float kPass = k >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - k, 1.0f / float(std::max(1, passesPerStep)));
-        // Goals of every particle, summed over the clusters it belongs to.
-        goalSum.assign(body.particles.size(), Vector3(0.0f));
-        goalCount.assign(body.particles.size(), 0);
-        // Map global particle index -> local slot (particles of a body are contiguous).
-        const int first = body.particles.front();
-        for (SoftCluster& cl : body.clusters) {
-            // Current centre of mass (all particles of a body have the same mass).
-            Vector3 c(0.0f);
-            for (int i : cl.particles) c += p[i];
-            c /= float(cl.particles.size());
-            // A = sum (p - c) q^T: the deformation of the cluster from rest.
-            Matrix3x3 A = Matrix3x3::zero();
-            for (size_t m = 0; m < cl.particles.size(); ++m) A += Matrix3x3::outer(p[cl.particles[m]] - c, cl.restOffsets[m]);
-            cl.rotation = extractRotation(A, cl.rotation, 10);
-            cl.deformation = A * cl.restInverseQQ; // the linear fit F (for the skin only)
-            cl.centre = c;
-            const Matrix3x3 R = cl.rotation.toMatrix3x3();
-            for (size_t m = 0; m < cl.particles.size(); ++m) {
-                int slot = cl.particles[m] - first;
-                goalSum[slot] += c + R * cl.restOffsets[m];
-                goalCount[slot] += 1;
-            }
-        }
-        // Corrections towards the averaged goals. Particles belong to different numbers of clusters,
-        // so these do not sum to zero on their own: remove their mean - an internal force must not
-        // move the body's centre of mass (momentum conservation). Unless part of the body is held
-        // (pinned / grabbed particles): that is an external support the body must follow.
-        std::vector<Vector3> delta(body.particles.size(), Vector3(0.0f));
-        Vector3 mean(0.0f);
-        int movable = 0;
-        for (size_t s = 0; s < body.particles.size(); ++s) {
-            int i = body.particles[s];
-            if (goalCount[s] == 0 || invMass[i] == 0) continue;
-            delta[s] = (goalSum[s] / float(goalCount[s]) - p[i]) * kPass;
-            mean += delta[s];
-            ++movable;
-        }
-        const bool held = movable < int(body.particles.size());
-        if (movable > 0 && !held) mean /= float(movable);
-        else mean = Vector3(0.0f);
-        for (size_t s = 0; s < body.particles.size(); ++s) {
-            int i = body.particles[s];
-            if (goalCount[s] == 0 || invMass[i] == 0) continue;
-            p[i] += delta[s] - mean;
-        }
+        n = length2(n) > 1e-30f ? normalize(n) : restNormal[size_t(i)];
     }
 }
 

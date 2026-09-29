@@ -49,7 +49,7 @@ enum class DrawLayer : uint32_t {
     WitnessPoints,      // the watched pair's witness points and separation / penetration vector
     ParticleNeighbours, // the particle nearest to probePoint() and lines to its neighbours
     DensityError,       // particles coloured by rho / rho0 - 1 (blue low, red high)
-    SoftClusters,       // soft-body cluster centres with lines to their particles
+    SoftTetrahedra,     // soft-body tetrahedra, edges coloured by the volume ratio det F
     ClothTension,       // cloth edges coloured by tension / strength (blue slack, red tearing)
     GasGrid,            // the grid cells of the slice plane
     GasVelocity,        // gas velocity arrows on the slice plane

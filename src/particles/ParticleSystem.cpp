@@ -1,7 +1,7 @@
 // ParticleSystem: the particles, what is made of them (blocks of liquid, soft bodies, cloth),
 // the emitter, the step, and taking one group out again. The liquid's density solver is in
 // DensitySolver.cpp, the contacts in
-// ParticleContacts.cpp, cloth and soft bodies in Cloth.cpp and SoftBody.cpp.
+// ParticleContacts.cpp, cloth in Cloth.cpp, soft bodies in SoftBody.cpp and SoftBodySolver.cpp.
 #include "particles/ParticleSystem.h"
 
 #include "core/Parallel.h"
@@ -121,28 +121,63 @@ void ParticleSystem::measureSurface(const MeshBVH& bvh, const Vector3& p, float&
     normal = length2(gradient) > 1e-6f * h * h ? normalize(gradient) : normalize(nearest.normal);
 }
 
-int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiffness, const Vector3& color, const Vector3& velocity) {
+// The lattice points of a soft body inside its mesh, and the tetrahedra between them. Only points
+// that are a corner of some tetrahedron become particles (addSoftBody): a lone point on a thin spike
+// would have nothing to hold it. The lattice is centred in the box - a body symmetric about a plane
+// gets a lattice symmetric about it (from the corner, the lattice of a 32 cm jelly ended 5 mm off,
+// and a box dropped flat on it was thrown sideways, spinning, by supports that were not where its
+// weight was) - unless the lattice from the corner, half a spacing in, holds more tetrahedra: a
+// ball two spacings across keeps only its middle cross when centred, and no tetrahedron at all.
+static std::vector<std::array<int, 4>> softLattice(const MeshBVH& bvh, const AABB& b, const AABB& domain, float s, std::vector<Vector3>& points) {
+    const Vector3 e = b.extent();
+    const int nx = int(std::ceil(e.x / s - 0.5f)), ny = int(std::ceil(e.y / s - 0.5f)), nz = int(std::ceil(e.z / s - 0.5f));
+    auto lattice = [&](const Vector3& first, std::vector<Vector3>& at) {
+        std::vector<std::array<int, 3>> cells;
+        for (int k = 0; k < nz; ++k)
+            for (int j = 0; j < ny; ++j)
+                for (int i = 0; i < nx; ++i) {
+                    const Vector3 p = first + Vector3(float(i), float(j), float(k)) * s;
+                    if (!domain.contains(p) || !bvh.isInside(p)) continue;
+                    at.push_back(p);
+                    cells.push_back({i, j, k});
+                }
+        return latticeTetrahedra(cells);
+    };
+    std::vector<Vector3> fromCornerPoints;
+    std::vector<std::array<int, 4>> quads = lattice(b.lo + (e - Vector3(float(nx - 1), float(ny - 1), float(nz - 1)) * s) * 0.5f, points);
+    std::vector<std::array<int, 4>> fromCorner = lattice(b.lo + Vector3(0.5f * s), fromCornerPoints);
+    if (fromCorner.size() > quads.size()) quads.swap(fromCorner), points.swap(fromCornerPoints);
+    return quads;
+}
+
+int ParticleSystem::addSoftBody(const TriMesh& shape, const SoftMaterial& material, const Vector3& color, const Vector3& velocity) {
     const float s = spacing();
     MeshBVH bvh;
     bvh.build(shape);
     const AABB b = shape.bounds();
+    std::vector<Vector3> points;
+    const std::vector<std::array<int, 4>> quads = softLattice(bvh, b, domain_, s, points);
+    std::vector<int> particleOf(points.size(), -1);
+    size_t used = 0;
+    for (const auto& q : quads)
+        for (int c : q) used += particleOf[size_t(c)] < 0 ? 1 : 0, particleOf[size_t(c)] = 0;
+    if (quads.empty() || x_.size() + used > size_t(params.maxParticles)) return -1;
     SoftBody body;
     body.object = nextObject_++;
     body.group = nextGroup_++;
-    body.stiffness = stiffness;
+    body.material = material;
     body.color = color;
-    const float invMass = 1.0f / (density * s * s * s);
-    std::vector<Vector3> rest;
-    for (float z = b.lo.z + 0.5f * s; z < b.hi.z; z += s)
-        for (float y = b.lo.y + 0.5f * s; y < b.hi.y; y += s)
-            for (float x = b.lo.x + 0.5f * s; x < b.hi.x; x += s) {
-                Vector3 p(x, y, z);
-                if (int(x_.size()) >= params.maxParticles || !domain_.contains(p) || !bvh.isInside(p)) continue;
-                body.particles.push_back(int(x_.size()));
-                rest.push_back(p);
-                addParticle(p, velocity, ParticlePhase::Soft, body.object, body.group, invMass);
-            }
-    if (body.particles.empty()) return -1;
+    const float invMass = 1.0f / (material.density * s * s * s); // every particle stands for a cube s^3
+    for (size_t k = 0; k < points.size(); ++k) {
+        if (particleOf[k] < 0) continue;
+        particleOf[k] = int(x_.size());
+        body.particles.push_back(particleOf[k]);
+        addParticle(points[k], velocity, ParticlePhase::Soft, body.object, body.group, invMass);
+    }
+    std::vector<std::array<int, 4>> tets = quads;
+    for (auto& q : tets)
+        for (int& c : q) c = particleOf[size_t(c)];
+    buildTetrahedra(body, tets, rest_);
     // The body's signed distance field, sampled at its particles (Macklin et al. 2014, sec. 5.1,
     // Fig. 7): how deep under the mesh's surface each one sits and which way is out. The contacts
     // with other bodies take their normal from it, so a deep overlap comes apart the way out of
@@ -150,14 +185,7 @@ int ParticleSystem::addSoftBody(const TriMesh& shape, float density, float stiff
     for (int i : body.particles)
         measureSurface(bvh, rest_[size_t(i)], surfaceDepth_[size_t(i)], restSurfaceNormal_[size_t(i)]);
     for (int i : body.particles) surfaceNormal_[size_t(i)] = restSurfaceNormal_[size_t(i)];
-    // Clusters every 1.5 particle spacings, each 2 spacings in radius (as FleX): a cluster spans
-    // ~4 particles, so a body a few particles thick bends and squashes between its clusters. Bigger
-    // clusters (3 / 4 spacings) covered a small body whole and made it rigid.
-    // A body must be at least 3 particles across: a cluster of a flat sheet of particles has no
-    // definite rotation, and its skin flies apart.
-    body.clusterRadius = 2.0f * s;
-    body.clusters = buildClusters(body.particles, rest, 1.5f * s, body.clusterRadius);
-    bindSurface(body, primitives::subdivided(shape, 1.5f * s), rest);
+    bindSurface(body, primitives::subdivided(shape, 1.5f * s), rest_);
     softBodies_.push_back(std::move(body));
     return int(softBodies_.size()) - 1;
 }
@@ -363,9 +391,9 @@ void ParticleSystem::emitParticles(float dt) {
 }
 
 // One step of position based fluids (Macklin & Müller 2013) with the soft bodies and cloth in the
-// same loop: predict where every particle goes, then a few iterations that push the particles
-// apart until the density is right and the solids keep their shape, then the velocities are
-// read off the corrected positions.
+// same loop: predict where every particle goes, the cloth and the soft bodies take their own small
+// steps, then a few iterations push the particles apart until the density is right and the solids
+// keep their shape, and the velocities are read off the corrected positions.
 void ParticleSystem::step(float dt) {
     emitParticles(dt);
     const int n = int(x_.size());
@@ -375,6 +403,10 @@ void ParticleSystem::step(float dt) {
     {
         Probe::Timer timer("particles/cloth ms");
         stepClothsInSmallSteps(dt);
+    }
+    {
+        Probe::Timer timer("particles/soft ms");
+        stepSoftBodies(dt);
     }
     const bool solids = fluidCount_ < size_t(n);
     // The contact passes below solve the cloth again over the whole step dt. They start from the
@@ -398,7 +430,21 @@ void ParticleSystem::step(float dt) {
         preStabilizeContacts();
         setMainSolveTargets();
     }
+    // A soft body next to liquid or cloth is pushed by them in the passes below: its material is
+    // solved there too, so a push on its bottom layer reaches the whole body before it becomes
+    // velocity (a foam cube on a trampoline shook at 0.28 m/s while only that layer moved). The
+    // passes go on from the force the body carries - lambda_h of the small steps is lambda_h m^2
+    // over dt, as for the cloth - so a body already in balance is not moved at all.
+    const float m2 = sqr(float(std::max(1, lastSoftSmallSteps_)));
+    for (SoftBody& b : softBodies_) {
+        b.touchesOthers = false;
+        for (int i : b.particles)
+            for (int k = 0; k < nbrCount_[size_t(i)] && !b.touchesOthers; ++k) b.touchesOthers = !isSoft(nbr_[size_t(i) * kMaxNeighbors + size_t(k)]);
+        if (b.touchesOthers) scaleSoftMultipliers(b, m2);
+    }
     for (int it = 0; it < params.solverIterations; ++it) solveIteration(solids, dt);
+    for (SoftBody& b : softBodies_)
+        if (b.touchesOthers) scaleSoftMultipliers(b, 1.0f / m2);
     finishStep(dt);
 }
 
@@ -409,22 +455,32 @@ void ParticleSystem::beginStep(int n) {
     contactNormal_.resize(n);
     contactPoint_.resize(n);
     contactDepth_.resize(n);
+    softFlight_.resize(n);
+    softMove_.resize(n);
     const size_t nb = rigid_ ? rigid_->bodies().size() : 0;
     bodyShift_.assign(nb, Vector3(0.0f));
     bodyTurn_.assign(nb, Vector3(0.0f));
+    bodyDv_.assign(nb, Vector3(0.0f));
+    bodyDw_.assign(nb, Vector3(0.0f));
 }
 
 // Explicit prediction: gravity into the velocity, the position one step ahead, pushed out of the
 // walls and bodies it would enter (a pinned particle stays). The bodies met on the way get their
-// contacts solved, and the grabbed particles follow the mouse.
+// contacts solved, and the grabbed particles follow the mouse. A free soft particle waits where it
+// is: its step is its own (stepSoftBodies).
 void ParticleSystem::predictPositions(float dt) {
     Probe::Timer timer("particles/predict ms");
     const int n = int(x_.size());
     const Vector3 g = params.gravity;
     prepareBodyQuery(true);
+    measureSoftMomenta(); // the free soft bodies' momenta before the step (keepFreeSpin)
     parallelFor(n, [&](int i) {
         if (invMass_[i] == 0) { // pinned
             v_[i] = Vector3(0.0f);
+            p_[i] = x_[i];
+            return;
+        }
+        if (isSoft(i)) {
             p_[i] = x_[i];
             return;
         }
@@ -443,6 +499,64 @@ void ParticleSystem::predictPositions(float dt) {
     for (size_t k = 0; k < grab_.particles.size(); ++k) p_[grab_.particles[k]] = grab_.target + grab_.offsets[k];
 }
 
+// A soft body's momentum and angular momentum (about its centre of mass) from the particles'
+// positions and velocities; false if a particle is held (a pin or the mouse: an outside support).
+static bool softMomenta(const SoftBody& b, const std::vector<Vector3>& x, const std::vector<Vector3>& v, const std::vector<float>& invMass,
+                        Vector3& P, Vector3& L, Vector3& centre, Matrix3x3& inertia, float& mass) {
+    P = L = centre = Vector3(0.0f);
+    mass = 0;
+    for (int i : b.particles) {
+        const float w = invMass[size_t(i)];
+        if (w == 0) return false;
+        centre += x[size_t(i)] / w;
+        P += v[size_t(i)] / w;
+        mass += 1.0f / w;
+    }
+    centre /= mass;
+    inertia = Matrix3x3::zero();
+    for (int i : b.particles) {
+        const float m = 1.0f / invMass[size_t(i)];
+        const Vector3 r = x[size_t(i)] - centre;
+        inertia += (Matrix3x3::identity() * length2(r) - Matrix3x3::outer(r, r)) * m;
+        L += cross(r, v[size_t(i)]) * m;
+    }
+    return true;
+}
+
+void ParticleSystem::measureSoftMomenta() {
+    softBefore_.assign(softBodies_.size(), SoftMomenta());
+    for (size_t b = 0; b < softBodies_.size(); ++b) {
+        SoftMomenta& m = softBefore_[b];
+        Vector3 centre;
+        Matrix3x3 inertia;
+        m.free = softMomenta(softBodies_[b], x_, v_, invMass_, m.momentum, m.angular, centre, inertia, m.mass);
+    }
+}
+
+// A soft body nothing outside touched in the step - no wall, contact, rigid body, liquid or pin:
+// its momentum changed by exactly its weight times dt - ends the step with the angular momentum it
+// began with, returned as a turn of its velocities as a whole (w x r, w = I^-1 dL). The velocity
+// read off the positions, (x_end - x) / dt, runs along the chord of every particle's arc while the
+// material pulls it in to the circle, and a free spinning body lost (w dt)^2 / 2 of its spin every
+// step: a box turning at 6 rad/s, 19 % in 2 s at 180 steps a second. (Predicted along the arc of
+// its turn instead, it kept the spin but lost the centrifugal stretch that turn needs.)
+void ParticleSystem::keepFreeSpin(float dt) {
+    for (size_t b = 0; b < softBodies_.size() && b < softBefore_.size(); ++b) {
+        const SoftMomenta& before = softBefore_[b];
+        if (!before.free) continue;
+        Vector3 P, L, centre;
+        Matrix3x3 inertia;
+        float mass;
+        if (!softMomenta(softBodies_[b], p_, v_, invMass_, P, L, centre, inertia, mass)) continue;
+        const Vector3 expected = before.momentum + params.gravity * (before.mass * dt);
+        float scale = before.mass * length(params.gravity) * dt; // of the particles' momenta, for the test's tolerance
+        for (int i : softBodies_[b].particles) scale += length(v_[size_t(i)]) / invMass_[size_t(i)];
+        if (length(P - expected) > 1e-4f * scale) continue; // something outside pushed it
+        const Vector3 w = inertia.inverse(1e-30f) * (before.angular - L);
+        for (int i : softBodies_[b].particles) v_[size_t(i)] += cross(w, p_[size_t(i)] - centre);
+    }
+}
+
 // One solver iteration: the density constraint of every fluid particle (lambda, then the
 // position correction), the walls and bodies again, and - with solids present - the particle
 // contacts, the cloth constraints and the shape matching, each followed by the bodies.
@@ -459,7 +573,8 @@ void ParticleSystem::solveIteration(bool solids, float dt) {
         parallelFor(n, [&](int i) {
             if (invMass_[i] == 0) return;
             Vector3 p = p_[i] + dp_[i];
-            collide(i, p, x_[i], true, dt);
+            if (isSoft(i)) collideWallsAndMesh(p, p_[i]); // the bodies are its own step's
+            else collide(i, p, x_[i], true, dt);
             p_[i] = p;
         });
         Probe::add("rigid/tree queries", n);
@@ -472,11 +587,17 @@ void ParticleSystem::solveIteration(bool solids, float dt) {
         // Contacts push cloth particles around (a body resting on a sheet): the cloth is
         // re-satisfied after every contact pass so the two converge together.
         for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt, ThreadSolve::Projection);
-        solveShapeMatching(softBodies_, p_, invMass_, params.solverIterations * std::max(1, params.solidIterations));
+        for (SoftBody& b : softBodies_) {
+            if (!b.touchesOthers) continue;
+            for (int i : b.particles) softFlight_[size_t(i)] = Vector3(0.0f); // the pass's moves, from p_
+            solveSoftBody(b, p_, softFlight_, invMass_, dt, false);
+            for (int i : b.particles) p_[size_t(i)] += softFlight_[size_t(i)];
+        }
         prepareBodyQuery(true);
         parallelFor(n, [&](int i) {
             if (invMass_[i] == 0 || isFluid(i)) return;
-            collide(i, p_[i], x_[i], true, dt);
+            if (isSoft(i)) collideWallsAndMesh(p_[i], p_[i]);
+            else collide(i, p_[i], x_[i], true, dt);
         });
         Probe::add("rigid/tree queries", n - int(fluidCount_));
         solveBodyContacts(dt);
@@ -503,6 +624,8 @@ void ParticleSystem::finishStep(float dt) {
             float m = 0;
             for (int i = b; i < e; ++i) {
                 Vector3 v = (p_[i] - x_[i]) / dt;
+                // A free soft particle: its own step's velocity, and what the passes pushed it by.
+                if (isSoft(i) && invMass_[i] > 0) v = v_[i] + (p_[i] - x_[i] - softMove_[i]) / dt;
                 float l = length(v);
                 if (l > vmaxAllowed) v *= vmaxAllowed / l;
                 v_[i] = v;
@@ -511,14 +634,17 @@ void ParticleSystem::finishStep(float dt) {
             return m;
         });
         maxSpeed_ = vmaxSeen;
+        keepFreeSpin(dt);
+        for (const SoftBody& b : softBodies_) dampSoftBody(b, v_, p_, invMass_, dt);
         Probe::set("particles/count", n);
         Probe::set("particles/fluid", double(fluidCount_));
         Probe::set("particles/max speed", maxSpeed_);
         applyViscosityAndVorticity(dt);
         x_.swap(p_);
-        for (size_t b = 0; b < bodyShift_.size(); ++b)
-            if (length2(bodyShift_[b]) + length2(bodyTurn_[b]) > 0)
-                rigid_->applyVelocityChange(int(b), bodyShift_[b] / dt, bodyTurn_[b] / dt);
+        for (size_t b = 0; b < bodyShift_.size(); ++b) {
+            const Vector3 dv = bodyShift_[b] / dt + bodyDv_[b], dw = bodyTurn_[b] / dt + bodyDw_[b];
+            if (length2(dv) + length2(dw) > 0) rigid_->applyVelocityChange(int(b), dv, dw);
+        }
     }
     if (Probe::drawEnabled()) {
         Probe::Timer timer("particles/debug draw ms");
@@ -581,8 +707,8 @@ void ParticleSystem::renumberSolids(int group, const std::vector<int>& newIndex)
     softBodies_.erase(std::remove_if(softBodies_.begin(), softBodies_.end(), ofGroup), softBodies_.end());
     for (SoftBody& b : softBodies_) {
         for (int& i : b.particles) i = newIndex[size_t(i)];
-        for (SoftCluster& c : b.clusters)
-            for (int& i : c.particles) i = newIndex[size_t(i)];
+        for (SoftTet& t : b.tets)
+            for (int& i : t.v) i = newIndex[size_t(i)];
     }
     cloths_.erase(std::remove_if(cloths_.begin(), cloths_.end(), ofGroup), cloths_.end());
     for (Cloth& c : cloths_) shiftCloth(c, c.firstParticle - newIndex[size_t(c.firstParticle)]);

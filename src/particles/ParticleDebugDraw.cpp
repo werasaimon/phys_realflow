@@ -1,8 +1,9 @@
 // The research view of the particle solver, drawn by layer into the Probe after the step (see
 // core/Probe.h): the neighbour list of the particle nearest to the probe point (what the density
 // constraint of Macklin & Müller 2013 sums over), the density error of the liquid (rho / rho0 - 1:
-// what PBF drives to zero), the clusters of the soft bodies (the shape-matching groups of Müller
-// et al. 2005) and the tension of every cloth thread against its strength (what tears it).
+// what PBF drives to zero), the tetrahedra of the soft bodies coloured by their volume change (what
+// the hydrostatic constraint holds) and the tension of every cloth thread against its strength
+// (what tears it).
 #include "particles/ParticleSystem.h"
 
 #include "core/Format.h"
@@ -18,7 +19,7 @@ void ParticleSystem::drawDebug(float dt) const {
     Probe::clearLayers(Probe::bits(DrawLayer::ParticleNeighbours, DrawLayer::ClothTension));
     drawNeighbours();
     drawDensityError();
-    drawSoftClusters();
+    drawSoftTetrahedra();
     drawClothTension(dt);
 }
 
@@ -50,15 +51,16 @@ void ParticleSystem::drawDensityError() const {
     }
 }
 
-// Every soft body's clusters: the centre (as matched in the last step) and a line to each member.
-void ParticleSystem::drawSoftClusters() const {
-    if (!Probe::layerOn(DrawLayer::SoftClusters)) return;
-    int index = 0;
+// Every soft body's tetrahedra: their edges coloured by the volume ratio det F - blue squeezed to
+// half, green at rest, red blown up to one and a half; a tetrahedron turned inside out is drawn white.
+void ParticleSystem::drawSoftTetrahedra() const {
+    if (!Probe::layerOn(DrawLayer::SoftTetrahedra)) return;
+    static const int edges[6][2] = {{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
     for (const SoftBody& b : softBodies_)
-        for (const SoftCluster& c : b.clusters) {
-            const Vector3 col = heatColor(std::fmod(0.37f * float(index++), 1.0f));
-            Probe::point(DrawLayer::SoftClusters, c.centre, col, 1.5f * params.particleRadius);
-            for (int p : c.particles) Probe::line(DrawLayer::SoftClusters, c.centre, x_[size_t(p)], col);
+        for (const SoftTet& t : b.tets) {
+            const float J = deformationGradient(t, x_).determinant();
+            const Vector3 col = J <= 0 ? Vector3(1.0f) : heatColor(std::clamp(J - 0.5f, 0.0f, 1.0f));
+            for (const auto& e : edges) Probe::line(DrawLayer::SoftTetrahedra, x_[size_t(t.v[e[0]])], x_[size_t(t.v[e[1]])], col);
         }
 }
 

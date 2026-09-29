@@ -96,36 +96,29 @@ std::vector<Outcome> runCases(const std::vector<const Case*>& cases, const RunOp
 
 std::string utcNow(bool forFileName) {
     const std::time_t t = std::time(nullptr);
-    std::tm utc{};
-#ifdef _WIN32
-    gmtime_s(&utc, &t);
-#else
-    gmtime_r(&t, &utc);
-#endif
+    const std::tm utc = *std::gmtime(&t); // its buffer is shared, but only rf_verify's main thread asks
     char buf[32];
     std::strftime(buf, sizeof(buf), forFileName ? "%Y-%m-%dT%H-%M-%SZ" : "%Y-%m-%dT%H:%M:%SZ", &utc);
     return buf;
 }
 
 // Runs a shell command and gives its standard output; false if it failed. Plain std: std::system
-// with the output sent to a temporary file (standard C++ has no pipes to a child process).
+// with the output and the errors sent to temporary files (standard C++ has no pipes to a child
+// process; "> file 2> file" reads the same in every shell, a null device does not).
 static bool commandOutput(const std::string& command, std::string& out) {
     namespace fs = std::filesystem;
     std::random_device device;
     std::error_code ec;
     const fs::path file = fs::temp_directory_path(ec) / ("rf_verify_" + std::to_string(device()) + ".txt");
-#ifdef _WIN32
-    const char* nowhere = "NUL";
-#else
-    const char* nowhere = "/dev/null";
-#endif
-    const int status = std::system((command + " > \"" + file.string() + "\" 2> " + nowhere).c_str());
+    const fs::path errors = fs::path(file).replace_extension(".err");
+    const int status = std::system((command + " > \"" + file.string() + "\" 2> \"" + errors.string() + "\"").c_str());
     std::stringstream text;
     {
         std::ifstream f(file, std::ios::binary);
         text << f.rdbuf();
     }
     fs::remove(file, ec);
+    fs::remove(errors, ec);
     out = text.str();
     return status == 0;
 }

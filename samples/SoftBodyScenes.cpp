@@ -30,13 +30,13 @@ public:
         // floats, and a jelly beam laid across two static blocks - it sags between them.
         TriMesh cube = primitives::box(Vector3(0.09f));
         cube.translate({-0.65f, 0.95f, 0.0f});
-        sim.particles.addSoftBody(cube, 150.0f, 0.2f, {0.3f, 0.75f, 0.95f});
+        sim.particles.addSoftBody(cube, SoftMaterial{150.0f, 3e4f, 0.3f}, {0.3f, 0.75f, 0.95f}); // foam
         TriMesh ball = primitives::sphere(0.08f, 16, 8);
         ball.translate({-0.45f, 1.1f, 0.1f});
-        sim.particles.addSoftBody(ball, 150.0f, 0.08f, {0.55f, 0.9f, 0.35f});
+        sim.particles.addSoftBody(ball, SoftMaterial{150.0f, 1.5e4f, 0.45f}, {0.55f, 0.9f, 0.35f}); // jelly
         TriMesh floater = primitives::box(Vector3(0.07f));
         floater.translate({0.75f, 0.6f, 0.0f});
-        sim.particles.addSoftBody(floater, 500.0f, 0.4f, {0.95f, 0.6f, 0.2f});
+        sim.particles.addSoftBody(floater, SoftMaterial{500.0f, 6e4f, 0.3f}, {0.95f, 0.6f, 0.2f});
         // No slender beams here: shape matching on clusters has no bending stiffness across the
         // clusters, so a long thin jelly bar droops like a rope whatever its stiffness (the FEM
         // soft body with a Young's modulus is the next step; a clamped beam is its test).
@@ -64,10 +64,10 @@ public:
         // Soft: a foam cube and a jelly ball dropped from above.
         TriMesh cube = primitives::box(Vector3(0.08f));
         cube.translate({-0.2f, 0.7f, 0.35f});
-        sim.particles.addSoftBody(cube, 150.0f, 0.4f, {0.3f, 0.75f, 0.95f});
+        sim.particles.addSoftBody(cube, SoftMaterial{150.0f, 6e4f, 0.3f}, {0.3f, 0.75f, 0.95f});
         TriMesh ball = primitives::sphere(0.08f, 16, 8);
         ball.translate({0.35f, 0.9f, -0.25f});
-        sim.particles.addSoftBody(ball, 150.0f, 0.15f, {0.55f, 0.9f, 0.35f});
+        sim.particles.addSoftBody(ball, SoftMaterial{150.0f, 2e4f, 0.45f}, {0.55f, 0.9f, 0.35f});
         // Cloth: a silk handkerchief high above the hot source: it floats down into the plume, which
         // holds it up (terminal speed ~0.7 m/s, the plume rises at 2-3 m/s) ...
         ClothMaterial silk;

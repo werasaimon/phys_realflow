@@ -127,6 +127,16 @@ void testMatrixToolbox();
 
 // scene graph of the editor (GraphTests.cpp): text file round trip, magnet forces, a graph scene runs
 void testSceneGraphRoundTrip();
+void testSceneGraphLocale();
+// SoftBodyTests.cpp
+void testSoftCantilever();
+void testSoftBeamFrequency();
+void testSoftHangingBar();
+void testSoftSpinMomentum();
+void testSoftDragThrough();
+void testSoftVirtualWork();
+void testSoftRest();
+void testSoftTimeStepAndEnergy();
 void testMagnetForce();
 void testMagnetsAttract();
 void testGraphSceneBuilds();

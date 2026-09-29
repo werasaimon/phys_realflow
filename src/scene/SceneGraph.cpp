@@ -28,7 +28,8 @@
 // back as the same float, so save -> load -> save gives the same text.
 #include "scene/SceneGraph.h"
 
-#include <cstdio>
+#include "core/Format.h"
+
 #include <cstdlib>
 #include <sstream>
 
@@ -41,17 +42,7 @@ const int kShapeCount = 6;
 const char* kColliderNames[] = {"auto", "box", "sphere", "capsule", "hull", "decomposition"};
 const int kColliderCount = 6;
 
-// The shortest decimal that reads back as the same float: 0.02 stays "0.02" (not the exact
-// "0.0199999996"), yet save -> load -> save is still exact. Nine digits always suffice for a float.
-std::string num(float v) {
-    char buf[32];
-    for (int digits = 6; digits <= 9; ++digits) {
-        std::snprintf(buf, sizeof(buf), "%.*g", digits, double(v));
-        if (std::strtof(buf, nullptr) == v) break;
-    }
-    return buf;
-}
-
+std::string num(float v) { return numberText(v); }
 std::string vec(const Vector3& v) { return num(v.x) + " " + num(v.y) + " " + num(v.z); }
 
 // Splits a line into words; a word in double quotes may contain spaces.
@@ -82,9 +73,7 @@ public:
     const std::string& key() { return w_[i_++]; }
     bool number(float& out) {
         if (i_ >= w_.size()) return false;
-        char* end = nullptr;
-        out = std::strtof(w_[i_].c_str(), &end);
-        if (end == w_[i_].c_str() || *end) return false;
+        if (!parseNumber(w_[i_], out)) return false;
         ++i_;
         return true;
     }
@@ -213,7 +202,9 @@ static void saveEntity(std::ostringstream& o, const Entity& e) {
           << num(e.rigid.restitution) << " fixed " << (e.rigid.fixed ? 1 : 0) << " velocity " << vec(e.rigid.velocity)
           << " spin " << vec(e.rigid.angularVelocity) << "\n";
     if (e.collider.enabled) saveCollider(o, e.collider);
-    if (e.soft.enabled) o << "  soft density " << num(e.soft.density) << " stiffness " << num(e.soft.stiffness) << "\n";
+    if (e.soft.enabled)
+        o << "  soft density " << num(e.soft.material.density) << " young " << num(e.soft.material.youngModulus) << " poisson "
+          << num(e.soft.material.poissonRatio) << " damping " << num(e.soft.material.damping) << "\n";
     if (e.liquid.enabled) o << "  liquid\n";
     if (e.magnet.enabled) o << "  magnet moment " << vec(e.magnet.moment) << "\n";
     if (e.heat.enabled) o << "  heat temperature " << num(e.heat.temperature) << " smoke " << num(e.heat.smoke) << "\n";
@@ -284,7 +275,17 @@ static bool readRoleKey(const std::string& role, const std::string& k, LineReade
             if (kind == kColliderNames[i]) { c.kind = ColliderKind(i); return true; }
         return false;
     }
-    if (role == "soft") return k == "density" ? r.number(e.soft.density) : k == "stiffness" ? r.number(e.soft.stiffness) : false;
+    if (role == "soft") {
+        SoftMaterial& m = e.soft.material;
+        if (k == "stiffness") { // a file from the shape-matching soft bodies: its 0..1 as a modulus, 10 kPa .. 1 MPa
+            float stiffness = 0;
+            if (!r.number(stiffness)) return false;
+            m.youngModulus = std::pow(10.0f, 4.0f + 2.0f * std::clamp(stiffness, 0.0f, 1.0f));
+            return true;
+        }
+        return k == "density" ? r.number(m.density) : k == "young" ? r.number(m.youngModulus) : k == "poisson" ? r.number(m.poissonRatio)
+             : k == "damping" ? r.number(m.damping) : false;
+    }
     if (role == "magnet") return k == "moment" && r.vector(e.magnet.moment);
     if (role == "heat") return k == "temperature" ? r.number(e.heat.temperature) : k == "smoke" ? r.number(e.heat.smoke) : false;
     if (role == "cloth")
