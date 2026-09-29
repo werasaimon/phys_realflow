@@ -19,6 +19,7 @@ enum class Preset {
     RigidFalling, RigidGranular, RigidPyramid, RigidConvex, RigidTower, RigidJoints, RigidCcd, RigidTeapots,
     SmokeBodies, SoftCloth, GasSoftCloth, Hydro, Fire, Water, Magnetosphere, Tokamak, Terrain,
     Dzhanibekov, NewtonCradle, GalileoTower, // lessons: one law each, its number next to the theory
+    RigidChains,
     Count
 };
 

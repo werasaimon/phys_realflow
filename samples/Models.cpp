@@ -24,4 +24,14 @@ std::shared_ptr<const CompoundShape> bunnyShape() {
     return shape;
 }
 
+// With the default decomposition, finer than the teapot's: a ring's hole must stay open for the
+// next ring of the chain (13 parts, reaching 2.9 mm into it).
+std::shared_ptr<const CompoundShape> ringShape() {
+    static std::shared_ptr<const CompoundShape> shape = [] {
+        const TriMesh ring = primitives::torus(0.05f, 0.012f);
+        return std::make_shared<const CompoundShape>(convexDecomposition({ring}), ring);
+    }();
+    return shape;
+}
+
 } // namespace rf

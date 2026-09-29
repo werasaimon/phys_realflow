@@ -251,6 +251,32 @@ public:
     }
 };
 
+// Chains of steel rings, as the physics engines show their non-convex bodies (Havok's and Bullet's
+// chain demos): one hangs from a fixed ring, one is let go stretched out sideways from another and
+// swings down, and rings are tossed over a peg. Each ring is the same compound of 13 convex parts
+// (ringShape); two interlocked rings hang 76 mm apart, centre to centre, when their tubes touch.
+class RigidChainsScene : public Scene {
+public:
+    void build(Simulation& sim) override {
+        sim.useRigidArena(Simulation::kDefaultArena);
+        const auto ring = ringShape();
+        const float step = 2 * (0.05f - 0.012f) - 0.006f; // 6 mm short of taut
+        const Quaternion inXY = Quaternion::fromAxisAngle({1, 0, 0}, 0.5f * kPi), inYZ = Quaternion::fromAxisAngle({0, 0, 1}, 0.5f * kPi);
+        const Vector3 steel(0.62f, 0.64f, 0.68f), fixed(0.85f, 0.35f, 0.25f);
+        for (int k = 0; k < 14; ++k) // hanging from its first ring
+            sim.rigid.addCompound(ring, {-1.0f, 2.3f - float(k) * step, 0.3f}, k % 2 ? inYZ : inXY, k == 0 ? 0.0f : 7800.0f, k == 0 ? fixed : steel);
+        for (int k = 0; k < 14; ++k) // stretched out along x in the air: the rings alternate between
+            // the plane of the floor (the torus as made) and the vertical plane through the chain
+            sim.rigid.addCompound(ring, {-0.4f + float(k) * step, 2.3f, 0.3f}, k % 2 ? Quaternion() : inXY, k == 0 ? 0.0f : 7800.0f, k == 0 ? fixed : steel);
+        sim.rigid.addBox({1.2f, 0.3f, -0.9f}, {0.015f, 0.3f, 0.015f}, Quaternion(), 0.0f, fixed); // the peg
+        for (int k = 0; k < 6; ++k) {
+            const float tilt = 0.15f * float(k % 3) - 0.15f;
+            sim.rigid.addCompound(ring, {1.2f + 0.01f * float(k % 2), 0.9f + 0.25f * float(k), -0.9f}, Quaternion::fromAxisAngle({1, 0, 0}, tilt), 7800.0f,
+                                  Vector3(0.75f, 0.6f - 0.05f * float(k), 0.3f));
+        }
+    }
+};
+
 // A terrain: the ground is one big static triangle mesh (a 12 x 12 m height field of 160 x 160
 // cells, 51 200 triangles) with a BVH over it - what Bullet does with btBvhTriangleMeshShape.
 // Every body asks the BVH for the triangles under its bounding box and collides with just those
@@ -307,6 +333,7 @@ void addRigidSamples(std::vector<SampleEntry>& out) {
     out.push_back({Preset::RigidCcd, "Твёрдые тела", "CCD: пули и тонкая стена", [] { return std::unique_ptr<Scene>(new RigidCcdScene); }});
     out.push_back({Preset::RigidTeapots, "Твёрдые тела", "Невыпуклые: 100 чайников (выпуклая декомпозиция)", [] { return std::unique_ptr<Scene>(new RigidTeapotsScene); }});
     out.push_back({Preset::Terrain, "Твёрдые тела", "Твёрдые тела: рельеф из 50 000 треугольников (статичный меш + BVH)", [] { return std::unique_ptr<Scene>(new TerrainScene); }});
+    out.push_back({Preset::RigidChains, "Твёрдые тела", "Невыпуклые: цепи из стальных колец, кольца на штыре", [] { return std::unique_ptr<Scene>(new RigidChainsScene); }});
 }
 
 } // namespace rf

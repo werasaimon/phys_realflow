@@ -157,20 +157,36 @@ void RigidWorld::computeLevels() {
     }
 }
 
+// A contact is solved one-sided only while its support does not move into the upper body faster
+// than this, along the normal at the contact [m/s].
+constexpr float kRestingSupport = 0.1f;
+
 void RigidWorld::solveManifoldShock(Manifold& m) {
     // Level of each side: static environment counts as -1 (always "below").
     const int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
     const int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
-    if (la == lb) { // same level: ordinary two-sided solve - except for an impact, whose separation
-        // (applied by applyRestitution just before) a two-sided re-solve would take back; shock
-        // propagation is for resting support, not for a bullet meeting a box in the air.
+    const bool upperIsA = la > lb;
+    // Shock propagation is for resting support. A support frozen while it moves into the upper
+    // body throws it off like a moving wall, with momentum the support never gives: a chain let go
+    // stretched out sideways gained 171 J in the first second of its fall. A support that sinks
+    // away (a stack under a cascade of landings) only takes the upper body's approach away. So a
+    // support moving into the upper body gets the ordinary two-sided solve.
+    const int support = upperIsA ? m.b : m.a;
+    bool resting = true;
+    if (support >= 0 && bodies_[size_t(support)].invMass > 0) {
+        const RigidBody& s = bodies_[size_t(support)];
+        const Vector3 toUpper = upperIsA ? m.normal : -m.normal; // m.normal points from b to a
+        resting = dot(s.vel + cross(s.angVel, m.center - s.pos), toUpper) < kRestingSupport;
+    }
+    if (la == lb || !resting) { // two-sided - except for an impact, whose separation (applied by
+        // applyRestitution just before) a two-sided re-solve would take back; shock propagation
+        // is for resting support, not for a bullet meeting a box in the air.
         bool impact = false;
         for (const SolverPoint& p : m.points) impact |= p.bounce > 0;
         if (!impact) solveManifold(m);
         return;
     }
-    const bool upperIsA = la > lb;
-    RigidBody& upper = bodies_[upperIsA ? m.a : m.b];
+    RigidBody& upper = bodies_[size_t(upperIsA ? m.a : m.b)];
     float pushes[4] = {0, 0, 0, 0};
     const int np = pushUpperOffSupport(m, upperIsA, pushes);
     if (shockFrictionPass_) dragAlongSupport(m, upper, upperIsA, pushes, np);
