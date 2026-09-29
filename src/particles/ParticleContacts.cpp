@@ -53,11 +53,9 @@ void ParticleSystem::findParticleContacts() {
             const int j = nb[m];
             if (j <= i) continue;                   // each pair once
             if (isFluid(i) && isFluid(j)) continue; // fluid-fluid: the density constraint
+            if (isSoft(i) && isSoft(j)) continue;   // two soft bodies: their own step's pairs, below
             if (invMass_[i] + invMass_[j] == 0) continue;
-            if (object_[i] >= 0 && object_[i] == object_[j]) {
-                if (phase_[i] == uint8_t(ParticlePhase::Soft)) continue;         // held by shape matching
-                if (length2(rest_[i] - rest_[j]) < 2.25f * d0 * d0) continue;     // cloth neighbours at rest
-            }
+            if (object_[i] >= 0 && object_[i] == object_[j] && length2(rest_[i] - rest_[j]) < 2.25f * d0 * d0) continue; // cloth neighbours at rest
             if (length2(p_[i] - p_[j]) >= reach2) continue; // cannot touch within this substep
             // The normal and the target come later: the pre-stabilization may still move the pair.
             local[i].push_back({i, j, Vector3(0.0f), stackLift(i, j), d0, false});
@@ -65,6 +63,9 @@ void ParticleSystem::findParticleContacts() {
     });
     contacts_.clear();
     for (auto& l : local) contacts_.insert(contacts_.end(), l.begin(), l.end());
+    // Two soft bodies: every pair their step found within reach where it started (findSoftPairs) -
+    // the main solve leaves them to that step, the pre-stabilization pulls apart those inside each other.
+    for (const SoftPair& s : softPairs_) contacts_.push_back({s.i, s.j, Vector3(0.0f), stackLift(s.i, s.j), d0, false});
 }
 
 // FleX's stiff-stack mass scaling for one pair (Macklin et al. 2014, sec. 5.2, eq. 21): in the

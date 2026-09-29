@@ -431,8 +431,13 @@ void ParticleSystem::step(float dt) {
     }
     {
         Probe::Timer timer("particles/neighbors ms");
-        buildGrid(p_);
-        findNeighbors();
+        if (fluidCount_ == 0 && cloths_.empty()) { // only soft bodies: they find their pairs themselves (findSoftPairs)
+            nbrCount_.assign(size_t(n), 0);
+            nbr_.resize(size_t(n) * kMaxNeighbors);
+        } else {
+            buildGrid(p_);
+            findNeighbors();
+        }
     }
     if (solids) { // the solid contacts of the step; bodies inside each other pulled apart first (no speed)
         Probe::Timer timer("particles/contacts ms");

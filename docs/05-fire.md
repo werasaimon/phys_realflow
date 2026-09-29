@@ -308,7 +308,7 @@ if (unburnt > 0 && pyrolysisRate(Theated) * dt > 1e-7f) {
 
 - Нить, у которой **оба конца** прогорели, распадается (`breakThread`, [Cloth.cpp:332](../src/particles/Cloth.cpp#L332)).
 - Обугленная ткань слабеет: прочность нити умножается на $c_{char} + (1 - c_{char})\min(u_a, u_b)$, $c_{char}$ = `charStrength` = 0.001 ([Cloth.cpp:239](../src/particles/Cloth.cpp#L239)). Прогоревшая ткань рвётся под собственным весом.
-- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:291](../src/particles/ParticleSystem.cpp#L291)).
+- Сгоревшая ткань легче: масса частицы $m_0(\chi + (1 - \chi)u)$ ([ParticleSystem.cpp:297](../src/particles/ParticleSystem.cpp#L297)).
 
 ### Порога воспламенения нет — он получается сам
 

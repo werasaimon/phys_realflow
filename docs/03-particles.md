@@ -62,7 +62,7 @@ $m_i\ddot{\mathbf x}_i = -\nabla_i U + m_i\mathbf g$. Сила SPH симмет�
 
 ## 3.1 Шаг решателя
 
-`ParticleSystem::step` ([ParticleSystem.cpp:397](../src/particles/ParticleSystem.cpp#L397)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
+`ParticleSystem::step` ([ParticleSystem.cpp:407](../src/particles/ParticleSystem.cpp#L407)) — схема Position Based Dynamics: предсказать положения, проецировать ограничения, получить скорости из смещений.
 
 ```mermaid
 flowchart TB
@@ -140,7 +140,7 @@ inline Vector3 gradW(const Vector3& r) const {
 }
 ```
 
-Масса частицы **калибруется**, а не берётся как $\rho_0(2r)^3$: сумма ядра по полной решётке $7^3$ соседей с шагом $2r$ должна дать ровно $\rho_0$ ([ParticleSystem.cpp:22](../src/particles/ParticleSystem.cpp#L22)). Иначе жидкость в покое была бы сжата или растянута на ошибку дискретизации ядра.
+Масса частицы **калибруется**, а не берётся как $\rho_0(2r)^3$: сумма ядра по полной решётке $7^3$ соседей с шагом $2r$ должна дать ровно $\rho_0$ ([ParticleSystem.cpp:23](../src/particles/ParticleSystem.cpp#L23)). Иначе жидкость в покое была бы сжата или растянута на ошибку дискретизации ядра.
 
 ### Ограничение плотности
 
@@ -286,7 +286,7 @@ float ParticleSystem::wallVolume(const Vector3& p, Vector3& gradient) const {
 
 ## 3.4 Столкновения частиц
 
-`collide(i, p, start, record, dt)` ([ParticleContacts.cpp:462](../src/particles/ParticleContacts.cpp#L462); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
+`collide(i, p, start, record, dt)` ([ParticleContacts.cpp:463](../src/particles/ParticleContacts.cpp#L463); `start` — положение в начале шага, от которого меряется проскальзывание для трения):
 
 1. **Стенки домена** — отсечение положения в бокс, уменьшенный на $r$.
 2. **Статический меш** — ближайшая точка через `MeshBVH` (гл. 1.7); если знаковое расстояние $< r$, частица выталкивается вдоль псевдонормали, касательное смещение гасится на долю `wallFriction`.
@@ -328,7 +328,7 @@ $$
 
 **Дискретизация.** За подшаг три шага.
 
-1. **Пары** (`findParticleContacts`): все пары ближе $1.5\,d_0$ в предсказанных положениях.
+1. **Пары** (`findParticleContacts`): все пары ближе $1.5\,d_0$ в предсказанных положениях. Пары двух мягких тел приходят из их собственного шага (`findSoftPairs`): всё, что может сойтись за шаг, от начальных положений. В сцене только из мягких тел общий поиск соседей поэтому не запускается: жидкости для плотности нет, ткани для контактов тоже.
 2. **Пересечения** (`preStabilizeContacts`, предстабилизация FleX, раздел 4.4, алгоритм 1, строки 10–15). Пара тел (или тело и частица ткани, жидкости) **пересекается**, если в начале шага хоть одна пара их частиц перекрыта глубже $d_0/4$ — или если предстабилизация прошлого шага ещё не развела их до конца. Всё остальное — **касание**. Пересечение распутывается до основного решателя, в начальных положениях $\mathbf x$, и предсказанные $\mathbf p$ сдвигаются так же: скорость $(\mathbf p - \mathbf x)/\Delta t$ его не видит.
    - *Кто движется.* Мягкое тело — целиком, одним сдвигом всех частиц. Если толкать отдельные частицы, как FleX, у мягкого тела останется вмятина: она спружинит обратно в соседа, и перекрытие всё-таки станет скоростью (у FleX тела твёрдые, и вмятину стирает следующее сопоставление формы). Частица ткани или жидкости движется одна.
    - *Куда.* По знаковому полю расстояний тел (FleX, раздел 5.1). Каждая частица мягкого тела хранит глубину $|\phi|$ под поверхностью своего тела в покое и направление наружу $\nabla\phi$, повёрнутое вращениями её кластеров. Решает частица, что ближе к своей поверхности (уравнение 17): другая выталкивается из её тела по её нормали, а сама она уходит вглубь. В поверхностном слое ($|\phi| < d_0$) берётся линия центров $\hat{\mathbf x}_{ij}$, отражённая, если она гонит соседа внутрь тела (уравнение 20, Müller & Chentanez 2011): частица поверхности — односторонний шар.
@@ -359,7 +359,7 @@ static float pushAlong(const Vector3& r, const Vector3& n, float target) {
 
 Нормаль пересечения, уравнения 17 и 20:
 
-[src/particles/ParticleContacts.cpp:219](../src/particles/ParticleContacts.cpp#L219)
+[src/particles/ParticleContacts.cpp:220](../src/particles/ParticleContacts.cpp#L220)
 ```cpp
 Vector3 ParticleSystem::intersectionNormal(int i, int j) const {
     const Vector3 centres = x_[i] - x_[j];
@@ -376,7 +376,7 @@ Vector3 ParticleSystem::intersectionNormal(int i, int j) const {
 
 Проход Якоби: пары просят, тела сдвигаются на среднее:
 
-[src/particles/ParticleContacts.cpp:237](../src/particles/ParticleContacts.cpp#L237)
+[src/particles/ParticleContacts.cpp:238](../src/particles/ParticleContacts.cpp#L238)
 ```cpp
 bool ParticleSystem::pushMoversApart() {
     const float d0 = spacing(), tolerance = kOverlapTolerance * d0;
@@ -399,7 +399,7 @@ bool ParticleSystem::pushMoversApart() {
 
 Цель основного решателя — $d_0$, для пересечения — «не глубже»:
 
-[src/particles/ParticleContacts.cpp:329](../src/particles/ParticleContacts.cpp#L329)
+[src/particles/ParticleContacts.cpp:330](../src/particles/ParticleContacts.cpp#L330)
 ```cpp
 void ParticleSystem::setMainSolveTargets() {
     const float d0 = spacing(), touching = (1.0f - kOverlapTolerance) * d0;
@@ -500,7 +500,7 @@ $$
 
 И главное — контакты одного тела решаются **по очереди** (Гаусс–Зейдель). Каждый следующий контакт видит тело, уже сдвинутое предыдущими: текущая глубина равна исходной минус то, насколько тело с тех пор ушло от частицы.
 
-[src/particles/ParticleContacts.cpp:389](../src/particles/ParticleContacts.cpp#L389)
+[src/particles/ParticleContacts.cpp:390](../src/particles/ParticleContacts.cpp#L390)
 ```cpp
 for (size_t b = 0; b < bodies.size(); ++b) {
     if (contacts[b].empty()) continue;
@@ -629,7 +629,7 @@ $$
 
 где $w = 1/m$ — обратная масса. Огромных чисел нет при любой высоте кучи. Высота меряется в шагах частиц $d_0$, так что при $k = 1$ две частицы одна над другой различаются по массе в $e \approx 2.7$ раза. FleX брал $k$ от 1 до 5 для куч твёрдых тел. Множитель считается один раз за шаг, по начальным положениям, когда пара найдена (у FleX — алгоритм 1, строка 4), и живёт только в контактах: сами массы не меняются.
 
-[src/particles/ParticleContacts.cpp:81](../src/particles/ParticleContacts.cpp#L81)
+[src/particles/ParticleContacts.cpp:82](../src/particles/ParticleContacts.cpp#L82)
 ```cpp
 float ParticleSystem::stackLift(int i, int j) const {
     const float g = length(params.gravity);
@@ -642,7 +642,7 @@ float ParticleSystem::stackLift(int i, int j) const {
 
 Основной решатель делит толчок по масштабированным обратным массам:
 
-[src/particles/ParticleContacts.cpp:353](../src/particles/ParticleContacts.cpp#L353)
+[src/particles/ParticleContacts.cpp:354](../src/particles/ParticleContacts.cpp#L354)
 ```cpp
 void ParticleSystem::solveParticleContacts() {
     for (const ParticleContact& c : contacts_) {
@@ -780,7 +780,7 @@ $$
 
 ### Малые шаги (Macklin et al. 2019)
 
-*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:324](../src/particles/ParticleSystem.cpp#L324)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
+*Small Steps in Physics Simulation*: много маленьких шагов с одной итерацией сходятся **намного** лучше, чем один шаг со многими итерациями. Ткань внутри каждого подшага проходит `clothSubsteps` = 8 малых шагов: гравитация, один проход ограничений, проверка разрыва, столкновения ([ParticleSystem.cpp:334](../src/particles/ParticleSystem.cpp#L334)). Закреплённые и схваченные частицы движутся линейно к своей цели подшага.
 
 ### Нити — цепочки: точное решение прогонкой
 
@@ -854,7 +854,7 @@ $$
 
 Каждое `add*` создаёт **группу**: блок жидкости, мягкое тело, полотно ткани; всё, что выпускает сопло, — ещё одна группа. `removeGroup` убирает одну группу, не трогая остальные (мета-объекты редактора: объект был мягким телом, стал водой — заменяется только его группа, и из **источника** — геометрии объекта — строится новая). Частицы группы уходят, массивы смыкаются **с сохранением порядка**, поэтому оставшаяся система — та же самая, только без дыр: мягкие тела переписывают номера своих частиц и кластеров, полотно ткани (его частицы идут одним блоком) сдвигается целиком на число удалённых перед ним частиц — нити, тросы и индекс нитей следуют за ним.
 
-[src/particles/ParticleSystem.cpp:662](../src/particles/ParticleSystem.cpp#L662)
+[src/particles/ParticleSystem.cpp:680](../src/particles/ParticleSystem.cpp#L680)
 ```cpp
 void ParticleSystem::removeGroup(int group) {
     if (group < 0 || std::find(group_.begin(), group_.end(), group) == group_.end()) return;

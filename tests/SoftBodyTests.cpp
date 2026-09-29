@@ -109,8 +109,9 @@ float shapeError(const ParticleSystem& s, const SoftBody& b, const std::vector<V
 }
 
 bool allFinite(const ParticleSystem& s) {
-    for (const Vector3& p : s.positions())
-        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) return false;
+    for (const std::vector<Vector3>* a : {&s.positions(), &s.velocities()})
+        for (const Vector3& p : *a)
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) return false;
     return true;
 }
 
@@ -500,9 +501,35 @@ void testSoftTimeStepAndEnergy() {
     CHECK(end - start < 0.01 * swing, "the energy grew by %.6f J", end - start);
 }
 
+namespace {
+
+// A jelly asleep on a tilted static platform: neither side of their contact can move, and the
+// contact is skipped - divided by its zero inverse mass, it turned every velocity to NaN.
+bool sleepsFiniteOnStaticSlope() {
+    ParticleSystem s;
+    RigidWorld w;
+    const AABB domain({-0.5f, 0, -0.5f}, {0.5f, 1.0f, 0.5f});
+    w.setDomain(domain);
+    s.setRigidWorld(&w);
+    s.reset(domain);
+    w.addBox({0, 0.1f, 0}, Vector3(0.3f, 0.1f, 0.3f), Quaternion::fromAxisAngle(normalize(Vector3(0.3f, 0, 1)), 0.05f), 0.0f, Vector3(1));
+    TriMesh jelly = primitives::box(Vector3(0.08f));
+    jelly.translate({0, 0.285f, 0});
+    s.addSoftBody(jelly, SoftMaterial{400.0f, 3e4f, 0.45f, 3.0f}, Vector3(1));
+    bool finite = true;
+    for (int k = 0; k < int(2.0f / kDt); ++k) {
+        w.step(kDt), s.step(kDt);
+        finite = finite && allFinite(s);
+    }
+    return finite && s.sleepingSoftBodies() == 1;
+}
+
+} // namespace
+
 // 10. Sleeping (as the rigid world's islands): a jelly lying still falls asleep and then does not
 //     move by a single bit; a box dropped on it wakes it and comes to rest on it (a sleeping body
-//     must not let a load through); both fall asleep again; the mouse wakes it.
+//     must not let a load through); both fall asleep again; the mouse wakes it. One asleep on a
+//     static slope stays finite.
 void testSoftSleep() {
     ParticleSystem s;
     RigidWorld w;
@@ -540,11 +567,13 @@ void testSoftSleep() {
     run(0.1f);
     const bool wokeByHand = s.sleepingSoftBodies() == 0;
     s.releaseGrab();
+    const bool slope = sleepsFiniteOnStaticSlope();
     std::printf("  jelly asleep after 2 s %d, still to the bit %d; a box dropped on it wakes it %d and rests on it: gap %.1f mm; "
-                "asleep again %d; the mouse wakes it %d\n",
-                int(asleep), int(frozen), int(wokeByBox), 1000 * gap, int(asleepAgain), int(wokeByHand));
+                "asleep again %d; the mouse wakes it %d; asleep on a static slope and finite %d\n",
+                int(asleep), int(frozen), int(wokeByBox), 1000 * gap, int(asleepAgain), int(wokeByHand), int(slope));
     CHECK(asleep && frozen, "the resting jelly does not sleep (asleep %d, frozen %d)", int(asleep), int(frozen));
     CHECK(wokeByBox && std::fabs(gap) < 0.5f * s.params.particleRadius, "the box on the sleeping jelly: woke %d, gap %.1f mm", int(wokeByBox),
           1000 * gap);
     CHECK(asleepAgain && wokeByHand, "asleep again %d, woken by the mouse %d", int(asleepAgain), int(wokeByHand));
+    CHECK(slope, "a jelly asleep on a static slope: not asleep, or not finite");
 }

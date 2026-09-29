@@ -205,8 +205,9 @@ namespace {
 template <class InverseMass, class Apply>
 void contactImpulse(const Vector3& relative, const Vector3& n, float mu, InverseMass inverseMass, Apply apply) {
     const float vn = dot(relative, n);
-    if (vn >= 0) return;
-    const float pushed = -vn / inverseMass(n);
+    const float w = vn < 0 ? inverseMass(n) : 0.0f;
+    if (w <= 0) return; // parting, or neither side can move (a sleeping particle on a static body)
+    const float pushed = -vn / w;
     const Vector3 slide = relative - n * vn;
     const float along = length(slide);
     Vector3 friction(0.0f);
@@ -247,8 +248,8 @@ void ParticleSystem::solveSoftContacts(float dt) {
             SoftPair& c = softPairs_[size_t(sweep % 2 ? np - 1 - q : q)];
             const size_t i = size_t(c.i), j = size_t(c.j);
             const float depth = pushAlong((x_[i] - x_[j]) + (u[i] - u[j]), c.normal, c.target);
-        const float wi = softAsleep_[i] ? 0.0f : invMass_[i], wj = softAsleep_[j] ? 0.0f : invMass_[j];
-            if (depth <= 0) continue;
+            const float wi = softAsleep_[i] ? 0.0f : invMass_[i], wj = softAsleep_[j] ? 0.0f : invMass_[j];
+            if (depth <= 0 || wi + wj == 0) continue; // apart, or both fixed (asleep, pinned)
             c.touching = true;
             u[i] += c.normal * (depth * wi / (wi + wj));
             u[j] -= c.normal * (depth * wj / (wi + wj));
