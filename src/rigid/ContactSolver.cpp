@@ -16,13 +16,14 @@ namespace rf {
 // ---------------------------------------------------------------------------
 // Collision detection
 // ---------------------------------------------------------------------------
-void RigidWorld::addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm) const {
+void RigidWorld::addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm, int sub) const {
     if (cm.points.empty()) return;
     reduceManifold(cm.points, 4);
     const RigidBody& A = bodies_[a];
     Manifold m;
     m.a = a;
     m.b = b;
+    m.sub = sub;
     float fb = b >= 0 ? bodies_[b].friction : 0.6f;
     m.friction = std::sqrt(A.friction * fb); // kinetic (sliding) coefficient
     float fsb = b >= 0 ? bodies_[b].staticFriction : 0.8f;
@@ -61,8 +62,34 @@ bool RigidWorld::mayTouchStatic(int i) const {
     return (params.collideWithDomain && !insideWalls) || nearMesh;
 }
 
+namespace {
+
+// The points of a body that can touch a wall of outward normal n: a box's corners; of a hull the
+// face turned towards the wall, of a compound each part's (Jolt's supporting face). Every vertex
+// within the contact margin, as it was, gave a curved hull the wider rings of vertices above its
+// lowest one; kept for the area they span, they became its support and the body sank until they
+// touched: a ring 9 mm into the floor, of a 24 mm tube.
+void wallCandidates(const RigidBody& body, const PosedShape& ps, const Vector3& n, std::vector<Vector3>& face, std::vector<Vector3>& verts) {
+    verts.clear();
+    if (body.type() == ShapeType::Box) {
+        const Vector3 h = body.halfExtents();
+        for (int k = 0; k < 8; ++k) verts.push_back(ps.p + ps.R * Vector3((k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z));
+        return;
+    }
+    auto faceOf = [&](const ConvexShape& shape, const Matrix3x3& R, const Vector3& p) {
+        shape.supportFeature(R.transposed() * -n, face);
+        for (const Vector3& v : face) verts.push_back(p + R * v);
+    };
+    if (body.type() == ShapeType::ConvexHull) faceOf(*body.shape, ps.R, ps.p);
+    else if (body.type() == ShapeType::Compound)
+        for (const auto& c : static_cast<const CompoundShape*>(body.shape.get())->children()) faceOf(*c.shape, ps.R * c.R, ps.p + ps.R * c.t);
+}
+
+} // namespace
+
 // Domain walls: one manifold per plane (static ids -1 .. -6). A sphere touches a wall at one
-// point; a box, hull or compound at every vertex within the contact margin of the plane.
+// point; a box at its corners, a hull or compound at the vertices of its faces turned to the wall
+// (wallCandidates), those within the contact margin of the plane.
 void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
     const RigidBody& body = bodies_[i];
     const PosedShape ps = body.posed();
@@ -72,17 +99,6 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
     CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
     std::vector<Vector3>& verts = S.verts;
     ContactManifold& wallContacts = S.wall;
-    verts.clear();
-    if (body.type() == ShapeType::Box) {
-        Vector3 h = body.halfExtents();
-        for (int k = 0; k < 8; ++k)
-            verts.push_back(ps.p + ps.R * Vector3((k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z));
-    } else if (body.type() == ShapeType::ConvexHull) {
-        for (const Vector3& v : static_cast<const ConvexHullShape*>(body.shape.get())->vertices()) verts.push_back(ps.p + ps.R * v);
-    } else if (body.type() == ShapeType::Compound) {
-        for (const auto& c : static_cast<const CompoundShape*>(body.shape.get())->children())
-            for (const Vector3& v : c.shape->vertices()) verts.push_back(ps.p + ps.R * (c.R * v + c.t));
-    }
     for (int w = 0; w < 6; ++w) {
         const Vector3& n = normals[w];
         // Early out with the support point along -n.
@@ -101,6 +117,7 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
                 if (d < margin) cm.add(e - n * (cap->radius() + 0.5f * d), n, -d);
             }
         } else {
+            wallCandidates(body, ps, n, S.face, verts);
             for (const Vector3& v : verts) {
                 float d = dot(v - points[w], n);
                 if (d < margin) cm.add(v - n * (0.5f * d), n, -d);
@@ -108,6 +125,55 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
         }
         addManifold(out, i, -1 - w, cm);
     }
+}
+
+// Normals of two parts' contacts closer than this (5 degrees) make one patch - Jolt's manifold
+// reduction threshold.
+constexpr float kPatchNormalCos = 0.9962f;
+
+// Two bodies of which one is non-convex: every pair of their convex parts whose boxes meet makes
+// its contact, as Bullet's compound algorithms and Jolt's sub-shape pairs do, and the contacts whose
+// normals agree within 5 degrees form one patch (Jolt's manifold reduction); each patch is a
+// manifold of its own, up to 4 points, cached under its first pair of parts. All in one manifold,
+// as before, a ring of a chain touching its neighbour's tube in facets of several parts had one
+// normal, one friction at the mean of the points and one rotational lock for all of them.
+void RigidWorld::collideCompoundPair(int i, int j, std::vector<Manifold>& out) const {
+    CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
+    auto partsOf = [](const PosedShape& P, std::vector<PosedShape>& parts) {
+        parts.clear();
+        if (P.shape->type() != ShapeType::Compound) { parts.push_back(P); return; }
+        for (const auto& c : static_cast<const CompoundShape*>(P.shape)->children()) parts.push_back({c.shape.get(), P.R * c.R, P.p + P.R * c.t});
+    };
+    auto boundsOf = [&](const PosedShape& P) { // the part's box turned: 8 corners, not a support query per axis
+        AABB bb = P.shape->type() == ShapeType::Sphere ? P.shape->boundsAt(P.R, P.p) : orientedBounds(P.shape->localBounds(), P.R, P.p);
+        bb.lo -= Vector3(params.contactMargin), bb.hi += Vector3(params.contactMargin);
+        return bb;
+    };
+    partsOf(bodies_[size_t(i)].posed(), S.partsA);
+    partsOf(bodies_[size_t(j)].posed(), S.partsB);
+    S.boundsB.clear();
+    for (const PosedShape& q : S.partsB) S.boundsB.push_back(boundsOf(q));
+    size_t used = 0;
+    for (size_t u = 0; u < S.partsA.size(); ++u) {
+        const AABB ab = boundsOf(S.partsA[u]);
+        for (size_t v = 0; v < S.partsB.size(); ++v) {
+            ContactManifold& part = S.pair;
+            part.points.clear();
+            if (!ab.overlaps(S.boundsB[v]) || !narrow_.collide(S.partsA[u], S.partsB[v], part) || part.points.empty()) continue;
+            const Vector3 n = part.points.front().normal;
+            size_t p = 0;
+            while (p < used && dot(S.patchNormals[p], n) < kPatchNormalCos) ++p;
+            if (p == used) { // a new patch, named by this pair of parts (1 + u * 512 + v: 20 bits for 512 parts)
+                if (used == S.patches.size()) S.patches.emplace_back(), S.patchNormals.emplace_back(), S.patchSubs.push_back(0);
+                S.patches[p].points.clear();
+                S.patchNormals[p] = n;
+                S.patchSubs[p] = 1 + int(u % 512) * 512 + int(v % 512);
+                ++used;
+            }
+            S.patches[p].points.insert(S.patches[p].points.end(), part.points.begin(), part.points.end());
+        }
+    }
+    for (size_t p = 0; p < used; ++p) addManifold(out, i, j, S.patches[p], S.patchSubs[p]);
 }
 
 // Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7). The query box
@@ -189,7 +255,8 @@ void RigidWorld::collide() {
         const RigidBody &A = bodies_[i], &B = bodies_[j];
         ContactManifold& cm = collideScratch_[size_t(ThreadPool::workerIndex())].pair; // the worker's scratch
         cm.points.clear();
-        if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
+        if (A.type() == ShapeType::Compound || B.type() == ShapeType::Compound) collideCompoundPair(i, j, slots_[size_t(nb) + k]);
+        else if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
     }, 2);
     for (size_t s = 0; s < size_t(nb) + np; ++s)
         for (const Manifold& m : slots_[s]) manifolds_.push_back(m);
@@ -268,7 +335,7 @@ void RigidWorld::buildColors() {
 // warm start from last step's impulses. Each part is a step below.
 void RigidWorld::prepareManifold(Manifold& m, float dt) {
     const RigidBody& A = bodies_[m.a];
-    auto oldIt = params.warmStarting ? cache_.find(key(m.a, m.b)) : cache_.end();
+    auto oldIt = params.warmStarting ? cache_.find(key(m.a, m.b, m.sub)) : cache_.end();
     const CachedPair* old = oldIt != cache_.end() ? &oldIt->second : nullptr;
     const float cell = contactCell(A);
     m.warmMatched = 0;
@@ -390,6 +457,9 @@ void RigidWorld::prepareNormalMassMatrix(Manifold& m) {
         }
 }
 
+// A lockable face contact: every normal within 10 degrees of the mean.
+constexpr float kLockNormalCos = 0.985f;
+
 // Rotational lock: a face contact (>= 3 points) that is (nearly) at rest relative to the other
 // body keeps its relative orientation qB^-1 qA. The error E = q_rel q_ref^-1 lives on SO(3); its
 // logarithm (a rotation vector in B's frame) drives an angular constraint like a fixed joint. A
@@ -400,7 +470,13 @@ void RigidWorld::prepareRotationalLock(Manifold& m, const CachedPair* old) {
     const Quaternion qB = B ? B->rot : Quaternion();
     const Quaternion qRel = qB.conjugate() * A.rot;
     m.locked = false;
-    if (params.rotationalLock && m.points.size() >= 3) {
+    // A face lying on a face: the points share one normal. The points of two compounds' parts all
+    // in one manifold, as they were, pointed every way - a ring of a chain touching its neighbour
+    // on both sides of the tube - and the lock held the two rings as one until its error let go at
+    // 0.2 rad, and the links were kicked; now each patch has one normal (collideCompoundPair).
+    bool face = m.points.size() >= 3;
+    for (const SolverPoint& p : m.points) face = face && dot(p.normal, m.normal) > kLockNormalCos;
+    if (params.rotationalLock && face) {
         Vector3 wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
         if (old && old->locked) {
             m.locked = true;

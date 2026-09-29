@@ -2,10 +2,12 @@
 // Convex hulls and approximate convex decomposition of non-convex solids.
 //
 //  * buildConvexHull: Quickhull in double precision, optional vertex limit (farthest first).
-//  * convexDecomposition: in the spirit of V-HACD - the solid is voxelised (inside test through
-//    MeshBVH), then the voxel set is split recursively by axis-aligned planes until every part is
-//    nearly convex: (volume of its hull - its voxel volume) <= concavity * total volume. Each part
-//    becomes the convex hull of its voxels' corners.
+//  * convexDecomposition: in the spirit of V-HACD and CoACD - the solid is voxelised (inside test
+//    through MeshBVH), then the least convex region is split by an axis-aligned plane, again and
+//    again, until every part is nearly convex: its hull reaches no deeper than `gap` into empty
+//    space (CoACD's collision-aware concavity) and adds at most `concavity` of the volume
+//    (V-HACD's). The hulls are fitted to the smooth surface and neighbours merged while the
+//    merged part stays nearly convex.
 
 #include "core/Mesh.h"
 
@@ -21,7 +23,8 @@ struct DecompositionParams {
     int maxParts = 24;
     int maxHullVertices = 64; // per convex part (collision cost of support mapping)
     float concavity = 0.015f; // allowed (hull - part) volume, as a fraction of the total volume
-    int maxDepth = 10;
+    float gap = 0.01f;        // how far a hull may reach into empty space, as a fraction of the diagonal
+    int maxDepth = 16;
 };
 
 // `solidParts`: closed meshes whose union is the solid (overlaps allowed).

@@ -57,6 +57,11 @@ int main() {
     run("hard contacts in motion: triangle seams, Jenga tower, edge drop", testHardContactDynamics);
     run("convex hull + convex decomposition (teapot)", testConvexHullAndDecomposition);
     run("100 non-convex teapots", testTeapots);
+    run("non-convex: the parts of a ring and a cup keep the hole and the hollow", testNonConvexDecomposition);
+    run("non-convex: a ring lying on the floor does not sink", testRingOnFloor);
+    run("non-convex: a chain of rings hangs interlocked", testChainOfRings);
+    run("non-convex: a ring dropped over a peg slides down to the floor", testRingOverPeg);
+    run("non-convex: a ball and boxes dropped into a cup land on its bottom", testDropIntoCup);
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);

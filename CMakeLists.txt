@@ -223,6 +223,7 @@ if(RF_BUILD_TESTS)
     tests/DebugDrawTests.cpp
     tests/MathTests.cpp
     tests/RigidTests.cpp tests/HardContactTests.h
+    tests/NonConvexTests.cpp
     tests/PileTests.cpp
     tests/ParticleTests.cpp
     tests/SoftBodyTests.cpp

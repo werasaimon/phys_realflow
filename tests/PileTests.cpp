@@ -180,7 +180,10 @@ void testBarrelTouchesFloor() {
 // again - a point that is new each step starts from a guess.
 // The hash changes with any change of the rigid results; explain a new one where it is set.
 //   a374657c2625233b - at first (the pile of the twitching barrels after its two fixes, in the
-//                      editor scene whose rigid domain is open above the floor).
+//                      editor scene whose rigid domain is open above the floor);
+//   not yet taken     - the floor touches a barrel at the face turned to it, not at every vertex
+//                      within the contact margin (RigidWorld::collideWalls): the value on MinGW is
+//                      still to be taken; on Linux (glibc) the hash went 1c7a78e7bc19fef7 -> 81342e09210211fe.
 void testBarrelPileSettles() {
     constexpr uint64_t kGolden = 0xa374657c2625233bull; // RF_STRICT_FP=ON, MinGW (GCC 11.2), Release
     const PileReport asleep = measureBarrelPile(true);

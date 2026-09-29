@@ -89,7 +89,7 @@ void RigidWorld::forgetBody(int i) {
     // stack keeps the cached contacts of its pairs, so the cache names every neighbour).
     std::vector<int> neighbours;
     for (auto it = cache_.begin(); it != cache_.end();) {
-        const int a = int(it->first >> 32), b = int(it->first & 0xffffffffu) - 64; // key(a, b)
+        const int a = keyA(it->first), b = keyB(it->first);
         if (a == i || b == i) {
             const int other = a == i ? b : a;
             if (other >= 0) neighbours.push_back(other);
@@ -439,7 +439,7 @@ void RigidWorld::solveContacts(float dt) {
 void RigidWorld::rememberContactImpulses() {
     ++cacheStamp_;
     for (const Manifold& m : manifolds_) { // 1.
-        CachedPair& c = cache_[key(m.a, m.b)];
+        CachedPair& c = cache_[key(m.a, m.b, m.sub)];
         c.stamp = cacheStamp_;
         c.points = m.points;
         c.friction = m.t1 * m.jt1 + m.t2 * m.jt2;
@@ -454,7 +454,7 @@ void RigidWorld::rememberContactImpulses() {
     };
     for (auto it = cache_.begin(); it != cache_.end();) { // 2.
         const uint64_t k = it->first;
-        const int a = int(k >> 32), b = int(k & 0xffffffffu) - 64;
+        const int a = keyA(k), b = keyB(k);
         const bool keep = it->second.stamp == cacheStamp_ || (a < int(bodies_.size()) && asleep(a) && asleep(b));
         it = keep ? std::next(it) : cache_.erase(it);
     }

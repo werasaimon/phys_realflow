@@ -285,10 +285,20 @@ public:
 private:
     struct V { int i, j, k; };
     struct Part { std::vector<Vector3> pts; float solidVolume; TriMesh hull; };
+    // A region of the voxels still to be split, with how far it is from convex.
+    struct Region { std::vector<V> vs; float score; int depth; Vector3 notch; bool hasNotch; };
+    // How far a hull reaches into empty space, and the point of its surface that reaches deepest.
+    struct Gap { float depth; Vector3 at; };
 
     bool voxelize();
+    void distanceField();
     TriMesh hullOf(const std::vector<V>& vs);
-    void split(std::vector<V>& vs, int depth);
+    Gap gapOf(const TriMesh& hull) const;
+    float scoreOf(const TriMesh& hull, float solidVolume, const Gap& gap) const;
+    float scoreOf(const TriMesh& hull, float solidVolume) const { return scoreOf(hull, solidVolume, gapOf(hull)); }
+    Region region(std::vector<V> vs, int depth);
+    void splitAll();
+    bool cutThroughNotch(const Region& r, int& bestAxis, int& bestCut);
     bool bestCut(const std::vector<V>& vs, int& bestAxis, int& bestCut) const;
     void fitToSurface(std::vector<std::vector<Vector3>>& pts) const;
     int ownerOf(const Vector3& x) const;
@@ -303,8 +313,10 @@ private:
     int nx = 0, ny = 0, nz = 0;
     std::vector<MeshBVH> bvhs;
     std::vector<uint8_t> occ;      // occupied voxels
+    std::vector<float> empty2;     // squared distance (in voxels) from a voxel centre to the nearest occupied one
     std::vector<V> all;            // the occupied voxels as a list
     float totalVolume = 0;
+    float gapTolerance = 0;        // [m]: prm_.gap of the diagonal, at least a voxel
     std::vector<int> stamp;        // hullOf: membership stamps
     int stampId = 0;
     std::vector<std::vector<V>> leaves; // the nearly convex regions
@@ -338,7 +350,46 @@ bool VoxelDecomposer::voxelize() {
     if (all.empty()) return false;
     totalVolume = float(all.size()) * h * h * h;
     stamp.assign(occ.size(), 0);
+    gapTolerance = std::max(prm_.gap * length(bb.extent()), h); // finer than a voxel is not seen
+    distanceField();
     return true;
+}
+
+// The squared distance, in voxels, from every voxel centre to the nearest occupied voxel centre:
+// the exact Euclidean distance transform of Felzenszwalb & Huttenlocher (2012, "Distance
+// Transforms of Sampled Functions", Theory of Computing 8(19)) - along each line the lower
+// envelope of the parabolas (q - v)^2 + f(v), the lines along x, then y, then z.
+void VoxelDecomposer::distanceField() {
+    const double inf = 1e30;
+    std::vector<double> f, z;
+    std::vector<int> v;
+    auto line = [&](size_t first, size_t stride, int n) {
+        f.resize(size_t(n)), v.resize(size_t(n)), z.resize(size_t(n) + 1);
+        for (int q = 0; q < n; ++q) f[size_t(q)] = double(empty2[first + stride * size_t(q)]);
+        int k = 0;
+        v[0] = 0, z[0] = -inf, z[1] = inf;
+        auto meet = [&](int q, int r) { return ((f[size_t(q)] + double(q) * q) - (f[size_t(r)] + double(r) * r)) / (2.0 * (q - r)); };
+        for (int q = 1; q < n; ++q) {
+            double s = meet(q, v[size_t(k)]);
+            while (k > 0 && s <= z[size_t(k)]) s = meet(q, v[size_t(--k)]);
+            ++k;
+            v[size_t(k)] = q, z[size_t(k)] = s, z[size_t(k) + 1] = inf;
+        }
+        k = 0;
+        for (int q = 0; q < n; ++q) {
+            while (z[size_t(k) + 1] < q) ++k;
+            const double d = double(q - v[size_t(k)]) * (q - v[size_t(k)]) + f[size_t(v[size_t(k)])];
+            empty2[first + stride * size_t(q)] = float(std::min(d, inf));
+        }
+    };
+    empty2.resize(occ.size());
+    for (size_t c = 0; c < occ.size(); ++c) empty2[c] = occ[c] ? 0.0f : float(inf);
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j) line(cellIdx(0, j, k), 1, nx);
+    for (int k = 0; k < nz; ++k)
+        for (int i = 0; i < nx; ++i) line(cellIdx(i, 0, k), size_t(nx), ny);
+    for (int j = 0; j < ny; ++j)
+        for (int i = 0; i < nx; ++i) line(cellIdx(i, j, 0), size_t(nx) * size_t(ny), nz);
 }
 
 // Hull of a voxel set: only voxels with a face exposed within the set can contribute extreme
@@ -358,6 +409,66 @@ TriMesh VoxelDecomposer::hullOf(const std::vector<V>& vs) {
             pts.push_back(bb.lo + Vector3(float(v.i + (c & 1)), float(v.j + ((c >> 1) & 1)), float(v.k + ((c >> 2) & 1))) * h);
     }
     return buildConvexHull(pts);
+}
+
+// How far a hull reaches into empty space: the largest distance from its surface to the solid -
+// CoACD's collision-aware concavity (Wei et al. 2022, "Approximate Convex Decomposition for 3D
+// Meshes with Collision-Aware Concavity and Tree Search", ACM TOG 41(4)), one-sided, hull to
+// solid, read off the distance field. It is what another body feels: a hull may add much volume
+// in a thin layer and nothing a body could touch, or little volume as a chord across the hole of
+// a ring, which a link of a chain hangs on 17 mm short of the metal. The surface is sampled every
+// half voxel; within a voxel's half diagonal of the solid counts as touching it.
+VoxelDecomposer::Gap VoxelDecomposer::gapOf(const TriMesh& hull) const {
+    Gap worst{0.0f, Vector3(0.0f)};
+    auto visit = [&](const Vector3& x) {
+        const Vector3 g = (x - bb.lo) / h;
+        const int i = clampv(int(g.x), 0, nx - 1), j = clampv(int(g.y), 0, ny - 1), k = clampv(int(g.z), 0, nz - 1);
+        const float d = std::sqrt(empty2[cellIdx(i, j, k)]) * h - 0.87f * h;
+        if (d > worst.depth) worst = {d, x};
+    };
+    for (const auto& t : hull.triangles) {
+        const Vector3 &a = hull.positions[t[0]], &b = hull.positions[t[1]], &c = hull.positions[t[2]];
+        const float L = std::max({length(b - a), length(c - a), length(c - b)});
+        const int n = std::clamp(int(std::ceil(L / h)), 1, 16);
+        for (int u = 0; u <= n; ++u)
+            for (int w = 0; u + w <= n; ++w) visit(a + (b - a) * (float(u) / n) + (c - a) * (float(w) / n));
+    }
+    return worst;
+}
+
+// How far from convex a part is, 1 at the limit: the larger of its gap over the tolerance and its
+// excess volume over the budget (V-HACD's volume concavity, kept as the second measure).
+float VoxelDecomposer::scoreOf(const TriMesh& hull, float solidVolume, const Gap& gap) const {
+    const float budget = std::max(prm_.concavity * totalVolume, 1e-30f);
+    return std::max(gap.depth / gapTolerance, (hull.signedVolume() - solidVolume) / budget);
+}
+
+VoxelDecomposer::Region VoxelDecomposer::region(std::vector<V> vs, int depth) {
+    const float solid = float(vs.size()) * h * h * h;
+    const TriMesh hull = hullOf(vs);
+    const Gap gap = gapOf(hull);
+    const float score = scoreOf(hull, solid, gap);
+    return {std::move(vs), score, depth, gap.at, gap.depth > gapTolerance};
+}
+
+// The cut of a region that reaches into empty space: through its notch, the point of its hull
+// deepest in the empty space (the cut of Lien & Amato 2007, "Approximate Convex Decomposition of
+// Polyhedra", through the most concave feature), along the axis whose two halves come out the
+// most nearly convex. A ring is cut into arcs this way, a cup into its bottom and staves; the cut
+// that only minimised the empty space of the halves' boxes sliced a ring into thinner rings.
+bool VoxelDecomposer::cutThroughNotch(const Region& r, int& bestAxis, int& bestCutOut) {
+    bestAxis = -1;
+    float bestCost = kInf;
+    const Vector3 g = (r.notch - bb.lo) / h;
+    for (int axis = 0; axis < 3; ++axis) {
+        const int cut = int(std::lround(g[axis]));
+        std::vector<V> a, b;
+        for (const V& v : r.vs) ((axis == 0 ? v.i : axis == 1 ? v.j : v.k) < cut ? a : b).push_back(v);
+        if (a.empty() || b.empty()) continue;
+        const float cost = scoreOf(hullOf(a), float(a.size()) * h * h * h) + scoreOf(hullOf(b), float(b.size()) * h * h * h);
+        if (cost < bestCost) { bestCost = cost; bestAxis = axis; bestCutOut = cut; }
+    }
+    return bestAxis >= 0;
 }
 
 // Best axis-aligned cut of a voxel set: minimise the empty space in the bounding boxes of the
@@ -391,29 +502,32 @@ bool VoxelDecomposer::bestCut(const std::vector<V>& vs, int& bestAxis, int& best
     return bestAxis >= 0;
 }
 
-// 1) Recursive splitting of the voxel set into nearly convex regions: a set is a leaf when its
-//    hull's excess volume over the voxels is within the concavity budget (or it is too small,
-//    too deep, or there are enough leaves already).
-void VoxelDecomposer::split(std::vector<V>& vs, int depth) {
-    TriMesh hull = hullOf(vs);
-    float vox = float(vs.size()) * h * h * h;
-    float excess = hull.signedVolume() - vox;
-    bool leaf = depth >= prm_.maxDepth || vs.size() < 8 || excess <= prm_.concavity * totalVolume ||
-                int(leaves.size()) >= prm_.maxParts * 2;
-    if (!leaf) {
-        int bestAxis, cut;
-        if (bestCut(vs, bestAxis, cut)) {
+// 1) Splitting the voxels into nearly convex regions, the least convex region first (V-HACD's
+//    and CoACD's order): a region is done when its score is within 1. When the part budget runs
+//    out, the regions left whole are the most nearly convex ones. Split depth first, as it was,
+//    one side of a cup was cut fine before the budget ran out and the other kept as slabs across
+//    its hollow - a box dropped in lay on them, level with the rim.
+void VoxelDecomposer::splitAll() {
+    std::vector<Region> open;
+    open.push_back(region(all, 0));
+    while (!open.empty()) {
+        size_t w = 0;
+        for (size_t q = 1; q < open.size(); ++q)
+            if (open[q].score > open[w].score) w = q;
+        Region r = std::move(open[w]);
+        open.erase(open.begin() + std::ptrdiff_t(w));
+        const bool budgetLeft = int(leaves.size() + open.size()) + 2 <= prm_.maxParts * 2;
+        int axis, cut;
+        const bool cuts = r.hasNotch ? cutThroughNotch(r, axis, cut) || bestCut(r.vs, axis, cut) : bestCut(r.vs, axis, cut);
+        if (r.score > 1.0f && budgetLeft && r.depth < prm_.maxDepth && r.vs.size() >= 8 && cuts) {
             std::vector<V> a, b;
-            for (const V& v : vs) {
-                int c = bestAxis == 0 ? v.i : bestAxis == 1 ? v.j : v.k;
-                (c < cut ? a : b).push_back(v);
-            }
-            split(a, depth + 1);
-            split(b, depth + 1);
-            return;
+            for (const V& v : r.vs) ((axis == 0 ? v.i : axis == 1 ? v.j : v.k) < cut ? a : b).push_back(v);
+            open.push_back(region(std::move(a), r.depth + 1));
+            open.push_back(region(std::move(b), r.depth + 1));
+        } else {
+            leaves.push_back(std::move(r.vs));
         }
     }
-    leaves.push_back(vs);
 }
 
 // The leaf that owns the voxel under a point, or the nearest owned neighbour voxel.
@@ -437,8 +551,8 @@ int VoxelDecomposer::ownerOf(const Vector3& x) const {
 }
 
 // 2) Fit to the real surface: each part's hull is built from the points of the original smooth
-//    surface inside its region (dense samples, spacing ~ h/3, only on the outer surface of the
-//    union), plus the corners of fully interior voxels (inner cut faces).
+//    surface inside its region (dense samples, spacing ~ h/2, only on the outer surface of the
+//    union), plus the voxel corners of its cut faces.
 void VoxelDecomposer::fitToSurface(std::vector<std::vector<Vector3>>& pts) const {
     for (const TriMesh& m : parts_)
         for (const auto& t : m.triangles) {
@@ -457,53 +571,73 @@ void VoxelDecomposer::fitToSurface(std::vector<std::vector<Vector3>>& pts) const
                     if (o >= 0) pts[o].push_back(x);
                 }
         }
+    // The cut faces: the corners of the region's voxels that lie inside the solid - all eight voxels
+    // around the corner occupied. Every corner of an interior voxel, as it was, let the corners at
+    // the inner edge of a cup's bottom stick a voxel out into the hollow: the bottom part came out
+    // 12 mm thicker than the 10 mm bottom, and a box dropped in lay on it.
+    auto solidCorner = [&](int a, int b, int c) {
+        for (int dz = -1; dz <= 0; ++dz)
+            for (int dy = -1; dy <= 0; ++dy)
+                for (int dx = -1; dx <= 0; ++dx) {
+                    const int i = a + dx, j = b + dy, k = c + dz;
+                    if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz || !occ[cellIdx(i, j, k)]) return false;
+                }
+        return true;
+    };
     for (int p = 0; p < int(leaves.size()); ++p)
-        for (const V& v : leaves[p]) {
-            bool interior = true;
-            const int nb[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-            for (auto& d : nb) {
-                int a = v.i + d[0], b = v.j + d[1], c = v.k + d[2];
-                if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz || !occ[cellIdx(a, b, c)]) { interior = false; break; }
+        for (const V& v : leaves[p])
+            for (int c = 0; c < 8; ++c) {
+                const int a = v.i + (c & 1), b = v.j + ((c >> 1) & 1), d = v.k + ((c >> 2) & 1);
+                if (solidCorner(a, b, d)) pts[p].push_back(bb.lo + Vector3(float(a), float(b), float(d)) * h);
             }
-            if (!interior) continue;
-            for (int c = 0; c < 8; ++c)
-                pts[p].push_back(bb.lo + Vector3(float(v.i + (c & 1)), float(v.j + ((c >> 1) & 1)), float(v.k + ((c >> 2) & 1))) * h);
-        }
 }
 
-// 3) Minimal set: greedily merge the pair of neighbours whose merged hull adds the least volume,
-//    while the excess of the merged part stays within the concavity budget (or until the part
-//    limit is met).
+// 3) Minimal set: greedily merge the pair of neighbours whose merged hull is the most nearly
+//    convex, while it stays within the gap tolerance and the volume budget (scoreOf <= 1) - or,
+//    over the part limit, whatever the score. The score of every pair is kept between merges and
+//    only the merged part's pairs are scored again: all of them every time was cubic in the number
+//    of parts, seconds for sixty.
 void VoxelDecomposer::mergeParts(std::vector<Part>& P) const {
-    const float budget = prm_.concavity * totalVolume;
-    for (;;) {
+    const int n = int(P.size());
+    auto merged = [&](int i, int j) {
+        std::vector<Vector3> u = P[size_t(i)].pts;
+        u.insert(u.end(), P[size_t(j)].pts.begin(), P[size_t(j)].pts.end());
+        return buildConvexHull(u);
+    };
+    auto pairScore = [&](int i, int j) {
+        AABB a = P[size_t(i)].hull.bounds();
+        a.lo -= Vector3(h), a.hi += Vector3(h);
+        if (!a.overlaps(P[size_t(j)].hull.bounds())) return kInf; // only neighbours
+        return scoreOf(merged(i, j), P[size_t(i)].solidVolume + P[size_t(j)].solidVolume);
+    };
+    std::vector<float> score(size_t(n) * size_t(n), kInf);
+    std::vector<uint8_t> alive(size_t(n), 1);
+    parallelFor(n, [&](int i) { for (int j = i + 1; j < n; ++j) score[size_t(i) * n + j] = pairScore(i, j); }, 1);
+    for (int count = n;; --count) {
         int bi = -1, bj = -1;
-        float bestExcess = kInf;
-        TriMesh bestHull;
-        for (int i = 0; i < int(P.size()); ++i)
-            for (int j = i + 1; j < int(P.size()); ++j) {
-                AABB a = P[i].hull.bounds(), b = P[j].hull.bounds();
-                a.lo -= Vector3(h); a.hi += Vector3(h);
-                if (!a.overlaps(b)) continue; // only neighbours
-                std::vector<Vector3> u = P[i].pts;
-                u.insert(u.end(), P[j].pts.begin(), P[j].pts.end());
-                TriMesh hu = buildConvexHull(u);
-                float excess = hu.signedVolume() - (P[i].solidVolume + P[j].solidVolume);
-                if (excess < bestExcess) { bestExcess = excess; bi = i; bj = j; bestHull = std::move(hu); }
-            }
-        bool mustMerge = int(P.size()) > prm_.maxParts;
-        if (bi < 0 || (!mustMerge && bestExcess > budget)) break;
-        P[bi].solidVolume += P[bj].solidVolume;
-        P[bi].hull = std::move(bestHull);
-        P[bi].pts = P[bi].hull.positions;
-        P.erase(P.begin() + bj);
+        for (int i = 0; i < n; ++i)
+            for (int j = i + 1; j < n; ++j)
+                if (alive[size_t(i)] && alive[size_t(j)] && (bi < 0 || score[size_t(i) * n + j] < score[size_t(bi) * n + bj])) bi = i, bj = j;
+        if (bi < 0 || score[size_t(bi) * n + bj] == kInf || (count <= prm_.maxParts && score[size_t(bi) * n + bj] > 1.0f)) break;
+        P[size_t(bi)].hull = merged(bi, bj);
+        P[size_t(bi)].solidVolume += P[size_t(bj)].solidVolume;
+        P[size_t(bi)].pts = P[size_t(bi)].hull.positions;
+        alive[size_t(bj)] = 0;
+        parallelFor(n, [&](int k) {
+            if (k == bi || !alive[size_t(k)]) return;
+            score[size_t(std::min(bi, k)) * n + std::max(bi, k)] = pairScore(std::min(bi, k), std::max(bi, k));
+        }, 1);
     }
+    std::vector<Part> kept;
+    for (int i = 0; i < n; ++i)
+        if (alive[size_t(i)]) kept.push_back(std::move(P[size_t(i)]));
+    P = std::move(kept);
 }
 
 std::vector<TriMesh> VoxelDecomposer::run() {
     std::vector<TriMesh> result;
     if (!voxelize()) return result;
-    split(all, 0);
+    splitAll();
     owner.assign(occ.size(), -1);
     for (int p = 0; p < int(leaves.size()); ++p)
         for (const V& v : leaves[p]) owner[cellIdx(v.i, v.j, v.k)] = p;

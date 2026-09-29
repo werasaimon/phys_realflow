@@ -256,6 +256,7 @@ private:
     };
     struct Manifold {
         int a = -1, b = -1; // b < 0: static (walls / mesh)
+        int sub = 0;        // two compounds: the first pair of parts of this patch, from 1 (0: the whole pair)
         float friction = 0.5f, staticFriction = 0.7f, restitution = 0.2f, rolling = 0.0f;
         SolverPoints points;
         // Manifold-level friction, as in ReactPhysics3D: two tangents and twist at the centre of
@@ -286,7 +287,12 @@ private:
         Quaternion lockRef;
         Vector3 lock;         // rotational lock impulse moment
     };
-    static uint64_t key(int a, int b) { return (uint64_t(uint32_t(a)) << 32) | uint32_t(b + 64); }
+    // A manifold's key: the two bodies (22 bits each, b + 64 for the walls) and the patch (20 bits).
+    static uint64_t key(int a, int b, int sub = 0) {
+        return (uint64_t(uint32_t(a)) << 42) | (uint64_t(uint32_t(b + 64)) << 20) | uint64_t(uint32_t(sub) & 0xfffffu);
+    }
+    static int keyA(uint64_t k) { return int(k >> 42); }
+    static int keyB(uint64_t k) { return int((k >> 20) & 0x3fffffu) - 64; }
 
     // Warm-start cache: each point carries a hash of its quantised position in A's frame (id), so
     // the same contact is found again next step without per-point searches.
@@ -299,7 +305,8 @@ private:
     bool mayTouchStatic(int i) const; // its box reaches a domain wall or the static mesh
     void collideWalls(int i, std::vector<Manifold>& out) const;      // the six domain planes
     void collideStaticMesh(int i, std::vector<Manifold>& out) const; // the static triangle mesh
-    void addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm) const;
+    void addManifold(std::vector<Manifold>& out, int a, int b, ContactManifold& cm, int sub = 0) const;
+    void collideCompoundPair(int i, int j, std::vector<Manifold>& out) const; // part by part, patch by patch
     void prepare(float dt);
     void sortManifoldsBottomUp();
     void solve();
@@ -459,9 +466,14 @@ private:
     // Scratch of the collision passes, one per thread of the pool (ThreadPool::workerIndex):
     // cleared before use, never freed.
     struct CollideScratch {
-        std::vector<Vector3> verts;             // the body's vertices against the domain walls
+        std::vector<Vector3> verts, face;       // the body's points against a domain wall; one face
         ContactManifold wall, mesh, triangle;   // one wall; the whole mesh; one of its triangles
         ContactManifold pair;                   // a body pair
+        std::vector<PosedShape> partsA, partsB; // two compounds: their convex parts
+        std::vector<AABB> boundsB;
+        std::vector<ContactManifold> patches;   // the parts' contacts grouped by normal
+        std::vector<Vector3> patchNormals;
+        std::vector<int> patchSubs;
     };
     mutable std::vector<CollideScratch> collideScratch_;
     std::vector<std::vector<int>> colors_; // manifold batches without shared bodies
