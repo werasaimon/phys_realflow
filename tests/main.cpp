@@ -62,6 +62,7 @@ int main() {
     run("non-convex: a chain of rings hangs interlocked", testChainOfRings);
     run("non-convex: a ring dropped over a peg slides down to the floor", testRingOverPeg);
     run("non-convex: a ball and boxes dropped into a cup land on its bottom", testDropIntoCup);
+    run("non-convex: a wheel of 48 flat segments rolls down a slope", testWheelRollsDownSlope);
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);

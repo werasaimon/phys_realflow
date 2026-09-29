@@ -45,6 +45,7 @@ void testRingOnFloor();
 void testChainOfRings();
 void testRingOverPeg();
 void testDropIntoCup();
+void testWheelRollsDownSlope();
 void testBeamOverCubes();
 void testConvexRest();
 void testHardContacts();

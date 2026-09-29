@@ -735,25 +735,8 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
     old = m.jtwist;
     m.jtwist = clampv(old - m.massTwist * dot(wRel, m.normal), -maxTwist, maxTwist);
     applyPairAngularImpulse(m, m.normal * (m.jtwist - old));
-    // The lock runs even with no load (total = 0): its limit is then 0, and the clamp takes back
-    // the impulse the warm start put in. The accumulated impulse is what is clamped (Catto 2005,
-    // "Iterative Dynamics with Temporal Coherence"), so a bound that collapses removes the warm
-    // start with it. Skipped at total = 0, last step's lock stayed in as a free angular kick: a
-    // cube bouncing flat got a spin on every bounce until it tumbled.
     if (m.locked) {
-        // Angular constraint on SO(3) at velocity level: the relative angular velocity of a resting
-        // face contact is driven to zero on all three axes (angular part of a fixed joint). It is
-        // breakable - limited by the friction moment the patch can carry - and released in
-        // prepareManifold() once log(E) shows a real relative rotation (toppling). No position-level
-        // term: the flush orientation is defined by the contact geometry itself.
-        const float limit = maxF * std::max(m.patchRadius, 0.25f * m.lever);
-        wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
-        Vector3 oldL = m.jlock;
-        Vector3 jl = oldL - m.rollMass * wRel;
-        float l = length(jl);
-        if (l > limit) jl *= limit / l;
-        m.jlock = jl;
-        applyPairAngularImpulse(m, jl - oldL);
+        solveRotationalLock(m, total, maxF);
         return;
     }
     // Rolling resistance: damps the remaining relative rotation (tilting / rolling). Still skipped
@@ -770,6 +753,42 @@ void RigidWorld::solveFriction(Manifold& m, float total) {
         m.jroll = jr;
         applyPairAngularImpulse(m, jr - oldR);
     }
+}
+
+// The rotational lock of a resting face contact (prepareRotationalLock). It runs even with no load
+// (total = 0): its limit is then 0, and the clamp takes back the impulse the warm start put in. The
+// accumulated impulse is what is clamped (Catto 2005, "Iterative Dynamics with Temporal
+// Coherence"), so a bound that collapses removes the warm start with it. Skipped at total = 0,
+// last step's lock stayed in as a free angular kick: a cube bouncing flat got a spin on every
+// bounce until it tumbled.
+// Angular constraint on SO(3) at velocity level: the relative angular velocity is driven to zero
+// (angular part of a fixed joint). About the normal it holds as far as the friction moment of the
+// patch reaches. Across the normal (tipping) it holds what the patch can - the load moved to its
+// edge in the direction of the tipping, total x that reach - and breaks when asked for more: the
+// body tips or rolls as its normal
+// impulses let it. Held there with the friction moment as the limit, as before, a wheel of 48
+// flat segments stood on a 15 degree slope, its centre of mass 8 cm past the 4 cm segment under
+// it; without the lock across, a pile of barrels crept 18 mm in 3 s. No position-level term: the
+// flush orientation is defined by the contact geometry itself. Released in prepareManifold() once
+// log(E) shows a real relative rotation.
+void RigidWorld::solveRotationalLock(Manifold& m, float total, float maxF) {
+    const RigidBody& A = bodies_[m.a];
+    const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+    const Vector3& n = m.normal;
+    const float twistLimit = maxF * std::max(m.patchRadius, 0.25f * m.lever);
+    const Vector3 wRel = A.angVel - (B ? B->angVel : Vector3(0.0f));
+    const Vector3 oldL = m.jlock;
+    const Vector3 jl = oldL - m.rollMass * wRel;
+    Vector3 across = jl - n * dot(jl, n);
+    // A moment about the axis `across` is held by the load moving along n x axis, as far as the
+    // patch reaches that way: a line contact holds nothing about its own line (a barrel rolls).
+    const float size = length(across);
+    float reach = 0;
+    if (size > 0)
+        for (const SolverPoint& p : m.points) reach = std::max(reach, std::fabs(dot(p.position - m.center, cross(n, across / size))));
+    if (size > total * reach) across = Vector3(0.0f), m.locked = false; // broken: it tips or rolls
+    m.jlock = n * clampv(dot(jl, n), -twistLimit, twistLimit) + across;
+    applyPairAngularImpulse(m, m.jlock - oldL);
 }
 
 } // namespace rf

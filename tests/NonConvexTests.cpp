@@ -193,3 +193,43 @@ void testDropIntoCup() {
     }
     CHECK(worst < 0.003f, "a body dropped into the cup rests %.1f mm off its bottom", 1000 * worst);
 }
+
+// A wheel of boxes - a hub, six spokes and a rim of 48 flat segments - let go on a 15 degree slope
+// rolls down without slipping. A round wheel would reach v^2 = 2 s g sin(t) / (1 + I / (m R^2)); a
+// 48-gon loses about 1 % of its energy at every corner it rolls over, so it is somewhat slower,
+// never faster. The rotational lock of a resting face held it standing before: its centre of mass
+// 8 cm past the 4 cm segment it stood on, the lock carried the tipping moment as if friction could.
+void testWheelRollsDownSlope() {
+    const int n = 48;
+    const float R = 0.3f, rim = 0.03f, width = 0.08f, theta = 15.0f * kPi / 180.0f;
+    auto boxAt = [](const Vector3& half, float angle, const Vector3& at) {
+        TriMesh b = primitives::box(half);
+        b.transform(Quaternion::fromAxisAngle({0, 0, 1}, angle).toMatrix3x3(), Vector3(1.0f), at);
+        return b;
+    };
+    std::vector<TriMesh> parts;
+    for (int k = 0; k < n; ++k) {
+        const float a = 2 * kPi * float(k) / n, r = R - 0.5f * rim;
+        parts.push_back(boxAt({R * std::sin(kPi / n) + 0.002f, 0.5f * rim, 0.5f * width}, a + 0.5f * kPi, {r * std::cos(a), r * std::sin(a), 0}));
+    }
+    for (int k = 0; k < 6; ++k) {
+        const float a = 2 * kPi * float(k) / 6, r = 0.5f * (R - rim + 0.05f);
+        parts.push_back(boxAt({0.5f * (R - rim - 0.05f), 0.012f, 0.012f}, a, {r * std::cos(a), r * std::sin(a), 0}));
+    }
+    parts.push_back(primitives::box({0.05f, 0.05f, 0.5f * width}));
+    RigidWorld w;
+    w.setDomain(AABB({-6, -4, -1}, {6, 4, 1}));
+    w.addBox({0, 0, 0}, {5.0f, 0.1f, 0.5f}, Quaternion::fromAxisAngle({0, 0, 1}, -theta), 0.0f, Vector3(0.5f));
+    const Vector3 down(std::cos(theta), -std::sin(theta), 0), up(std::sin(theta), std::cos(theta), 0);
+    const Vector3 start = down * -3.5f + up * (0.1f + R + 0.001f);
+    const int b = w.addCompound(std::make_shared<const CompoundShape>(parts, primitives::merge(parts)), start, Quaternion(), 1000.0f, Vector3(0.8f));
+    const RigidBody& wheel = w.bodies()[size_t(b)];
+    const Matrix3x3 invI = wheel.rotation() * Matrix3x3::diag(wheel.invInertiaLocal) * wheel.rotation().transposed();
+    const float a = 9.81f * std::sin(theta) / (1 + 1 / (invI.m[2][2] * wheel.mass * R * R));
+    for (int f = 0; f < 90; ++f) w.step(kDt);
+    const float s = dot(wheel.pos - start, down), v = dot(wheel.vel, down), round = std::sqrt(2 * a * std::max(s, 0.0f));
+    const float slip = std::fabs(v - std::fabs(wheel.angVel.z) * R) / std::max(v, 1e-3f);
+    std::printf("  wheel of %d segments on a 15 deg slope, 1.5 s: rolled %.2f m at %.3f m/s (a round wheel: %.3f), slip %.1f %%\n", n, s, v, round, 100 * slip);
+    CHECK(s > 0.8f && v > 0.75f * round && v <= round, "the wheel does not roll: %.2f m, %.3f of %.3f m/s", s, v, round);
+    CHECK(slip < 0.03f, "the wheel slides: slip %.1f %%", 100 * slip);
+}
