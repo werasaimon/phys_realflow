@@ -116,11 +116,23 @@ void buildNodes(SoftBody& body) {
             body.nodes[size_t(v - first)].restVolume += 0.25f * body.tets[size_t(t)].restVolume;
         }
     body.nodeStar.clear();
+    body.nodeNear.clear();
+    body.nodeSlot.clear();
     for (size_t k = 0; k < n; ++k) {
-        body.nodes[k].starBegin = int(body.nodeStar.size());
+        SoftNode& node = body.nodes[k];
+        node.starBegin = int(body.nodeStar.size());
         body.nodeStar.insert(body.nodeStar.end(), star[k].begin(), star[k].end());
-        body.nodes[k].starEnd = int(body.nodeStar.size());
+        node.starEnd = int(body.nodeStar.size());
+        node.nearBegin = int(body.nodeNear.size());
+        for (int t : star[k])
+            for (int v : body.tets[size_t(t)].v) {
+                auto at = std::find(body.nodeNear.begin() + node.nearBegin, body.nodeNear.end(), v);
+                if (at == body.nodeNear.end()) at = body.nodeNear.insert(body.nodeNear.end(), v);
+                body.nodeSlot.push_back(uint8_t(at - (body.nodeNear.begin() + node.nearBegin)));
+            }
+        node.nearEnd = int(body.nodeNear.size());
     }
+    body.nodeGradient.assign(body.nodeNear.size(), Vector3(0.0f));
     std::vector<std::vector<int>> taken(n); // colours of the nodes whose star holds the particle
     std::vector<int> colour(n, 0);
     int colours = 0;

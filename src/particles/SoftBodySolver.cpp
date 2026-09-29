@@ -51,12 +51,7 @@ namespace rf {
 
 namespace {
 
-// What one pass needs of a body's material and step, the same for all its tetrahedra and nodes.
-struct PassConstants {
-    float shapeCompliance = 0;  // 1 / (2 mu) [1/Pa]; divided by the tetrahedron's volume
-    float volumeCompliance = 0; // 1 / lambda [1/Pa]; divided by the node's volume; 0: nu = 0, no volume term
-    float invDt2 = 0;           // 1 / dt^2 of the step the multipliers belong to
-};
+using PassConstants = SoftPassConstants;
 
 PassConstants passConstants(const SoftMaterial& m, float dt) {
     PassConstants k;
@@ -72,12 +67,6 @@ PassConstants passConstants(const SoftMaterial& m, float dt) {
 void shares(const SoftTet& t, Vector3 b[4]) {
     const Matrix3x3 T = t.restInverse.transposed();
     b[1] = T.col(0), b[2] = T.col(1), b[3] = T.col(2), b[0] = -(b[1] + b[2] + b[3]);
-}
-
-// cof F = det(F) F^-T = d det F / dF, column by column [f2 x f3, f3 x f1, f1 x f2].
-Matrix3x3 cofactor(const Matrix3x3& F) {
-    const Vector3 f1 = F.col(0), f2 = F.col(1), f3 = F.col(2);
-    return Matrix3x3::fromColumns(cross(f2, f3), cross(f3, f1), cross(f1, f2));
 }
 
 // A tetrahedron's shape constraint C = F - R with its 3 x 3 multiplier Lambda (XPBD, eq. 18 of
@@ -104,92 +93,118 @@ void solveTet(SoftTet& t, const PassConstants& k, const std::vector<Vector3>& ba
 }
 
 // A node's volume constraint C = J_i - 1 and its gradient at the particles around it (at most 27 on
-// the lattice; a particle in several of the tetrahedra takes the sum of their shares):
-//   J_i = sum_t s_t det F_t,   dJ_i/dx_c = sum_t s_t cof(F_t) b_c,   s_t = V_t / (4 V_i).
-struct NodeGradient {
-    int count = 0;
-    int particle[27];
-    Vector3 g[27];
-    void add(int q, const Vector3& v) {
-        for (int k = 0; k < count; ++k)
-            if (particle[k] == q) {
-                g[k] += v;
-                return;
-            }
-        particle[count] = q, g[count] = v, ++count;
-    }
-};
+// the lattice; a particle in several of the tetrahedra takes the sum of their shares), grad[q] at
+// nodeNear[nearBegin + q]. With s_t = V_t / (4 V_i), J_i = sum_t s_t det F_t = sum_t v_t / (4 V_i):
+// V_t det F_t is simply the tetrahedron's volume now, v_t = e1 . (e2 x e3) / 6 of its edges from
+// corner 0, whose gradient at corner 1 is e2 x e3 / 6 (and so on round; corner 0 takes minus the
+// sum) - three cross products per tetrahedron where cof(F) b_c took three times the work.
+constexpr int kNodeParticles = 27;
 
-float nodeConstraint(const SoftBody& body, const SoftNode& n, const std::vector<Vector3>& base, const std::vector<Vector3>& u, NodeGradient& grad) {
-    double J = 0;
+float nodeConstraint(const SoftBody& body, const SoftNode& n, const std::vector<Vector3>& base, const std::vector<Vector3>& u,
+                     Vector3 grad[kNodeParticles]) {
+    for (int q = 0; q < n.nearEnd - n.nearBegin; ++q) grad[q] = Vector3(0.0f);
+    const float per = 1.0f / (24.0f * n.restVolume); // (1 / 6) / (4 V_i)
+    double sixV = 0;
     for (int s = n.starBegin; s < n.starEnd; ++s) {
         const SoftTet& t = body.tets[size_t(body.nodeStar[size_t(s)])];
-        const Matrix3x3 F = deformationGradient(t, base, u);
-        const float share = 0.25f * t.restVolume / n.restVolume;
-        J += double(share) * F.determinant();
-        const Matrix3x3 cof = cofactor(F);
-        Vector3 b[4];
-        shares(t, b);
-        for (int c = 0; c < 4; ++c) grad.add(t.v[c], cof * b[c] * share);
+        auto edge = [&](int c) {
+            const size_t a = size_t(t.v[size_t(c)]), o = size_t(t.v[0]);
+            return (base[a] - base[o]) + (u[a] - u[o]);
+        };
+        const Vector3 e1 = edge(1), e2 = edge(2), e3 = edge(3);
+        const Vector3 g1 = cross(e2, e3), g2 = cross(e3, e1), g3 = cross(e1, e2);
+        sixV += double(dot(e1, g1));
+        const uint8_t* slot = &body.nodeSlot[size_t(4 * s)];
+        grad[slot[0]] -= (g1 + g2 + g3) * per;
+        grad[slot[1]] += g1 * per;
+        grad[slot[2]] += g2 * per;
+        grad[slot[3]] += g3 * per;
     }
-    return float(J - 1.0);
+    return float(sixV * double(per) - 1.0);
 }
 
-// The node's scalar XPBD update: dl = (-C - a l) / (sum w |grad C|^2 + a).
-void solveNode(const SoftBody& body, SoftNode& n, const PassConstants& k, const std::vector<Vector3>& base, std::vector<Vector3>& u,
+// The node's scalar XPBD update: dl = (-C - a l) / (sum w |grad C|^2 + a). The gradient is kept for
+// the next warm start (warmStartNode).
+void solveNode(SoftBody& body, SoftNode& n, const PassConstants& k, const std::vector<Vector3>& base, std::vector<Vector3>& u,
                const std::vector<float>& invMass) {
-    NodeGradient grad;
+    Vector3 grad[kNodeParticles];
     const float C = nodeConstraint(body, n, base, u, grad);
+    const int count = n.nearEnd - n.nearBegin;
+    const int* near = &body.nodeNear[size_t(n.nearBegin)];
     float wg = 0;
-    for (int q = 0; q < grad.count; ++q) wg += invMass[size_t(grad.particle[q])] * length2(grad.g[q]);
+    for (int q = 0; q < count; ++q) wg += invMass[size_t(near[q])] * length2(grad[q]);
     const float a = k.volumeCompliance / n.restVolume * k.invDt2;
     if (wg + a < 1e-30f) return;
     const float dl = (-C - a * n.lambda) / (wg + a);
     n.lambda += dl;
-    for (int q = 0; q < grad.count; ++q) u[size_t(grad.particle[q])] += grad.g[q] * (invMass[size_t(grad.particle[q])] * dl);
+    Vector3* kept = &body.nodeGradient[size_t(n.nearBegin)];
+    for (int q = 0; q < count; ++q) {
+        u[size_t(near[q])] += grad[q] * (invMass[size_t(near[q])] * dl);
+        kept[q] = grad[q];
+    }
 }
 
 // The warm start's moves - the forces of the last small step, x = x~ + M^-1 grad C^T lambda, the
 // start a Gauss-Seidel pass needs to go on from those multipliers - into `move` (slot q = particle
-// first + q), not into the positions: see warmStart.
+// first + q), not into the positions: see warmStart. A node pushes along the gradient its last
+// update found (at rest it is the gradient now, and the static answer stays exact).
 void warmStartTet(const SoftTet& t, const std::vector<float>& invMass, std::vector<Vector3>& move, int first) {
     Vector3 b[4];
     shares(t, b);
     for (int c = 0; c < 4; ++c) move[size_t(t.v[c] - first)] += t.lambdaShape * b[c] * invMass[size_t(t.v[c])];
 }
 
-void warmStartNode(const SoftBody& body, const SoftNode& n, const std::vector<Vector3>& base, const std::vector<Vector3>& u,
-                   const std::vector<float>& invMass, std::vector<Vector3>& move, int first) {
+void warmStartNode(const SoftBody& body, const SoftNode& n, const std::vector<float>& invMass, std::vector<Vector3>& move, int first) {
     if (n.lambda == 0) return;
-    NodeGradient grad;
-    nodeConstraint(body, n, base, u, grad);
-    for (int q = 0; q < grad.count; ++q) move[size_t(grad.particle[q] - first)] += grad.g[q] * (invMass[size_t(grad.particle[q])] * n.lambda);
+    const int* near = &body.nodeNear[size_t(n.nearBegin)];
+    const Vector3* kept = &body.nodeGradient[size_t(n.nearBegin)];
+    for (int q = 0; q < n.nearEnd - n.nearBegin; ++q) move[size_t(near[q] - first)] += kept[q] * (invMass[size_t(near[q])] * n.lambda);
 }
 
-// Runs f(i) for every index of every colour, colour after colour, the indices of one colour in
-// parallel: they share no particle, and the result is the same on any number of threads.
-template <class Visit>
-void byColour(const std::vector<int>& colourStart, Visit f) {
-    for (size_t c = 0; c + 1 < colourStart.size(); ++c) {
-        const int begin = colourStart[c], count = colourStart[c + 1] - begin;
-        parallelFor(count, [&](int q) { f(begin + q); }, 256);
+// Runs f(body, i) for every index i of every colour of every body, colour after colour: one colour
+// of all the bodies in one parallel loop - bodies share no particle, and neither do two indices of
+// one colour of a body - so the result is the same on any number of threads, and a big body and
+// many small ones fill the threads alike. colourStart(body) gives a body's colour table.
+template <class ColourStart, class Visit>
+void byColour(const std::vector<SoftBody*>& bodies, std::vector<SoftColourRun>& runs, ColourStart colourStart, Visit f, int grain = 64) {
+    size_t colours = 0;
+    for (const SoftBody* b : bodies) colours = std::max(colours, colourStart(*b).size());
+    for (size_t c = 0; c + 1 < colours; ++c) {
+        runs.clear();
+        int total = 0;
+        for (int k = 0; k < int(bodies.size()); ++k) {
+            const std::vector<int>& start = colourStart(*bodies[size_t(k)]);
+            if (c + 1 >= start.size() || start[c + 1] == start[c]) continue;
+            runs.push_back({k, start[c], total});
+            total += start[c + 1] - start[c];
+        }
+        parallelRanges(total, [&](int from, int to) {
+            size_t r = size_t(std::upper_bound(runs.begin(), runs.end(), from, [](int i, const SoftColourRun& run) { return i < run.offset; }) -
+                              runs.begin()) - 1;
+            for (int i = from; i < to; ++i) {
+                while (r + 1 < runs.size() && i >= runs[r + 1].offset) ++r;
+                f(*bodies[size_t(runs[r].body)], runs[r].begin + (i - runs[r].offset));
+            }
+        }, grain);
     }
 }
 
-// The warm start of a whole body: every tetrahedron's and node's move found from the same
+// The warm start of the bodies: every tetrahedron's and node's move found from the same
 // configuration (Jacobi), then added. Applied one after another, each would meet its neighbours
 // already moved by forces far larger than the strain they hold (the pressure wave of a nearly
 // incompressible body crosses several cells a small step), and would push along the gradients of a
 // shape that is not the one the pass starts from.
-void warmStart(SoftBody& body, const std::vector<Vector3>& base, std::vector<Vector3>& u, const std::vector<float>& invMass, const PassConstants& k) {
-    const int first = body.particles.front();
-    body.warmMove.assign(body.particles.size(), Vector3(0.0f));
-    byColour(body.colourStart, [&](int t) { warmStartTet(body.tets[size_t(t)], invMass, body.warmMove, first); });
-    if (k.volumeCompliance > 0)
-        byColour(body.nodeColourStart, [&](int q) {
-            warmStartNode(body, body.nodes[size_t(body.nodeOrder[size_t(q)])], base, u, invMass, body.warmMove, first);
-        });
-    for (size_t q = 0; q < body.particles.size(); ++q) u[size_t(first) + q] += body.warmMove[q];
+void warmStart(const std::vector<SoftBody*>& bodies, std::vector<Vector3>& u, const std::vector<float>& invMass,
+               std::vector<SoftColourRun>& runs) {
+    byColour(bodies, runs, [](const SoftBody& b) -> const std::vector<int>& { return b.colourStart; },
+             [&](SoftBody& b, int t) { warmStartTet(b.tets[size_t(t)], invMass, b.warmMove, b.particles.front()); });
+    byColour(bodies, runs, [](const SoftBody& b) -> const std::vector<int>& { return b.nodeColourStart; }, [&](SoftBody& b, int q) {
+        if (b.pass.volumeCompliance > 0) warmStartNode(b, b.nodes[size_t(b.nodeOrder[size_t(q)])], invMass, b.warmMove, b.particles.front());
+    });
+    parallelFor(int(bodies.size()), [&](int k) {
+        const SoftBody& b = *bodies[size_t(k)];
+        for (size_t q = 0; q < b.particles.size(); ++q) u[size_t(b.particles.front()) + q] += b.warmMove[q];
+    }, 1);
 }
 
 // The material's forces are internal: they must not turn the body. Each projection keeps the
@@ -230,16 +245,21 @@ void undoTurn(const SoftBody& body, const std::vector<Vector3>& base, std::vecto
 
 } // namespace
 
-void solveSoftBody(SoftBody& body, const std::vector<Vector3>& base, std::vector<Vector3>& u, const std::vector<float>& invMass, float dt,
-                   bool withWarmStart) {
-    if (body.tets.empty()) return;
-    body.passStart.assign(u.begin() + body.particles.front(), u.begin() + body.particles.front() + int(body.particles.size()));
-    const PassConstants k = passConstants(body.material, dt);
-    if (withWarmStart) warmStart(body, base, u, invMass, k);
-    byColour(body.colourStart, [&](int t) { solveTet(body.tets[size_t(t)], k, base, u, invMass); });
-    if (k.volumeCompliance > 0)
-        byColour(body.nodeColourStart, [&](int q) { solveNode(body, body.nodes[size_t(body.nodeOrder[size_t(q)])], k, base, u, invMass); });
-    undoTurn(body, base, u, invMass, body.passStart);
+void solveSoftBodies(const std::vector<SoftBody*>& bodies, const std::vector<Vector3>& base, std::vector<Vector3>& u,
+                     const std::vector<float>& invMass, float dt, bool withWarmStart, std::vector<SoftColourRun>& runs) {
+    parallelFor(int(bodies.size()), [&](int k) {
+        SoftBody& b = *bodies[size_t(k)];
+        b.pass = passConstants(b.material, dt);
+        b.passStart.assign(u.begin() + b.particles.front(), u.begin() + b.particles.front() + int(b.particles.size()));
+        if (withWarmStart) b.warmMove.assign(b.particles.size(), Vector3(0.0f));
+    }, 1);
+    if (withWarmStart) warmStart(bodies, u, invMass, runs);
+    byColour(bodies, runs, [](const SoftBody& b) -> const std::vector<int>& { return b.colourStart; },
+             [&](SoftBody& b, int t) { solveTet(b.tets[size_t(t)], b.pass, base, u, invMass); });
+    byColour(bodies, runs, [](const SoftBody& b) -> const std::vector<int>& { return b.nodeColourStart; }, [&](SoftBody& b, int q) {
+        if (b.pass.volumeCompliance > 0) solveNode(b, b.nodes[size_t(b.nodeOrder[size_t(q)])], b.pass, base, u, invMass);
+    }, 8); // a node is heavy: small runs keep every thread busy
+    parallelFor(int(bodies.size()), [&](int k) { undoTurn(*bodies[size_t(k)], base, u, invMass, bodies[size_t(k)]->passStart); }, 1);
 }
 
 void scaleSoftMultipliers(SoftBody& body, float f) {

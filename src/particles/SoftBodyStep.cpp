@@ -26,10 +26,14 @@ int ParticleSystem::softSmallSteps(const SoftBody& b, float dt) const {
 
 // The contacts a soft particle may meet in this step, found once from where the step starts (as
 // Jolt's soft bodies and "Small Steps", sec. 4.2, do), within the reach of how far it can move in
-// the step.
+// the step. Two levels, as the broad phases of Bullet and PhysX: the soft bodies' boxes first -
+// only the particles of a body whose box meets a rigid body or another soft body go on - then the
+// particles, in parallel. Every search counts first and fills second, each particle at its place in
+// the list: the list comes out the same on any number of threads.
 void ParticleSystem::findSoftContacts(float dt) {
     softBodyContacts_.clear();
     softPairs_.clear();
+    softBodyBoxes(dt);
     findRigidPlanes(dt);
     findSoftPairs(dt);
 }
@@ -39,76 +43,149 @@ float ParticleSystem::softTravel(int i, float dt) const {
     return length(v_[size_t(i)]) * dt + 0.5f * length(params.gravity) * dt * dt;
 }
 
+// The box of every soft body where its particles start the step, grown by how far the farthest of
+// them can go and by the reach of a contact (1.5 r).
+void ParticleSystem::softBodyBoxes(float dt) {
+    softBoxes_.resize(softBodies_.size());
+    const float r = params.particleRadius;
+    parallelFor(int(softBodies_.size()), [&](int b) {
+        AABB box;
+        float travel = 0;
+        for (int i : softBodies_[size_t(b)].particles) box.expand(x_[size_t(i)]), travel = std::max(travel, softTravel(i, dt));
+        const Vector3 grow(1.5f * r + travel);
+        softBoxes_[size_t(b)] = AABB(box.lo - grow, box.hi + grow);
+    }, 1);
+}
+
+// The first pass of a search over n items: count(q) says how many results item q has; offsets[q]
+// becomes the place its results start at (the second pass writes them there), results in item order.
+template <class Count>
+static int countResults(int n, std::vector<int>& offsets, Count count) {
+    offsets.assign(size_t(n) + 1, 0);
+    parallelFor(n, [&](int q) { offsets[size_t(q) + 1] = count(q); }, 64);
+    for (int q = 0; q < n; ++q) offsets[size_t(q) + 1] += offsets[size_t(q)];
+    return offsets[size_t(n)];
+}
+
 // Against a rigid body: the plane of the body's surface nearest to the particle, the body where it
 // ends this step (the rigid solver steps first). The plane stays for the whole step, so a particle
 // pressed into a box goes back out the way it came in - never out through the far face, the way
-// the edge of a box used to cut into a jelly.
+// the edge of a box used to cut into a jelly. The world tree is asked once per soft body, with its box.
 void ParticleSystem::findRigidPlanes(float dt) {
     if (!rigid_) return;
     prepareBodyQuery(false);
-    std::vector<int>& candidates = bodyCandidates_[size_t(ThreadPool::workerIndex())];
     const auto& bodies = rigid_->bodies();
     const float r = params.particleRadius;
-    for (const SoftBody& b : softBodies_)
-        for (int i : b.particles) {
-            if (invMass_[size_t(i)] == 0) continue;
-            const Vector3& x = x_[size_t(i)];
-            const float reach = 1.5f * r + softTravel(i, dt);
-            rigid_->queryBodies(AABB(x - Vector3(reach), x + Vector3(reach)), candidates);
-            for (int k : candidates) {
-                Vector3 n;
-                const float d = bodies[size_t(k)].signedDistance(x, n);
-                if (d < reach) softBodyContacts_.push_back({i, k, n, x - n * d});
-            }
+    softNearRigid_.resize(softBodies_.size());
+    softSearch_.clear(), softSearchBody_.clear();
+    for (size_t b = 0; b < softBodies_.size(); ++b) {
+        rigid_->queryBodies(softBoxes_[b], softNearRigid_[b]);
+        if (softNearRigid_[b].empty()) continue;
+        for (int i : softBodies_[b].particles)
+            if (invMass_[size_t(i)] != 0) softSearch_.push_back(i), softSearchBody_.push_back(int(b));
+    }
+    auto planes = [&](int q, auto emit) {
+        const int i = softSearch_[size_t(q)];
+        const Vector3& x = x_[size_t(i)];
+        const float reach = 1.5f * r + softTravel(i, dt);
+        int found = 0;
+        for (int k : softNearRigid_[size_t(softSearchBody_[size_t(q)])]) {
+            const RigidBody& body = bodies[size_t(k)];
+            if (length2(x - body.pos) > sqr(body.boundingRadius() + reach)) continue;
+            Vector3 n;
+            const float d = body.signedDistance(x, n);
+            if (d < reach) emit(found++, i, k, n, x - n * d);
         }
+        return found;
+    };
+    const int n = int(softSearch_.size());
+    softBodyContacts_.resize(size_t(countResults(n, softCount_, [&](int q) { return planes(q, [](int, int, int, const Vector3&, const Vector3&) {}); })));
+    parallelFor(n, [&](int q) {
+        planes(q, [&](int k, int i, int body, const Vector3& nrm, const Vector3& point) {
+            softBodyContacts_[size_t(softCount_[size_t(q)] + k)] = {i, body, nrm, point};
+        });
+    }, 64);
 }
 
-// Between two soft bodies: every pair of their particles that can come within d0 in the step (a
-// sorted grid of the soft particles, cells as big as the farthest two can close in a step), pushed
-// apart along the line of their centres at the step's start. Two bodies found inside each other -
-// an overlap deeper than a quarter spacing, or one the pre-stabilization is still pulling apart -
-// are only kept from going deeper: they come apart as wholes, without a speed
-// (ParticleContacts.cpp); pushed apart particle by particle they would dent, and the dents spring
-// back into a jump.
+// Which soft bodies' boxes meet another's: sweep and prune along x (Bullet's AxisSweep3 on one
+// axis) - sorted by the low end of their boxes, a body meets only those that start before its box ends.
+void ParticleSystem::softBodiesThatMeet() {
+    const int B = int(softBodies_.size());
+    softOrder_.resize(size_t(B));
+    for (int b = 0; b < B; ++b) softOrder_[size_t(b)] = b;
+    auto box = [&](int k) -> const AABB& { return softBoxes_[size_t(softOrder_[size_t(k)])]; };
+    std::sort(softOrder_.begin(), softOrder_.end(), [&](int a, int b) { return softBoxes_[size_t(a)].lo.x < softBoxes_[size_t(b)].lo.x; });
+    softMeets_.assign(size_t(B), 0);
+    for (int a = 0; a < B; ++a)
+        for (int c = a + 1; c < B && box(c).lo.x <= box(a).hi.x; ++c)
+            if (box(a).overlaps(box(c))) softMeets_[size_t(softOrder_[size_t(a)])] = softMeets_[size_t(softOrder_[size_t(c)])] = 1;
+}
+
+// Between two soft bodies: every pair of their particles that can come within d0 in the step,
+// pushed apart along the line of their centres at the step's start. The bodies first
+// (softBodiesThatMeet), then the particles of the bodies that meet another, hashed into a grid of cells as big as the farthest two can close in a step (Teschner et
+// al. 2003, "Optimized Spatial Hashing for Collision Detection of Deformable Objects"), sorted into
+// the cells by counting. Two bodies found inside each other - an overlap deeper than a quarter
+// spacing, or one the pre-stabilization is still pulling apart - are only kept from going deeper:
+// they come apart as wholes, without a speed (ParticleContacts.cpp); pushed apart particle by
+// particle they would dent, and the dents spring back into a jump.
 void ParticleSystem::findSoftPairs(float dt) {
-    if (softBodies_.size() < 2) return;
-    const float r = params.particleRadius, d0 = spacing();
+    const int B = int(softBodies_.size());
+    if (B < 2) return;
+    softBodiesThatMeet();
+    softSearch_.clear();
     float fastest = 0;
-    for (const SoftBody& b : softBodies_)
-        for (int i : b.particles) fastest = std::max(fastest, softTravel(i, dt));
-    const float cell = d0 + 2.0f * fastest + 0.25f * r;
+    for (int b = 0; b < B; ++b)
+        if (softMeets_[size_t(b)])
+            for (int i : softBodies_[size_t(b)].particles) softSearch_.push_back(i), fastest = std::max(fastest, softTravel(i, dt));
+    const int n = int(softSearch_.size());
+    if (n == 0) return;
+    const float r = params.particleRadius, d0 = spacing(), cell = d0 + 2.0f * fastest + 0.25f * r;
+    size_t buckets = 1;
+    while (buckets < size_t(2 * n)) buckets *= 2;
     auto cellOf = [&](const Vector3& p) { return std::array<int, 3>{int(std::floor(p.x / cell)), int(std::floor(p.y / cell)), int(std::floor(p.z / cell))}; };
-    auto key = [](int x, int y, int z) { return ((long long)(x & 0x1fffff) << 42) | ((long long)(y & 0x1fffff) << 21) | (long long)(z & 0x1fffff); };
-    softCells_.clear();
-    for (const SoftBody& b : softBodies_)
-        for (int i : b.particles) {
-            const auto c = cellOf(x_[size_t(i)]);
-            softCells_.push_back({key(c[0], c[1], c[2]), i});
-        }
-    std::sort(softCells_.begin(), softCells_.end());
-    auto pairWith = [&](int i, int j) {
-        if (j <= i || object_[size_t(j)] == object_[size_t(i)] || invMass_[size_t(i)] + invMass_[size_t(j)] == 0) return;
-        const Vector3 centres = x_[size_t(i)] - x_[size_t(j)];
-        const float apart = length(centres), reach = d0 + softTravel(i, dt) + softTravel(j, dt) + 0.25f * r;
-        if (apart >= reach || apart < 1e-9f) return;
-        // softBodyOf_ is the last pre-stabilization's: particles appended since (the emitter's) are not in it.
-        bool inside = apart < 0.75f * d0;
-        if (!inside && !unresolved_.empty() && size_t(j) < softBodyOf_.size())
-            inside = std::binary_search(unresolved_.begin(), unresolved_.end(), moverPair({i, j, Vector3(0.0f), 1.0f, d0, false}));
-        softPairs_.push_back({i, j, centres / apart, inside ? std::min(apart, d0) : d0});
+    auto bucket = [&](int x, int y, int z) { return int((unsigned(x) * 73856093u ^ unsigned(y) * 19349663u ^ unsigned(z) * 83492791u) & unsigned(buckets - 1)); };
+    softCellStart_.assign(buckets + 1, 0);
+    for (int i : softSearch_) {
+        const auto c = cellOf(x_[size_t(i)]);
+        ++softCellStart_[size_t(bucket(c[0], c[1], c[2])) + 1];
+    }
+    for (size_t k = 0; k < buckets; ++k) softCellStart_[k + 1] += softCellStart_[k];
+    softCellFill_.assign(softCellStart_.begin(), softCellStart_.end() - 1);
+    softCellItems_.resize(size_t(n));
+    for (int i : softSearch_) {
+        const auto c = cellOf(x_[size_t(i)]);
+        softCellItems_[size_t(softCellFill_[size_t(bucket(c[0], c[1], c[2]))]++)] = i;
+    }
+    auto pairsOf = [&](int q, auto emit) {
+        const int i = softSearch_[size_t(q)];
+        const auto c = cellOf(x_[size_t(i)]);
+        int seen[27], count = 0, found = 0;
+        for (int dz = -1; dz <= 1; ++dz)
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx) seen[count++] = bucket(c[0] + dx, c[1] + dy, c[2] + dz);
+        std::sort(seen, seen + count);
+        count = int(std::unique(seen, seen + count) - seen); // two neighbour cells may share a bucket
+        for (int k = 0; k < count; ++k)
+            for (int e = softCellStart_[size_t(seen[k])]; e < softCellStart_[size_t(seen[k]) + 1]; ++e) {
+                const int j = softCellItems_[size_t(e)];
+                if (j <= i || object_[size_t(j)] == object_[size_t(i)] || invMass_[size_t(i)] + invMass_[size_t(j)] == 0) continue;
+                const Vector3 centres = x_[size_t(i)] - x_[size_t(j)];
+                const float apart = length(centres), reach = d0 + softTravel(i, dt) + softTravel(j, dt) + 0.25f * r;
+                if (apart < reach && apart >= 1e-9f) emit(found++, i, j, centres, apart);
+            }
+        return found;
     };
-    for (const SoftBody& b : softBodies_)
-        for (int i : b.particles) {
-            const auto c = cellOf(x_[size_t(i)]);
-            for (int dz = -1; dz <= 1; ++dz)
-                for (int dy = -1; dy <= 1; ++dy)
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        const long long k = key(c[0] + dx, c[1] + dy, c[2] + dz);
-                        for (auto it = std::lower_bound(softCells_.begin(), softCells_.end(), std::make_pair(k, -1));
-                             it != softCells_.end() && it->first == k; ++it)
-                            pairWith(i, it->second);
-                    }
-        }
+    softPairs_.resize(size_t(countResults(n, softCount_, [&](int q) { return pairsOf(q, [](int, int, int, const Vector3&, float) {}); })));
+    parallelFor(n, [&](int q) {
+        pairsOf(q, [&](int k, int i, int j, const Vector3& centres, float apart) {
+            // softBodyOf_ is the last pre-stabilization's: particles appended since (the emitter's) are not in it.
+            bool inside = apart < 0.75f * d0;
+            if (!inside && !unresolved_.empty() && size_t(j) < softBodyOf_.size())
+                inside = std::binary_search(unresolved_.begin(), unresolved_.end(), moverPair({i, j, Vector3(0.0f), 1.0f, d0, false}));
+            softPairs_[size_t(softCount_[size_t(q)] + k)] = {i, j, centres / apart, inside ? std::min(apart, d0) : d0};
+        });
+    }, 64);
 }
 
 namespace {
@@ -198,23 +275,59 @@ void ParticleSystem::solveSoftContacts() {
 }
 
 // The small steps of all soft bodies, m of h = dt / m, each:
-//   1. fly: v += g h, x += v h (a held particle - pinned, grabbed - slides to where the step puts it);
-//   2. the material: one XPBD pass, warm-started (SoftBodySolver.cpp); v += its move / h;
-//   3. the walls and the obstacle, then the rigid bodies and the other soft bodies (solveSoftContacts),
-//      each contact pushed out and its approach stopped with friction (contactImpulse).
+//   1. fly (softFlight);
+//   2. the material: one XPBD pass, warm-started (SoftBodySolver.cpp);
+//   3. the walls and the obstacle (softWalls), then the rigid bodies and the other soft bodies
+//      (solveSoftContacts), each contact pushed out and its approach stopped with friction.
 // The body leaves the step with its last small step's velocity: it falls at exactly g, rests with
 // none, and sags as its material says. (Contacts solved after the small steps instead, in the
 // passes, got no velocity right: the mean over the step lagged gravity - a body fell at 0.63 g -,
 // the last small step's left a supported body a phantom 20 mm/s.) The liquid and the cloth meet the
 // soft particles in the passes that follow; what they push a soft particle by is added to its
 // position and, over dt, to its velocity (finishStep).
+// A body's flight in small step s of m (of length h): v += g h, u += v h; a held particle slides to
+// where the step puts it.
+void ParticleSystem::softFlight(const SoftBody& b, int s, int m, float h) {
+    std::vector<Vector3>& u = softMove_;
+    const Vector3 g = params.gravity;
+    for (int i : b.particles) {
+        const size_t k = size_t(i);
+        if (invMass_[k] == 0) {
+            u[k] = softFlight_[k] * (float(s + 1) / float(m));
+            continue;
+        }
+        v_[k] += g * h;
+        u[k] += v_[k] * h;
+        softFlight_[k] = u[k];
+    }
+}
+
+// After the material: v += its move / h; then the walls and the obstacle push the particles out and
+// stop their approach with friction (contactImpulse).
+void ParticleSystem::softWalls(const SoftBody& b, float h) {
+    std::vector<Vector3>& u = softMove_;
+    const float mu = params.solidFriction;
+    for (int i : b.particles) {
+        const size_t k = size_t(i);
+        if (invMass_[k] == 0) continue;
+        v_[k] += (u[k] - softFlight_[k]) / h;
+        Vector3 at = x_[k] + u[k];
+        const Vector3 before = at;
+        collideWallsAndMesh(at, at); // pushed out without friction; the friction is in the velocities
+        const Vector3 push = at - before;
+        const float depth = length(push), w = invMass_[k];
+        if (depth == 0) continue;
+        u[k] += push;
+        contactImpulse(v_[k], push / depth, mu, [&](const Vector3&) { return w; }, [&](const Vector3& J) { v_[k] += J * w; });
+    }
+}
+
 void ParticleSystem::stepSoftBodies(float dt) {
     if (softBodies_.empty()) return;
     int m = 1;
     for (const SoftBody& b : softBodies_) m = std::max(m, softSmallSteps(b, dt));
     lastSoftSmallSteps_ = m;
-    const float h = dt / float(m), mu = params.solidFriction;
-    const Vector3 g = params.gravity;
+    const float h = dt / float(m);
     findSoftContacts(dt);
     if (rigid_) {
         const auto& bodies = rigid_->bodies();
@@ -233,33 +346,15 @@ void ParticleSystem::stepSoftBodies(float dt) {
         if (scale != 1.0f) scaleSoftMultipliers(b, scale);
         b.multiplierStep = h;
     }
+    softAll_.clear();
+    for (SoftBody& b : softBodies_) softAll_.push_back(&b);
+    const int bodies = int(softBodies_.size());
     for (int s = 0; s < m; ++s) {
-        for (SoftBody& b : softBodies_) {
-            for (int i : b.particles) { // 1. fly
-                const size_t k = size_t(i);
-                if (invMass_[k] == 0) {
-                    u[k] = softFlight_[k] * (float(s + 1) / float(m));
-                    continue;
-                }
-                v_[k] += g * h;
-                u[k] += v_[k] * h;
-                softFlight_[k] = u[k];
-            }
-            solveSoftBody(b, x_, u, invMass_, h, true); // 2. the material
-            for (int i : b.particles) { // 3. the walls and the obstacle
-                const size_t k = size_t(i);
-                if (invMass_[k] == 0) continue;
-                v_[k] += (u[k] - softFlight_[k]) / h;
-                Vector3 at = x_[k] + u[k];
-                const Vector3 before = at;
-                collideWallsAndMesh(at, at); // pushed out without friction; the friction is in the velocities
-                const Vector3 push = at - before;
-                const float depth = length(push), w = invMass_[k];
-                if (depth == 0) continue;
-                u[k] += push;
-                contactImpulse(v_[k], push / depth, mu, [&](const Vector3&) { return w; }, [&](const Vector3& J) { v_[k] += J * w; });
-            }
-        }
+        // The bodies share no particle: their flights and walls run a body per thread, their material
+        // one colour of all of them per parallel loop.
+        parallelFor(bodies, [&](int b) { softFlight(softBodies_[size_t(b)], s, m, h); }, 1);
+        solveSoftBodies(softAll_, x_, u, invMass_, h, true, softRuns_);
+        parallelFor(bodies, [&](int b) { softWalls(softBodies_[size_t(b)], h); }, 1);
         solveSoftContacts(); // 3. the rigid bodies and the other soft bodies
     }
     for (const SoftBody& b : softBodies_)

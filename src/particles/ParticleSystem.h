@@ -241,13 +241,27 @@ private:
     int softSmallSteps(const SoftBody& b, float dt) const;
     float softTravel(int i, float dt) const;
     void findSoftContacts(float dt);
+    void softBodyBoxes(float dt);
     void findRigidPlanes(float dt);
+    void softBodiesThatMeet();
     void findSoftPairs(float dt);
     void solveSoftContacts();
+    void softFlight(const SoftBody& b, int s, int m, float h);
+    void softWalls(const SoftBody& b, float h);
+    // The bodies of a pass (all of them in the small steps, those next to liquid or cloth in the
+    // unified passes) and the pass's work space.
+    std::vector<SoftBody*> softAll_, softTouching_;
+    std::vector<SoftColourRun> softRuns_;
     void stepSoftBodies(float dt);
     std::vector<SoftBodyContact> softBodyContacts_;
     std::vector<SoftPair> softPairs_;
-    std::vector<std::pair<long long, int>> softCells_;
+    // The broad phase of the soft step (SoftBodyStep.cpp): the bodies' boxes, the rigid bodies near
+    // each, the bodies in sweep order and whether each meets another, the particles searched (and
+    // their bodies), the per-item counts of the two-pass searches, and the hashed grid.
+    std::vector<AABB> softBoxes_;
+    std::vector<std::vector<int>> softNearRigid_;
+    std::vector<int> softOrder_, softSearch_, softSearchBody_, softCount_, softCellStart_, softCellFill_, softCellItems_;
+    std::vector<uint8_t> softMeets_;
     // Per soft particle: how far the soft step has moved it (the soft step works on x_ + softMove_,
     // SoftBodySolver.cpp: why; what the passes add afterwards is their push), and its flight in the
     // current small step - a held one's: where it ends the step; in the passes, a material pass's moves.

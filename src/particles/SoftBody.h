@@ -57,6 +57,19 @@ struct SoftNode {
     float restVolume = 0;       // V_i [m^3]
     float lambda = 0;           // XPBD multiplier of J_i - 1
     int starBegin = 0, starEnd = 0; // its tetrahedra: SoftBody::nodeStar[starBegin .. starEnd)
+    int nearBegin = 0, nearEnd = 0; // their particles, each once: SoftBody::nodeNear[nearBegin .. nearEnd), at most 27
+};
+
+// What one pass needs of a body's material and step (SoftBodySolver.cpp).
+struct SoftPassConstants {
+    float shapeCompliance = 0;  // 1 / (2 mu) [1/Pa]; divided by the tetrahedron's volume
+    float volumeCompliance = 0; // 1 / lambda [1/Pa]; divided by the node's volume; 0: nu = 0, no volume term
+    float invDt2 = 0;           // 1 / dt^2 of the step the multipliers belong to
+};
+
+// A run of one colour of one body in a pass over several bodies (solveSoftBodies' work space).
+struct SoftColourRun {
+    int body = 0, begin = 0, offset = 0; // the body, its first index of the colour, the run's first place in the loop
 };
 
 struct SoftBody {
@@ -73,11 +86,19 @@ struct SoftBody {
     // nodeOrder[nodeColourStart[c] .. nodeColourStart[c + 1]).
     std::vector<SoftNode> nodes;
     std::vector<int> nodeStar, nodeOrder, nodeColourStart;
+    // Per node: the place among its particles (nodeNear) of every corner of every tetrahedron of its
+    // star - nodeSlot[4 s + c], s the place in nodeStar - found once, so an update sums its gradient
+    // without searching; and that gradient as its last update found it, for the next warm start.
+    std::vector<int> nodeNear;
+    std::vector<uint8_t> nodeSlot;
+    std::vector<Vector3> nodeGradient;
     SoftMaterial material;
     Vector3 color{0.9f, 0.4f, 0.4f};
     float multiplierStep = 0;       // the small step the multipliers belong to (0: none yet)
     bool touchesOthers = false;     // next to liquid or cloth in this step: its material is solved in the passes too
-    // Work space of a pass (SoftBodySolver.cpp): the moves it found the particles at, the warm start's moves.
+    // Work space of a pass (SoftBodySolver.cpp): its constants, the moves it found the particles at,
+    // the warm start's moves.
+    SoftPassConstants pass;
     std::vector<Vector3> passStart, warmMove;
     // Surface for drawing: rest mesh; per vertex the tetrahedron it rides in and its barycentric
     // weights for the corners v[1], v[2], v[3] (v[0] takes the rest).
@@ -108,13 +129,14 @@ Matrix3x3 deformationGradient(const SoftTet& t, const std::vector<Vector3>& posi
 // a move u far below the float step of the base still counts (SoftBodySolver.cpp).
 Matrix3x3 deformationGradient(const SoftTet& t, const std::vector<Vector3>& base, const std::vector<Vector3>& u);
 
-// One XPBD pass of a body's material (SoftBodySolver.cpp): every tetrahedron's shape and every
-// particle's volume, colour by colour, for a step of length dt, at the positions base + u; it moves
-// u only. withWarmStart: the multipliers carried from the last small step are applied first (the
-// body's own small steps); without, the pass goes on from the multipliers as they stand (the
-// unified passes of the particles).
-void solveSoftBody(SoftBody& body, const std::vector<Vector3>& base, std::vector<Vector3>& u, const std::vector<float>& invMass, float dt,
-                   bool withWarmStart);
+// One XPBD pass of the material of several bodies (SoftBodySolver.cpp): every tetrahedron's shape
+// and every particle's volume, colour by colour - one colour of all the bodies in one parallel loop
+// (they share no particle) - for a step of length dt, at the positions base + u; it moves u only.
+// withWarmStart: the multipliers carried from the last small step are applied first (the bodies' own
+// small steps); without, the pass goes on from the multipliers as they stand (the unified passes of
+// the particles). `runs` is work space.
+void solveSoftBodies(const std::vector<SoftBody*>& bodies, const std::vector<Vector3>& base, std::vector<Vector3>& u,
+                     const std::vector<float>& invMass, float dt, bool withWarmStart, std::vector<SoftColourRun>& runs);
 
 // Every multiplier of the body times f (the same forces over a step of another length: lambda ~ h^2).
 void scaleSoftMultipliers(SoftBody& body, float f);

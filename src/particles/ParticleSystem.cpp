@@ -436,11 +436,12 @@ void ParticleSystem::step(float dt) {
     // passes go on from the force the body carries - lambda_h of the small steps is lambda_h m^2
     // over dt, as for the cloth - so a body already in balance is not moved at all.
     const float m2 = sqr(float(std::max(1, lastSoftSmallSteps_)));
+    softTouching_.clear();
     for (SoftBody& b : softBodies_) {
         b.touchesOthers = false;
         for (int i : b.particles)
             for (int k = 0; k < nbrCount_[size_t(i)] && !b.touchesOthers; ++k) b.touchesOthers = !isSoft(nbr_[size_t(i) * kMaxNeighbors + size_t(k)]);
-        if (b.touchesOthers) scaleSoftMultipliers(b, m2);
+        if (b.touchesOthers) scaleSoftMultipliers(b, m2), softTouching_.push_back(&b);
     }
     for (int it = 0; it < params.solverIterations; ++it) solveIteration(solids, dt);
     for (SoftBody& b : softBodies_)
@@ -587,11 +588,12 @@ void ParticleSystem::solveIteration(bool solids, float dt) {
         // Contacts push cloth particles around (a body resting on a sheet): the cloth is
         // re-satisfied after every contact pass so the two converge together.
         for (Cloth& c : cloths_) solveCloth(c, p_, invMass_, dt, ThreadSolve::Projection);
-        for (SoftBody& b : softBodies_) {
-            if (!b.touchesOthers) continue;
-            for (int i : b.particles) softFlight_[size_t(i)] = Vector3(0.0f); // the pass's moves, from p_
-            solveSoftBody(b, p_, softFlight_, invMass_, dt, false);
-            for (int i : b.particles) p_[size_t(i)] += softFlight_[size_t(i)];
+        if (!softTouching_.empty()) {
+            for (SoftBody* b : softTouching_)
+                for (int i : b->particles) softFlight_[size_t(i)] = Vector3(0.0f); // the pass's moves, from p_
+            solveSoftBodies(softTouching_, p_, softFlight_, invMass_, dt, false, softRuns_);
+            for (SoftBody* b : softTouching_)
+                for (int i : b->particles) p_[size_t(i)] += softFlight_[size_t(i)];
         }
         prepareBodyQuery(true);
         parallelFor(n, [&](int i) {
