@@ -20,6 +20,8 @@ enum class Preset {
     SmokeBodies, SoftCloth, GasSoftCloth, Hydro, Fire, Water, Magnetosphere, Tokamak, Terrain,
     Dzhanibekov, NewtonCradle, GalileoTower, // lessons: one law each, its number next to the theory
     RigidChains, RigidRace, RigidBowl, RigidTables, RigidCups, TerrainModels,
+    RigidTower200, RigidSandbox, TorusChains,
+    HangingTorus,
     Count
 };
 
@@ -48,5 +50,7 @@ void addFireSamples(std::vector<SampleEntry>& out);        // FireScene.cpp
 void addPlasmaSamples(std::vector<SampleEntry>& out);      // plasma/MagnetosphereScene.cpp, plasma/TokamakScene.cpp
 void addLessonSamples(std::vector<SampleEntry>& out);      // LessonScenes.cpp: Dzhanibekov, Newton's cradle, Galileo
 void addNonConvexSamples(std::vector<SampleEntry>& out);   // NonConvexScenes.cpp: race, bowl, tables, cups, models on terrain
+void addTorusChainSamples(std::vector<SampleEntry>& out); // TorusChainsScene.cpp: long contact-only chains
+void addHangingTorusSample(std::vector<SampleEntry>& out); // HangingTorusScene.cpp: short interactive chain
 
 } // namespace rf

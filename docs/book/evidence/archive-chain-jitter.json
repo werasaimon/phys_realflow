@@ -1,0 +1,71 @@
+{
+  "control": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 1.0253229647853578e-05,
+    "late_max_kinetic_j": 7.637786e-05,
+    "late_total_energy_range_j": 0.0034311105879041293,
+    "late_total_energy_net_j": 0.0015843030361040178,
+    "late_mean_max_speed_mps": 0.0020713595191347756,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "lock-fixed": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 2.0961885710549084e-05,
+    "late_max_kinetic_j": 0.00019025046,
+    "late_total_energy_range_j": 0.00869672224099105,
+    "late_total_energy_net_j": 0.007191581470998187,
+    "late_mean_max_speed_mps": 0.002824475396738769,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "angular-fixed": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 1.1820287647254576e-05,
+    "late_max_kinetic_j": 8.099038e-05,
+    "late_total_energy_range_j": 0.010157736296001474,
+    "late_total_energy_net_j": 0.008671510691996787,
+    "late_mean_max_speed_mps": 0.002225732763926789,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "iterations": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 1.9873009101497505e-06,
+    "late_max_kinetic_j": 3.3124372e-06,
+    "late_total_energy_range_j": 0.0013018812359959497,
+    "late_total_energy_net_j": -0.0012915668178976603,
+    "late_mean_max_speed_mps": 0.000944867970232945,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "substeps": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 4.271724200665558e-06,
+    "late_max_kinetic_j": 5.016911e-06,
+    "late_total_energy_range_j": 0.002214109497991501,
+    "late_total_energy_net_j": -0.002214109497991501,
+    "late_mean_max_speed_mps": 0.0013628207594009983,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "no-warm": {
+    "frames": 1200,
+    "late_mean_kinetic_j": 5.648160941597338e-05,
+    "late_max_kinetic_j": 5.8010624e-05,
+    "late_total_energy_range_j": 0.010861790626002232,
+    "late_total_energy_net_j": -0.010861790626002232,
+    "late_mean_max_speed_mps": 0.005044358067054908,
+    "broken": 0.0,
+    "sleepers": 0.0
+  },
+  "baseline_preserved": {
+    "src/rigid/ContactSolver.cpp": true,
+    "src/rigid/RigidWorld.h": true,
+    "samples/HangingTorusScene.cpp": true,
+    "build-core/librfcore.a": true,
+    "build-core/librfsamples.a": true,
+    "AGENTS.md": true
+  },
+  "accepted_solver_change": null
+}

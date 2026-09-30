@@ -116,6 +116,8 @@ add_library(rfsamples STATIC
   samples/SoftBodyScenes.cpp
   samples/RigidScenes.cpp
   samples/NonConvexScenes.cpp
+  samples/TorusChainsScene.h       samples/TorusChainsScene.cpp
+  samples/HangingTorusScene.h      samples/HangingTorusScene.cpp
   samples/WindTunnelScenes.cpp
   samples/SmokeScenes.cpp
   samples/FireScene.cpp
@@ -223,8 +225,8 @@ if(RF_BUILD_TESTS)
     tests/CoreTests.cpp
     tests/DebugDrawTests.cpp
     tests/MathTests.cpp
-    tests/RigidTests.cpp tests/HardContactTests.h
-    tests/NonConvexTests.cpp
+    tests/RigidTests.cpp tests/HardContactTests.h tests/CcdBoundsTests.cpp
+    tests/NonConvexTests.cpp tests/WallContactTests.cpp tests/ShockPropagationTests.cpp
     tests/PileTests.cpp
     tests/ParticleTests.cpp
     tests/SoftBodyTests.cpp
@@ -244,7 +246,9 @@ if(RF_BUILD_TESTS)
     tests/TensorTests.cpp
     tests/CurvatureTests.cpp
     tests/SymplecticTests.cpp
-    tests/PerfTests.cpp)
+    tests/PerfTests.cpp
+    tests/StandardRigidTests.cpp
+    tests/TorusChainTests.cpp tests/HangingTorusTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   if(RF_BUILD_VERIFY) # the smoke test of the registry
     target_sources(rf_tests PRIVATE tests/VerificationTests.cpp)
@@ -255,4 +259,6 @@ if(RF_BUILD_TESTS)
     endif()
   endif()
   add_test(NAME rf_tests COMMAND rf_tests)
+  add_test(NAME rigid_standard COMMAND rf_tests)
+  set_tests_properties(rigid_standard PROPERTIES ENVIRONMENT "RF_TEST=standard rigid:" LABELS "rigid;standard")
 endif()

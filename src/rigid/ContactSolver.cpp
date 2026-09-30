@@ -80,10 +80,30 @@ void wallCandidates(const RigidBody& body, const PosedShape& ps, const Vector3& 
     auto faceOf = [&](const ConvexShape& shape, const Matrix3x3& R, const Vector3& p) {
         shape.supportFeature(R.transposed() * -n, face);
         for (const Vector3& v : face) verts.push_back(p + R * v);
+        // The most aligned face need not contain the extreme vertex of an irregular hull.
+        // Keep that witness too: otherwise even the deepest plane contact can be missing.
+        const Vector3 support = p + R * shape.support(R.transposed() * -n);
+        if (std::none_of(verts.begin(), verts.end(), [&](const Vector3& v) { return length2(v - support) < 1e-12f; }))
+            verts.push_back(support);
     };
     if (body.type() == ShapeType::ConvexHull) faceOf(*body.shape, ps.R, ps.p);
     else if (body.type() == ShapeType::Compound)
         for (const auto& c : static_cast<const CompoundShape*>(body.shape.get())->children()) faceOf(*c.shape, ps.R * c.R, ps.p + ps.R * c.t);
+}
+
+// Once a hull touches the plane, reduce its load-bearing region, not the larger silhouette
+// of distant speculative vertices. The same touching zone (-slop) is used by prepareContactPoints.
+// A cup's outer vertices 9 mm above the floor otherwise displace its actual lower rim from the
+// four-point patch, leaving just one loaded point and a spurious tipping moment. Separated
+// patches keep their look-ahead contacts; box corner manifolds keep their existing path.
+void restrictWallPatch(ShapeType type, float slop, ContactManifold& contacts) {
+    auto& points = contacts.points;
+    if ((type != ShapeType::Compound && type != ShapeType::ConvexHull) || points.size() <= 4) return;
+    if (std::none_of(points.begin(), points.end(), [](const ContactPoint& c) { return c.depth > 0; })) return;
+    const float band = std::max(slop, 1e-5f); // preserve a rounding band even with zero solver slop
+    points.erase(std::remove_if(points.begin(), points.end(), [&](const ContactPoint& c) {
+        return c.depth < -band;
+    }), points.end());
 }
 
 } // namespace
@@ -124,6 +144,7 @@ void RigidWorld::collideWalls(int i, std::vector<Manifold>& out) const {
                 if (d < margin) cm.add(v - n * (0.5f * d), n, -d);
             }
         }
+        restrictWallPatch(body.type(), params.slop, cm);
         addManifold(out, i, -1 - w, cm);
     }
 }
@@ -135,65 +156,99 @@ constexpr float kPatchNormalCos = 0.9962f;
 // neighbouring parts of a decomposition share their faces or overlap.
 constexpr float kSeamProbe = 0.5e-3f;
 
-// Two bodies of which one is non-convex: every pair of their convex parts whose boxes meet makes
-// its contact, as Bullet's compound algorithms and Jolt's sub-shape pairs do, and the contacts whose
-// normals agree within 5 degrees form one patch (Jolt's manifold reduction); each patch is a
-// manifold of its own, up to 4 points, cached under its first pair of parts. All in one manifold,
-// as before, a ring of a chain touching its neighbour's tube in facets of several parts had one
-// normal, one friction at the mean of the points and one rotational lock for all of them.
+namespace {
+
+void compoundParts(const PosedShape& pose, float margin, std::vector<PosedShape>& parts, std::vector<AABB>& bounds) {
+    parts.clear();
+    bounds.clear();
+    if (pose.shape->type() != ShapeType::Compound) parts.push_back(pose);
+    else for (const auto& c : static_cast<const CompoundShape*>(pose.shape)->children())
+        parts.push_back({c.shape.get(), pose.R * c.R, pose.p + pose.R * c.t});
+    for (const PosedShape& p : parts) {
+        AABB box = p.shape->type() == ShapeType::Sphere ? p.shape->boundsAt(p.R, p.p) : orientedBounds(p.shape->localBounds(), p.R, p.p);
+        box.lo -= Vector3(margin);
+        box.hi += Vector3(margin);
+        bounds.push_back(box);
+    }
+}
+
+bool inOtherPart(const std::vector<PosedShape>& parts, const std::vector<AABB>& bounds, size_t skip, const Vector3& point) {
+    for (size_t k = 0; k < parts.size(); ++k)
+        if (k != skip && bounds[k].contains(point) && parts[k].shape->contains(parts[k].R.transposed() * (point - parts[k].p))) return true;
+    return false;
+}
+
+bool onPartSurface(const PosedShape& part, const Vector3& point) {
+    Vector3 normal;
+    // A clipped manifold may shift its midpoint/depth away from the actual surfaces. Such
+    // reconstructed anchors cannot certify an external contact. 20 um is a surface residual
+    // tolerance, independent of the solver's (much larger) allowed penetration.
+    return std::fabs(part.shape->signedDistance(part.R.transposed() * (point - part.p), normal)) <= 2e-5f;
+}
+
+} // namespace
+
+bool RigidWorld::compoundSeam(const CollideScratch& s, size_t u, size_t v, const ContactPoint& c) {
+    const Vector3 a = c.position - c.normal * (0.5f * c.depth);
+    const Vector3 b = c.position + c.normal * (0.5f * c.depth);
+    return inOtherPart(s.partsA, s.boundsA, u, a - c.normal * kSeamProbe) ||
+           inOtherPart(s.partsB, s.boundsB, v, b + c.normal * kSeamProbe);
+}
+
+void RigidWorld::recoverCompoundPoints(CollideScratch& s, size_t u, size_t v) {
+    auto& points = s.pair.points;
+    points.erase(std::remove_if(points.begin(), points.end(), [&](const ContactPoint& c) {
+        // Recover only real intersections, not speculative constraints through a thin wall.
+        if (c.depth <= 0 || compoundSeam(s, u, v, c)) return true;
+        return !onPartSurface(s.partsA[u], c.position - c.normal * (0.5f * c.depth)) ||
+               !onPartSurface(s.partsB[v], c.position + c.normal * (0.5f * c.depth));
+    }), points.end());
+}
+
+void RigidWorld::appendCompoundPatch(CollideScratch& s, size_t& used, const ContactManifold& part, int sub) {
+    const Vector3 n = part.points.front().normal;
+    size_t p = 0;
+    while (p < used && dot(s.patchNormals[p], n) < kPatchNormalCos) ++p;
+    if (p == used) {
+        if (used == s.patches.size()) s.patches.emplace_back(), s.patchNormals.emplace_back(), s.patchSubs.push_back(0);
+        s.patches[p].points.clear();
+        s.patchNormals[p] = n;
+        s.patchSubs[p] = sub;
+        ++used;
+    }
+    s.patches[p].points.insert(s.patches[p].points.end(), part.points.begin(), part.points.end());
+}
+
+// Each convex-part pair contributes to a normal patch (5 degrees, up to four solver points).
+// Reject internal seams, but inspect the remaining points before discarding a whole manifold:
+// an internal deepest point does not imply every point is internal. Preserve existing patch
+// IDs/order by appending recovered external points after the ordinary patches.
 void RigidWorld::collideCompoundPair(int i, int j, std::vector<Manifold>& out) const {
-    CollideScratch& S = collideScratch_[size_t(ThreadPool::workerIndex())];
-    auto partsOf = [](const PosedShape& P, std::vector<PosedShape>& parts) {
-        parts.clear();
-        if (P.shape->type() != ShapeType::Compound) { parts.push_back(P); return; }
-        for (const auto& c : static_cast<const CompoundShape*>(P.shape)->children()) parts.push_back({c.shape.get(), P.R * c.R, P.p + P.R * c.t});
-    };
-    auto boundsOf = [&](const PosedShape& P) { // the part's box turned: 8 corners, not a support query per axis
-        AABB bb = P.shape->type() == ShapeType::Sphere ? P.shape->boundsAt(P.R, P.p) : orientedBounds(P.shape->localBounds(), P.R, P.p);
-        bb.lo -= Vector3(params.contactMargin), bb.hi += Vector3(params.contactMargin);
-        return bb;
-    };
-    partsOf(bodies_[size_t(i)].posed(), S.partsA);
-    partsOf(bodies_[size_t(j)].posed(), S.partsB);
-    S.boundsA.clear();
-    S.boundsB.clear();
-    for (const PosedShape& q : S.partsA) S.boundsA.push_back(boundsOf(q));
-    for (const PosedShape& q : S.partsB) S.boundsB.push_back(boundsOf(q));
-    auto inOtherPart = [](const std::vector<PosedShape>& parts, const std::vector<AABB>& bounds, size_t skip, const Vector3& x) {
-        for (size_t k = 0; k < parts.size(); ++k)
-            if (k != skip && bounds[k].contains(x) && parts[k].shape->contains(parts[k].R.transposed() * (x - parts[k].p))) return true;
-        return false;
-    };
-    size_t used = 0;
-    for (size_t u = 0; u < S.partsA.size(); ++u) {
-        const AABB& ab = S.boundsA[u];
-        for (size_t v = 0; v < S.partsB.size(); ++v) {
-            ContactManifold& part = S.pair;
+    CollideScratch& s = collideScratch_[size_t(ThreadPool::workerIndex())];
+    compoundParts(bodies_[size_t(i)].posed(), params.contactMargin, s.partsA, s.boundsA);
+    compoundParts(bodies_[size_t(j)].posed(), params.contactMargin, s.partsB, s.boundsB);
+    size_t used = 0, recovered = 0;
+    for (size_t u = 0; u < s.partsA.size(); ++u) {
+        for (size_t v = 0; v < s.partsB.size(); ++v) {
+            ContactManifold& part = s.pair;
             part.points.clear();
-            if (!ab.overlaps(S.boundsB[v]) || !narrow_.collide(S.partsA[u], S.partsB[v], part) || part.points.empty()) continue;
-            const Vector3 n = part.points.front().normal;
-            // A seam: the contact leaves a part through a face it shares with another part of the
-            // same body (a step outwards from the surface point lands in that other part), a face
-            // inside the body. Two wall parts of nested cups, one a little into the other across
-            // such a face, got its normal - along the wall, pushing the upper cup down into the
-            // lower one - and a stack of six cups sank, rocked and never slept. The parts across
-            // the seam give the contact its true normal (Jolt's active edges do this for meshes).
-            const ContactPoint& c = part.points.front(); // the deepest (reduceManifold)
-            const Vector3 onA = c.position - n * (0.5f * c.depth), onB = c.position + n * (0.5f * c.depth);
-            if (inOtherPart(S.partsA, S.boundsA, u, onA - n * kSeamProbe) || inOtherPart(S.partsB, S.boundsB, v, onB + n * kSeamProbe)) continue;
-            size_t p = 0;
-            while (p < used && dot(S.patchNormals[p], n) < kPatchNormalCos) ++p;
-            if (p == used) { // a new patch, named by this pair of parts (1 + u * 512 + v: 20 bits for 512 parts)
-                if (used == S.patches.size()) S.patches.emplace_back(), S.patchNormals.emplace_back(), S.patchSubs.push_back(0);
-                S.patches[p].points.clear();
-                S.patchNormals[p] = n;
-                S.patchSubs[p] = 1 + int(u % 512) * 512 + int(v % 512);
-                ++used;
+            if (!s.boundsA[u].overlaps(s.boundsB[v]) || !narrow_.collide(s.partsA[u], s.partsB[v], part) || part.points.empty()) continue;
+            const int sub = 1 + int(u % 512) * 512 + int(v % 512);
+            if (!compoundSeam(s, u, v, part.points.front())) {
+                appendCompoundPatch(s, used, part, sub);
+                continue;
             }
-            S.patches[p].points.insert(S.patches[p].points.end(), part.points.begin(), part.points.end());
+            // The deepest point lies on a decomposition seam. The rest can still contain the
+            // only external witness of a genuine overlap (the captured two-torus regression).
+            recoverCompoundPoints(s, u, v);
+            if (part.points.empty()) continue;
+            if (recovered == s.recovered.size()) s.recovered.emplace_back(), s.recoveredSubs.push_back(0);
+            s.recovered[recovered].points = part.points;
+            s.recoveredSubs[recovered++] = sub;
         }
     }
-    for (size_t p = 0; p < used; ++p) addManifold(out, i, j, S.patches[p], S.patchSubs[p]);
+    for (size_t p = 0; p < recovered; ++p) appendCompoundPatch(s, used, s.recovered[p], s.recoveredSubs[p]);
+    for (size_t p = 0; p < used; ++p) addManifold(out, i, j, s.patches[p], s.patchSubs[p]);
 }
 
 // Static triangle mesh: BVH -> candidate triangles -> narrow phase (static id -7). The query box

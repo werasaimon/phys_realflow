@@ -123,12 +123,14 @@ public:
 
 // Standard stability test: 100 cubes, each released 1 cm above the one below.
 class RigidTowerScene : public Scene {
+    int count_;
 public:
+    explicit RigidTowerScene(int count = 100) : count_(count) {}
     void build(Simulation& sim) override {
-        sim.useRigidArena(AABB({-3.0f, 0.0f, -3.0f}, {3.0f, 24.0f, 3.0f}));
+        sim.useRigidArena(AABB({-3.0f, 0.0f, -3.0f}, {3.0f, count_ == 100 ? 24.0f : 48.0f, 3.0f}));
         const float h = 0.1f, gap = 0.01f;
-        for (int i = 0; i < 100; ++i) {
-            float t = i / 99.0f;
+        for (int i = 0; i < count_; ++i) {
+            float t = float(i) / float(count_ - 1);
             sim.rigid.addBox({0.0f, h + i * (2 * h + gap), 0.0f}, Vector3(h), Quaternion(), 500.0f,
                              {0.25f + 0.65f * t, 0.55f + 0.2f * std::sin(6.28f * t), 0.9f - 0.6f * t});
         }
@@ -332,6 +334,7 @@ void addRigidSamples(std::vector<SampleEntry>& out) {
     out.push_back({Preset::RigidPyramid, "Твёрдые тела", "Твёрдые тела: пирамида и снаряд", [] { return std::unique_ptr<Scene>(new RigidPyramidScene); }});
     out.push_back({Preset::RigidConvex, "Твёрдые тела", "Твёрдые тела: многогранники (SAT, GJK-EPA)", [] { return std::unique_ptr<Scene>(new RigidConvexScene); }});
     out.push_back({Preset::RigidTower, "Твёрдые тела", "Твёрдые тела: башня из 100 кубиков", [] { return std::unique_ptr<Scene>(new RigidTowerScene); }});
+    out.push_back({Preset::RigidTower200, "Твёрдые тела", "Стандартные тесты: башня из 200 кубиков", [] { return std::unique_ptr<Scene>(new RigidTowerScene(200)); }});
     out.push_back({Preset::RigidJoints, "Твёрдые тела", "Сочленения: 5 типов", [] { return std::unique_ptr<Scene>(new RigidJointsScene); }});
     out.push_back({Preset::RigidCcd, "Твёрдые тела", "CCD: пули и тонкая стена", [] { return std::unique_ptr<Scene>(new RigidCcdScene); }});
     out.push_back({Preset::RigidTeapots, "Твёрдые тела", "Невыпуклые: 100 чайников (выпуклая декомпозиция)", [] { return std::unique_ptr<Scene>(new RigidTeapotsScene); }});

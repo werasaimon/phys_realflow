@@ -428,6 +428,7 @@ private:
     std::vector<XContact> xcontacts_;
     int substepCounter_ = 0;
     void solveManifoldShock(Manifold& m);
+    bool oneSidedShock(const Manifold& m) const;
     int pushUpperOffSupport(Manifold& m, bool upperIsA, float* pushes); // its one-sided push
     void dragAlongSupport(Manifold& m, RigidBody& upper, bool upperIsA, const float* acc, int np); // its friction part
 
@@ -476,7 +477,12 @@ private:
         std::vector<ContactManifold> patches;   // the parts' contacts grouped by normal
         std::vector<Vector3> patchNormals;
         std::vector<int> patchSubs;
+        std::vector<ContactManifold> recovered; // validated external points of rejected seam manifolds
+        std::vector<int> recoveredSubs;
     };
+    static bool compoundSeam(const CollideScratch& scratch, size_t u, size_t v, const ContactPoint& point);
+    static void recoverCompoundPoints(CollideScratch& scratch, size_t u, size_t v);
+    static void appendCompoundPatch(CollideScratch& scratch, size_t& used, const ContactManifold& part, int sub);
     mutable std::vector<CollideScratch> collideScratch_;
     std::vector<std::vector<int>> colors_; // manifold batches without shared bodies
     bool parallelColors_ = false;

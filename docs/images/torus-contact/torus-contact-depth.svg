@@ -1,0 +1,37 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Перед обновлением поз: какие проникновения видит решатель</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Перед обновлением поз: какие проникновения видит решатель</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>Подшаг</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>Глубина, мм</text>
+<text x='84' y='416' class='cap'>Пара 67/68. Геометрия и ограничения наблюдаются на одном этапе; ноль означает отсутствие точек.</text>
+<line x1='84' x2='736' y1='291.3' y2='291.3' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='295.3' text-anchor='end' class='tick'>−5</text>
+<line x1='84' x2='736' y1='232.1' y2='232.1' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='236.1' text-anchor='end' class='tick'>0</text>
+<line x1='84' x2='736' y1='173.0' y2='173.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='177.0' text-anchor='end' class='tick'>5</text>
+<line x1='84' x2='736' y1='113.8' y2='113.8' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='117.8' text-anchor='end' class='tick'>10</text>
+<line x1='84.0' x2='84.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='84.0' y='364' text-anchor='middle' class='tick'>470</text>
+<line x1='214.4' x2='214.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='214.4' y='364' text-anchor='middle' class='tick'>475</text>
+<line x1='344.8' x2='344.8' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='344.8' y='364' text-anchor='middle' class='tick'>480</text>
+<line x1='475.2' x2='475.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='475.2' y='364' text-anchor='middle' class='tick'>485</text>
+<line x1='605.6' x2='605.6' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='605.6' y='364' text-anchor='middle' class='tick'>490</text>
+<line x1='736.0' x2='736.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='736.0' y='364' text-anchor='middle' class='tick'>495</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='84.0,137.5 110.1,127.5 136.2,119.9 162.2,130.8 188.3,133.7 214.4,132.8 240.5,120.6 266.6,136.4 292.6,127.7 318.7,134.0 344.8,124.8 370.9,127.9 397.0,132.8 423.0,137.4 449.1,126.6 475.2,115.7 501.3,114.1 527.4,80.4 553.4,74.2 579.5,69.9 605.6,66.1 631.7,69.0 657.8,64.0 683.8,65.3 709.9,76.3 736.0,136.2' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<polyline points='84.0,137.5 110.1,127.5 136.2,119.9 162.2,130.8 188.3,133.7 214.4,132.8 240.5,120.6 266.6,136.4 292.6,127.7 318.7,134.0 344.8,124.8 370.9,127.9 397.0,132.8 423.0,137.4 449.1,126.6 475.2,122.2 501.3,257.5 527.4,94.5 553.4,275.5 579.5,252.1 605.6,66.1 631.7,344.0 657.8,292.4 683.8,232.1 709.9,76.3 736.0,136.2' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>Все части</text>
+<line x1='192.8' x2='218.8' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='224.8' y='51' font-size='12.5'>В решателе</text>
+</svg>

@@ -1,6 +1,6 @@
 // Continuous collision detection: the time of impact of two moving shapes by conservative
 // advancement (the distance shrinks no faster than the bound on the relative speed), and the
-// step of RigidWorld that stops fast bodies at their impact so nothing tunnels. See TimeOfImpact.h.
+// motion-clamping stage of RigidWorld for fast bodies. See TimeOfImpact.h for its limitations.
 #include "rigid/TimeOfImpact.h"
 #include "rigid/RigidWorld.h"
 
@@ -10,6 +10,19 @@
 #include <algorithm>
 
 namespace rf {
+
+AABB sweptBounds(const SweptPose& sweep, float tolerance) {
+    const PosedShape start = sweep.at(0), end = sweep.at(1);
+    AABB box = start.shape->boundsAt(start.R, start.p);
+    box.expand(end.shape->boundsAt(end.R, end.p));
+    // For each material point x(s), |x''(s)| <= |theta|^2 r. Linear interpolation
+    // between its endpoints has error <= max|x''| s(1-s)/2 <= |theta|^2 r/8.
+    // Translation is linear; r includes the offset of a compound child. See docs/22.
+    const float arc = 0.125f * length(sweep.dTheta) * sweep.angularReach();
+    box.lo -= Vector3(tolerance + arc);
+    box.hi += Vector3(tolerance + arc);
+    return box;
+}
 
 ToiResult timeOfImpact(const SweptPose& A, const SweptPose& B, float tol, int maxIt) {
     ToiResult r;
@@ -21,7 +34,7 @@ ToiResult timeOfImpact(const SweptPose& A, const SweptPose& B, float tol, int ma
         GjkResult g = gjk(A.at(s), B.at(s));
         if (g.intersect) {
             if (s == 0) return r; // already touching: the discrete solver owns this pair
-            r.hit = true;         // overshot inside the tolerance band: report the last safe s
+            r.hit = true;         // intersecting iterate; no earlier safe bracket is retained here
             r.s = s;
             return r;
         }
@@ -82,11 +95,6 @@ SweptPose sweptOf(const RigidBody& b) {
     sp.q0 = b.prevRot;
     sp.dTheta = (b.rot * b.prevRot.conjugate()).log();
     return sp;
-}
-
-AABB boundsAt(const SweptPose& sp, float s) {
-    PosedShape ps = sp.at(s);
-    return ps.shape->boundsAt(ps.R, ps.p);
 }
 
 // Fast: the body moves (or its rim turns) further than a fraction of its own thickness in one
@@ -207,13 +215,8 @@ AABB RigidWorld::coarseSweepBox(int j) const {
 // The sweep of one body over this step and the box that contains it from start to end, widened by
 // the tolerance.
 void RigidWorld::sweepBody(int i) {
-    const float tol = params.ccdTolerance;
     sweeps_[size_t(i)] = sweptOf(bodies_[i]);
-    AABB box = boundsAt(sweeps_[size_t(i)], 0);
-    box.expand(boundsAt(sweeps_[size_t(i)], 1));
-    box.lo -= Vector3(tol);
-    box.hi += Vector3(tol);
-    sweepBoxes_[size_t(i)] = box;
+    sweepBoxes_[size_t(i)] = sweptBounds(sweeps_[size_t(i)], params.ccdTolerance);
 }
 
 // The sweeps of all bodies (kept between steps: no allocation once grown).

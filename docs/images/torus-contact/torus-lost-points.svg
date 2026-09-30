@@ -1,0 +1,35 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Наблюдаемая пара: первая точка определяет судьбу остальных</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Наблюдаемая пара: первая точка определяет судьбу остальных</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>Время симуляции, с</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>Точек</text>
+<text x='84' y='416' class='cap'>Индивидуальный предикат внутренних швов. Это проверка отбора, а не доказательство правильности нормалей.</text>
+<line x1='84' x2='736' y1='344.0' y2='344.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='348.0' text-anchor='end' class='tick'>0</text>
+<line x1='84' x2='736' y1='272.2' y2='272.2' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='276.2' text-anchor='end' class='tick'>10</text>
+<line x1='84' x2='736' y1='200.4' y2='200.4' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='204.4' text-anchor='end' class='tick'>20</text>
+<line x1='84' x2='736' y1='128.6' y2='128.6' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='132.6' text-anchor='end' class='tick'>30</text>
+<line x1='149.2' x2='149.2' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='149.2' y='364' text-anchor='middle' class='tick'>0,76</text>
+<line x1='279.6' x2='279.6' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='279.6' y='364' text-anchor='middle' class='tick'>0,78</text>
+<line x1='410.0' x2='410.0' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='410.0' y='364' text-anchor='middle' class='tick'>0,8</text>
+<line x1='540.4' x2='540.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='540.4' y='364' text-anchor='middle' class='tick'>0,82</text>
+<line x1='670.8' x2='670.8' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='670.8' y='364' text-anchor='middle' class='tick'>0,84</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='84.0,157.3 94.9,64.0 105.7,78.4 116.6,92.7 127.5,85.5 138.3,107.1 149.2,85.5 160.1,107.1 170.9,114.3 181.8,157.3 192.7,121.4 203.5,171.7 214.4,143.0 225.3,135.8 236.1,164.5 247.0,135.8 257.9,157.3 268.7,135.8 279.6,164.5 290.5,135.8 301.3,171.7 312.2,178.9 323.1,143.0 333.9,164.5 344.8,164.5 355.7,164.5 366.5,135.8 377.4,143.0 388.3,143.0 399.1,157.3 410.0,150.2 420.9,135.8 431.7,157.3 442.6,143.0 453.5,214.8 464.3,265.0 475.2,308.1 486.1,279.4 496.9,286.6 507.8,322.5 518.7,322.5 529.5,286.6 540.4,336.8 551.3,257.8 562.1,200.4 573.0,243.5 583.9,265.0 594.7,265.0 605.6,265.0 616.5,293.7 627.3,344.0 638.2,344.0 649.1,344.0 659.9,344.0 670.8,344.0 681.7,344.0 692.5,344.0 703.4,344.0 714.3,344.0 725.1,344.0 736.0,344.0' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<polyline points='84.0,308.1 94.9,322.5 105.7,315.3 116.6,322.5 127.5,336.8 138.3,315.3 149.2,336.8 160.1,344.0 170.9,336.8 181.8,315.3 192.7,329.6 203.5,315.3 214.4,336.8 225.3,336.8 236.1,344.0 247.0,344.0 257.9,329.6 268.7,322.5 279.6,315.3 290.5,329.6 301.3,329.6 312.2,329.6 323.1,315.3 333.9,293.7 344.8,300.9 355.7,300.9 366.5,308.1 377.4,344.0 388.3,322.5 399.1,293.7 410.0,308.1 420.9,315.3 431.7,286.6 442.6,315.3 453.5,315.3 464.3,315.3 475.2,336.8 486.1,329.6 496.9,344.0 507.8,329.6 518.7,329.6 529.5,329.6 540.4,336.8 551.3,336.8 562.1,322.5 573.0,336.8 583.9,344.0 594.7,344.0 605.6,344.0 616.5,344.0 627.3,344.0 638.2,344.0 649.1,344.0 659.9,344.0 670.8,344.0 681.7,344.0 692.5,344.0 703.4,344.0 714.3,344.0 725.1,344.0 736.0,344.0' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>Прошли проверку</text>
+<line x1='236.0' x2='262.0' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='268.0' y='51' font-size='12.5'>Теряются с участком</text>
+</svg>

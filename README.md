@@ -13,6 +13,7 @@
 | Рендер | OpenGL 3.0 (работает и без видеокарты): пламя как чёрное тело, экранная вода, светящаяся плазма |
 
 **Документация** — физика, численные методы, код и проверка по главам: [docs/README.md](docs/README.md).
+**Книга о контактах** — вывод формул, разбор PDF, связь с кодом и границы проверенных результатов: [docs/book/README.md](docs/book/README.md).
 **Замысел** — для кого это, мерка качества (граница Крамера–Рао) и карта пути: [docs/00-vision.md](docs/00-vision.md).
 
 ## Быстрый старт
@@ -23,6 +24,11 @@ cmake -S . -B build-core -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-core -j
 build-core/rf_tests
 ```
+
+Стандартные испытания твёрдых тел (колонны 100/200, невыпуклые цепи и песочница, кучи, CCD):
+`python3 tools/run_rigid_standard.py --build-dir build-core --threads 4`.
+Скрипт сохраняет отчёт, JUnit и покадровые CSV; критерии и исходные отказы —
+в [описании набора](docs/15-rigid-standard-tests.md).
 
 Редактор с окном, панелями и графиками — отдельный репозиторий [phys_realflow_editor](https://github.com/werasaimon/phys_realflow_editor),
 в котором этот SDK подключён git-сабмодулем (`git clone --recurse-submodules`).

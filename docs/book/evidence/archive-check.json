@@ -1,0 +1,19 @@
+{
+  "shaken": {
+    "late10_mean_kinetic_j": 6.762505317304493e-06,
+    "max_broken": 0.0
+  },
+  "control": {
+    "late10_mean_kinetic_j": 1.391806995721797e-05,
+    "max_broken": 0.0
+  },
+  "fine": {
+    "late10_mean_kinetic_j": 3.675076908985025e-08,
+    "max_broken": 0.0
+  },
+  "scope": "archived values reread, long dynamics not rerun in this checkpoint",
+  "runs": 11,
+  "frames": 39840,
+  "sat_checkpoints": 675,
+  "sampled_max_child_sat_depth_mm": 0.10658923
+}

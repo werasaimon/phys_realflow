@@ -84,6 +84,21 @@ public:
     }
 };
 
+// A reproducible mixed compound drop, in the spirit of Bullet's convex/mesh benchmarks and
+// Jolt's compound-shape samples. These are actual parts, not convex hulls closing their holes.
+class SandboxScene : public Scene {
+public:
+    void build(Simulation& sim) override {
+        sim.useRigidArena(AABB({-2, 0, -2}, {2, 5, 2}));
+        const std::shared_ptr<const CompoundShape> shapes[] = {tableShape(), teapotShape(), ringShape(), cupShape()};
+        for (int i = 0; i < 24; ++i) {
+            const Vector3 p(-1.2f + 0.8f * float(i % 4), 1.2f + 0.9f * float(i / 12), -0.8f + 0.8f * float((i / 4) % 3));
+            const Quaternion q = Quaternion::fromAxisAngle(normalize(Vector3(1, 0.3f, 0.7f)), 0.37f * float(i));
+            sim.rigid.addCompound(shapes[i % 4], p, q, 600.0f, {0.3f + 0.2f * float(i % 4), 0.65f, 0.8f});
+        }
+    }
+};
+
 class TerrainModelsScene : public Scene {
 public:
     void configure(Simulation& sim) override { configureTerrain(sim); }
@@ -102,6 +117,7 @@ public:
 } // namespace
 
 void addNonConvexSamples(std::vector<SampleEntry>& out) {
+    out.push_back({Preset::RigidSandbox, "Твёрдые тела", "Стандартные тесты: песочница из 24 невыпуклых тел", [] { return std::unique_ptr<Scene>(new SandboxScene); }});
     out.push_back({Preset::RigidRace, "Твёрдые тела", "Скатывание: шар, цилиндр и колесо из 55 ящиков", [] { return std::unique_ptr<Scene>(new RaceScene); }});
     out.push_back({Preset::RigidBowl, "Твёрдые тела", "Невыпуклые: чаша и 60 тел", [] { return std::unique_ptr<Scene>(new BowlScene); }});
     out.push_back({Preset::RigidTables, "Твёрдые тела", "Невыпуклые: стопка из 8 столов", [] { return std::unique_ptr<Scene>(new TablesScene); }});

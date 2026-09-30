@@ -1,0 +1,167 @@
+{
+  "utc": "2026-09-30T20:09:29.091710+00:00",
+  "baseline_commit": "3d9f69f0a058a96a7a7a056895d9a7c1cf2d7fe5",
+  "build": {
+    "type": "Release",
+    "RF_WERROR": true,
+    "RF_STRICT_FP": false
+  },
+  "resource_limits": {
+    "threads": 2,
+    "cpu_affinity": [
+      8,
+      9
+    ],
+    "nice": 15,
+    "address_space_bytes": 2147483648
+  },
+  "suites": [
+    {
+      "name": "default",
+      "filter": null,
+      "tests": 171,
+      "failures": 1,
+      "seconds": 706.711,
+      "failed_cases": [
+        "particles vs many bodies: the world tree"
+      ],
+      "maximum_rss_kib": 974924,
+      "exit_code": 1,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-book-check-20260930/default-resources.txt",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "build-core/rf_tests"
+      ]
+    },
+    {
+      "name": "particle-repeat",
+      "filter": "particles vs many bodies:",
+      "tests": 1,
+      "failures": 0,
+      "seconds": 7.723,
+      "failed_cases": [],
+      "maximum_rss_kib": 21224,
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-book-check-20260930/particle-repeat-resources.txt",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "120s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "build-core/rf_tests"
+      ]
+    },
+    {
+      "name": "standard",
+      "filter": "standard rigid:",
+      "tests": 35,
+      "failures": 0,
+      "seconds": 504.879,
+      "failed_cases": [],
+      "maximum_rss_kib": 39852,
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-book-check-20260930/standard-resources.txt",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "build-core/rf_tests"
+      ]
+    }
+  ],
+  "book_math": {
+    "passed": 6,
+    "scope": "book examples only",
+    "results": {
+      "angular_lock": {
+        "old_gain_j": 0.0011337868480725624,
+        "scalar_impulse": 0.0
+      },
+      "sat_containment": {
+        "overlap_length": 2,
+        "separating_shift": 3
+      },
+      "rotation_arc": {
+        "samples": 404,
+        "bound_for_0_2_rad_m": 0.0005000000000000001
+      },
+      "friction_square": {
+        "corner_to_circle_ratio": 1.4142135623730951
+      },
+      "inelastic_chain": {
+        "energy_before_j": 4.5,
+        "energy_after_j": 0.75
+      },
+      "pair_momentum": {
+        "angular_momentum_change": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "projection_cases": 5,
+  "readability": "PASS: 174 files, functions <= 60 lines, explanatory headers",
+  "binary_sha256": "b9ee31faef016b1e46c0280bbb74767e27d8ab31e3685e4647aa78c03da66c2f",
+  "source_sha256": {
+    "CMakeLists.txt": "fa0541c4479606b448a9afcff41eeab35af3aec227772c597ff5f479520fa69a",
+    "tests/main.cpp": "ecb54ad5de695d76f5b79af03a65f5d3f3bad5edab4bb9518062acaed8a39741",
+    "tests/HangingTorusTests.cpp": "64cf2008409d43f2a68fb7caa61e9b2fad46da89209b4564f525f41a2b0b68ab",
+    "src/rigid/ContactSolver.cpp": "ebb334edcec2e923482b75012c0d701568b26fc707df4982c579ca014bf0a85c",
+    "src/rigid/RigidWorld.h": "1168f4f3ae16482bbcd770b6ed2cea6d640277e94d62f31eaa87904886f2045c",
+    "src/rigid/ShockPropagation.cpp": "6313a45ab1d4f27261804899d426ea84874aadf102407caf91264b8d3da13500",
+    "src/rigid/TimeOfImpact.cpp": "76f069cf8acccb46eeb683b44589daa2a4e0f71b9d73310f6698242f1896a69f",
+    "src/rigid/TimeOfImpact.h": "41a2c8afc8504bf8863c236e6e391b169938fd0848e95a0f6e7d0696f3f276aa",
+    "tools/check_book_math.py": "18e54f6f068d1867762108fde980cea5b30e01185361668031042afe61cc95b0",
+    "tools/contact_projection_reference.py": "dd1158a787164bf5046ed2cc225b9c0fd8b99cdfd6a4d839951003dd0cdadd00",
+    "samples/TorusChainsScene.cpp": "8cbd0aa6ffc2e9461f5d66e0ffd11c777afaf83ca5d6bf84756116e9b6e64456",
+    "samples/HangingTorusScene.cpp": "abf0f01b7a977b529583097b1b237b06251da3074548f346533494d3b1914d7b"
+  },
+  "limitations": [
+    "Original default run has one timing failure; isolated repeat does not erase it.",
+    "Long relaxation A/B and external-engine benchmarks were not rerun.",
+    "Strict-FP golden hash, sanitizers, all-machine-core and cross-platform tests were not run.",
+    "No universal nonpenetration or exact equilibrium guarantee."
+  ]
+}

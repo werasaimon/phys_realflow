@@ -1,0 +1,32 @@
+{
+  "passed": 6,
+  "scope": "book examples only",
+  "results": {
+    "angular_lock": {
+      "old_gain_j": 0.0011337868480725624,
+      "scalar_impulse": 0.0
+    },
+    "sat_containment": {
+      "overlap_length": 2,
+      "separating_shift": 3
+    },
+    "rotation_arc": {
+      "samples": 404,
+      "bound_for_0_2_rad_m": 0.0005000000000000001
+    },
+    "friction_square": {
+      "corner_to_circle_ratio": 1.4142135623730951
+    },
+    "inelastic_chain": {
+      "energy_before_j": 4.5,
+      "energy_after_j": 0.75
+    },
+    "pair_momentum": {
+      "angular_momentum_change": [
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

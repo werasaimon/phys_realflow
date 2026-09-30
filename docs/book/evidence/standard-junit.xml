@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="35" failures="0" time="504.879">
+  <testcase classname="rf_tests" name="standard rigid: sample columns 100 and 200" time="0.659"/>
+  <testcase classname="rf_tests" name="standard rigid: sample chains of 14 interlocked rings" time="14.692"/>
+  <testcase classname="rf_tests" name="standard rigid: mixed non-convex sandbox, sleep on and off" time="3.363"/>
+  <testcase classname="rf_tests" name="standard rigid: new samples give the same state on 1, 2 and all threads" time="15.301"/>
+  <testcase classname="rf_tests" name="standard rigid: dense piles repeat on 1, 2 and all threads" time="60.580"/>
+  <testcase classname="rf_tests" name="standard rigid: torus chains: linking meter" time="3.394"/>
+  <testcase classname="rf_tests" name="standard rigid: torus chains: loaded, released and suspended, 120 tori" time="218.543"/>
+  <testcase classname="rf_tests" name="standard rigid: torus chains: determinism on 1, 2 and all threads" time="129.298"/>
+  <testcase classname="rf_tests" name="standard rigid: short torus chain survives mouse pulls" time="6.228"/>
+  <testcase classname="rf_tests" name="standard rigid: short torus chain sleeps and wakes on re-grab" time="27.171"/>
+  <testcase classname="rf_tests" name="standard rigid: torus chains: intersecting stationary pair retains contacts" time="0.005"/>
+  <testcase classname="rf_tests" name="standard rigid: stack of 100 boxes dropped from 1 cm" time="0.210"/>
+  <testcase classname="rf_tests" name="standard rigid: stack of 200 boxes dropped from 1 cm" time="0.535"/>
+  <testcase classname="rf_tests" name="standard rigid: rigid perf: 1000 cubes fall" time="1.583"/>
+  <testcase classname="rf_tests" name="standard rigid: joints: ball, hinge+motor, slider, fixed, distance" time="0.037"/>
+  <testcase classname="rf_tests" name="standard rigid: continuous collision (GJK conservative advancement)" time="0.002"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD between moving bodies (no superposition)" time="0.014"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD for a fast-spinning plate" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD bounds contain the full rotation arc" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: floor contacts retain the loaded support region" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: floor contacts include the extreme hull witness" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: shock pass with a shared moving support is deterministic" time="0.076"/>
+  <testcase classname="rf_tests" name="standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop" time="0.204"/>
+  <testcase classname="rf_tests" name="standard rigid: 100 non-convex teapots" time="4.536"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: the parts of a ring and a cup keep the hole and the hollow" time="0.237"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a chain of rings hangs interlocked" time="0.296"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a ring dropped over a peg slides down to the floor" time="0.064"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a ball and boxes dropped into a cup land on its bottom" time="0.142"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: 60 bodies poured into a bowl stay in it and sleep" time="0.952"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a stack of eight tables stands and sleeps" time="0.024"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: six cups nest as their parts allow and sleep" time="3.718"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: teapots, bunnies and rings on the terrain mesh" time="5.689"/>
+  <testcase classname="rf_tests" name="standard rigid: Newton's cradle on the floor: the hit passes down the row" time="0.003"/>
+  <testcase classname="rf_tests" name="standard rigid: terrain: 150 bodies on a static mesh of 51 200 triangles" time="4.900"/>
+  <testcase classname="rf_tests" name="standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps" time="2.423"/>
+</testsuite>

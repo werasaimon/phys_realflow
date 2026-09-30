@@ -13,9 +13,10 @@ namespace rf {
 // the ground up, each level against a frozen support, so the weight of a tall stack reaches the
 // floor in one sweep instead of one level per iteration.
 //
-// In parallel within a level, where it is safe: a one-sided push writes only its upper body (the
-// support below is frozen, its level done), so the pushes of one level whose upper bodies differ
-// run at the same time - in a pile of a thousand cubes a level holds about a hundred of them. The
+// A batch with distinct upper bodies is parallel only if every solve really is one-sided at
+// execution time. A moving support can trigger a two-sided fallback and become writable: then
+// preserve the batch's original serial order to avoid racing on a shared lower body. When all
+// solves are one-sided, the lower bodies remain unchanged throughout the batch. The
 // two-sided solves of bodies on the same level do reach each other (a row of touching balls passes
 // a hit along it); they keep their ground-up order, one by one, after the level's pushes - solved
 // in coloured batches instead, a Newton's cradle of touching balls gained 4 % momentum. The batches
@@ -28,7 +29,8 @@ void RigidWorld::propagateShock() {
         shockFrictionPass_ = params.shockFriction && pass == params.shockIterations - 1; // once per step
         for (int b = 0; b < shockBatchCount_; ++b) {
             const std::vector<int>& batch = shockBatches_[size_t(b)];
-            if (!shockBatchSerial_[size_t(b)] && batch.size() >= kShockParallelBatch)
+            if (!shockBatchSerial_[size_t(b)] && batch.size() >= kShockParallelBatch &&
+                std::all_of(batch.begin(), batch.end(), [&](int i) { return oneSidedShock(manifolds_[size_t(i)]); }))
                 parallelFor(int(batch.size()), [&](int k) { solveManifoldShock(manifolds_[size_t(batch[size_t(k)])]); }, 8);
             else
                 for (int i : batch) solveManifoldShock(manifolds_[size_t(i)]);
@@ -174,7 +176,7 @@ void RigidWorld::computeLevels() {
 // upper body nor slides along the contact faster than this [m/s].
 constexpr float kRestingSupport = 0.1f;
 
-void RigidWorld::solveManifoldShock(Manifold& m) {
+bool RigidWorld::oneSidedShock(const Manifold& m) const {
     // Level of each side: static environment counts as -1 (always "below").
     const int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
     const int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
@@ -199,7 +201,11 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
         const bool above = dot(upperBody.pos - s.pos, params.gravity) < 0;
         resting = above && into < kRestingSupport && length2(v - toUpper * into) < kRestingSupport * kRestingSupport;
     }
-    if (la == lb || !resting) { // two-sided - except for an impact, whose separation (applied by
+    return la != lb && resting;
+}
+
+void RigidWorld::solveManifoldShock(Manifold& m) {
+    if (!oneSidedShock(m)) { // two-sided - except for an impact, whose separation (applied by
         // applyRestitution just before) a two-sided re-solve would take back; shock propagation
         // is for resting support, not for a bullet meeting a box in the air.
         bool impact = false;
@@ -207,6 +213,9 @@ void RigidWorld::solveManifoldShock(Manifold& m) {
         if (!impact) solveManifold(m);
         return;
     }
+    const int la = bodies_[m.a].invMass == 0 ? -1 : levels_[m.a];
+    const int lb = (m.b < 0 || bodies_[m.b].invMass == 0) ? -1 : levels_[m.b];
+    const bool upperIsA = la > lb;
     RigidBody& upper = bodies_[size_t(upperIsA ? m.a : m.b)];
     float pushes[4] = {0, 0, 0, 0};
     const int np = pushUpperOffSupport(m, upperIsA, pushes);

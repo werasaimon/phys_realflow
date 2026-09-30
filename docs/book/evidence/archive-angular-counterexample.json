@@ -1,0 +1,46 @@
+{
+  "effective_inverse_inertia": [
+    [
+      1.0,
+      0.4,
+      0.0
+    ],
+    [
+      0.4,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "physically_admissible_principal_inertia": [
+    0.7142857142857143,
+    1.0,
+    1.6666666666666667
+  ],
+  "angular_velocity": [
+    0.1,
+    0.0,
+    0.0
+  ],
+  "constraint_normal": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "old_impulse": [
+    0.0,
+    0.04761904761904762,
+    0.0
+  ],
+  "old_energy_gain_j": 0.0011337868480725626,
+  "correct_impulse": [
+    0,
+    0,
+    0
+  ],
+  "notes": "zero initial normal spin and zero accumulated impulse: exact 1D friction must do nothing"
+}

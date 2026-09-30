@@ -29,6 +29,21 @@ void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
 void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
 
 int main() {
+    // Extended stress scenarios are opt-in, like the long fire and gas benchmarks below.
+    // RF_TEST="standard rigid:" includes both these targets and the existing rigid checks.
+    if (const char* only = std::getenv("RF_TEST"); only && *only) {
+        run("standard rigid: sample columns 100 and 200", testStandardSampleColumns);
+        run("standard rigid: sample chains of 14 interlocked rings", testStandardSampleChains);
+        run("standard rigid: mixed non-convex sandbox, sleep on and off", testStandardSandbox);
+        run("standard rigid: new samples give the same state on 1, 2 and all threads", testStandardRigidDeterminism);
+        run("standard rigid: dense piles repeat on 1, 2 and all threads", testDensePileDeterminism);
+        run("standard rigid: torus chains: linking meter", testTorusLinkingMeter);
+        run("standard rigid: torus chains: loaded, released and suspended, 120 tori", testTorusChainStress);
+        run("standard rigid: torus chains: determinism on 1, 2 and all threads", testTorusChainDeterminism);
+        run("standard rigid: short torus chain survives mouse pulls", testHangingTorusMouse);
+        run("standard rigid: short torus chain sleeps and wakes on re-grab", testHangingTorusSleep);
+    }
+    run("standard rigid: torus chains: intersecting stationary pair retains contacts", testTorusContactStarvation);
     run("probe: channels, counters, timers, debug drawing", testProbe);
     run("math: vectors, matrices, quaternions, N x N solvers", testMath);
     run("math: tensors - Einstein summation vs loops, raise / lower / trace, refusals", testTensorEinstein);
@@ -43,30 +58,34 @@ int main() {
     run("dynamic AABB tree (insert, move, remove, query)", testAABBTree);
     run("broad phase BVH, SAP, AABB tree == brute force", testBroadPhase);
     run("tall stack (10 boxes)", testTallStack);
-    run("stack of 100 boxes dropped from 1 cm", testStack100);
-    run("stack of 200 boxes dropped from 1 cm", testStack200);
-    run("rigid perf: 1000 cubes fall", testRigidPerfThousandCubes);
+    run("standard rigid: stack of 100 boxes dropped from 1 cm", testStack100);
+    run("standard rigid: stack of 200 boxes dropped from 1 cm", testStack200);
+    run("standard rigid: rigid perf: 1000 cubes fall", testRigidPerfThousandCubes);
     run("ray cast + mouse joint", testRaycastGrab);
-    run("joints: ball, hinge+motor, slider, fixed, distance", testJoints);
-    run("continuous collision (GJK conservative advancement)", testCcd);
-    run("CCD between moving bodies (no superposition)", testCcdBodies);
+    run("standard rigid: joints: ball, hinge+motor, slider, fixed, distance", testJoints);
+    run("standard rigid: continuous collision (GJK conservative advancement)", testCcd);
+    run("standard rigid: CCD between moving bodies (no superposition)", testCcdBodies);
     run("GJK robustness on thin boxes", testGjkRandomThin);
-    run("CCD for a fast-spinning plate", testCcdSpinningPlate);
+    run("standard rigid: CCD for a fast-spinning plate", testCcdSpinningPlate);
+    run("standard rigid: CCD bounds contain the full rotation arc", testCcdSweptBounds);
+    run("standard rigid: floor contacts retain the loaded support region", testWallSupportRegion);
+    run("standard rigid: floor contacts include the extreme hull witness", testWallExtremeWitness);
+    run("standard rigid: shock pass with a shared moving support is deterministic", testShockSharedSupport);
     run("long beam onto cubes (no pass-through)", testBeamOverCubes);
     run("hard contacts: edge-edge, rotated faces, 1:1000, deep EPA vs SAT", testHardContacts);
-    run("hard contacts in motion: triangle seams, Jenga tower, edge drop", testHardContactDynamics);
+    run("standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop", testHardContactDynamics);
     run("convex hull + convex decomposition (teapot)", testConvexHullAndDecomposition);
-    run("100 non-convex teapots", testTeapots);
-    run("non-convex: the parts of a ring and a cup keep the hole and the hollow", testNonConvexDecomposition);
+    run("standard rigid: 100 non-convex teapots", testTeapots);
+    run("standard rigid: non-convex: the parts of a ring and a cup keep the hole and the hollow", testNonConvexDecomposition);
     run("non-convex: a ring lying on the floor does not sink", testRingOnFloor);
-    run("non-convex: a chain of rings hangs interlocked", testChainOfRings);
-    run("non-convex: a ring dropped over a peg slides down to the floor", testRingOverPeg);
-    run("non-convex: a ball and boxes dropped into a cup land on its bottom", testDropIntoCup);
+    run("standard rigid: non-convex: a chain of rings hangs interlocked", testChainOfRings);
+    run("standard rigid: non-convex: a ring dropped over a peg slides down to the floor", testRingOverPeg);
+    run("standard rigid: non-convex: a ball and boxes dropped into a cup land on its bottom", testDropIntoCup);
     run("non-convex: a ball, a cylinder and a wheel of boxes roll down a slope, each by its law", testRollingRace);
-    run("non-convex: 60 bodies poured into a bowl stay in it and sleep", testBowlHoldsPour);
-    run("non-convex: a stack of eight tables stands and sleeps", testStackOfTables);
-    run("non-convex: six cups nest as their parts allow and sleep", testNestedCups);
-    run("non-convex: teapots, bunnies and rings on the terrain mesh", testModelsOnTerrain);
+    run("standard rigid: non-convex: 60 bodies poured into a bowl stay in it and sleep", testBowlHoldsPour);
+    run("standard rigid: non-convex: a stack of eight tables stands and sleeps", testStackOfTables);
+    run("standard rigid: non-convex: six cups nest as their parts allow and sleep", testNestedCups);
+    run("standard rigid: non-convex: teapots, bunnies and rings on the terrain mesh", testModelsOnTerrain);
     run("particles rest", testSPH);
     run("particles floating", testFloating);
     run("soft bodies and cloth (unified particles)", testSoftBodyAndCloth);
@@ -115,7 +134,7 @@ int main() {
         run("determinism: the fire burns the same threads on 1, 2 and all threads", testFireAcrossThreads);
     run("benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)", testCylinderStrouhal);
     run("Noether: energy, momentum and angular momentum of rigid bodies", testNoetherRigid);
-    run("Newton's cradle on the floor: the hit passes down the row", testNewtonCradle);
+    run("standard rigid: Newton's cradle on the floor: the hit passes down the row", testNewtonCradle);
     run("grid convergence of the gas solver (Richardson order)", testGridConvergence);
     run("gas: multigrid pressure matches PCG and converges in few iterations", testMultigridPressure);
     run("gas: advection-reflection keeps the inviscid Taylor-Green energy", testAdvectionReflection);
@@ -123,7 +142,7 @@ int main() {
     if (const char* only = std::getenv("RF_TEST"); only && std::strstr(only, "benchmark: gas pressure"))
         run("benchmark: gas pressure, Jacobi PCG vs multigrid PCG, ms per frame", testPressureBenchmark);
     run("benchmark: dam break front vs Martin & Moyce 1952", testDamBreakMartinMoyce);
-    run("terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
+    run("standard rigid: terrain: 150 bodies on a static mesh of 51 200 triangles", testTerrain);
     run("Voronoi fracture: cells fill the body, convex and watertight", testVoronoiFracture);
     run("particles vs many bodies: the world tree", testParticlesManyBodies);
     run("rigid: destroy one body, reuse its slot", testDestroyBody);
@@ -131,7 +150,7 @@ int main() {
     run("rigid: restitution 0 - a dropped body stops at the touch", testDeadLanding);
     run("rigid: a cube dropped flat lands without turning or sliding", testFlatLanding);
     run("rigid: a barrel touching a wide floor gets the floor's normal and its true depth", testBarrelTouchesFloor);
-    run("rigid: a pile of 50 barrels settles, stands still and sleeps", testBarrelPileSettles);
+    run("standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps", testBarrelPileSettles);
     run("particles: remove one group (soft body, liquid)", testRemoveParticleGroup);
     // relativity: geodesics in Kerr, light bending, the shadow of a black hole
     run("geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)", testGeodesicInvariants);

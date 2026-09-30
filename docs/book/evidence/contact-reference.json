@@ -1,0 +1,35 @@
+{
+  "scope": "fixed poses, touching contacts, frictionless plastic impulses, isotropic inertias",
+  "closed_chain": {
+    "energy_before_j": 4.5,
+    "energy_after_j": 0.75,
+    "dissipated_j": 3.75,
+    "min_normal_velocity_m_s": 0.0
+  },
+  "duplicate_constraint": {
+    "energy_before_j": 4.5,
+    "energy_after_j": 0.75,
+    "dissipated_j": 3.75,
+    "min_normal_velocity_m_s": 0.0
+  },
+  "glancing": {
+    "energy_before_j": 0.5,
+    "energy_after_j": 0.2647058823529412,
+    "dissipated_j": 0.23529411764705882,
+    "min_normal_velocity_m_s": 0.0
+  },
+  "transformed_glancing": {
+    "energy_before_j": 0.5,
+    "energy_after_j": 0.26470588235294124,
+    "dissipated_j": 0.23529411764705882,
+    "min_normal_velocity_m_s": 0.0
+  },
+  "gravity_supported_stack": {
+    "energy_before_j": 0.0008019675000000004,
+    "energy_after_j": 1.8055593228630336e-35,
+    "dissipated_j": 0.0008019675000000002,
+    "min_normal_velocity_m_s": -6.938893903907228e-18,
+    "support_impulse_ns": 0.09810000000000003,
+    "gravity_impulse_ns": -0.0981
+  }
+}

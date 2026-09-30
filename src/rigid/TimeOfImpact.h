@@ -2,11 +2,12 @@
 // Continuous collision detection: conservative advancement (B. Mirtich, 1996) on GJK distances.
 //
 // The motion of each shape over the step is parameterised by s in [0, 1]: position linear, the
-// orientation by the exponential map of its rotation vector. At the current s GJK gives the exact
+// orientation by the exponential map of its rotation vector. At the current s GJK estimates the
 // distance d between the posed shapes; the relative motion cannot close a gap faster than
 //     bound = |dP_rel| + |dTheta_A| r_A + |dTheta_B| r_B      (per unit s),
-// so s can safely advance by d / bound. The loop stops when d < tolerance (time of impact) or
-// s passes 1 (no collision within the step). Works for every convex shape (support mapping).
+// so an exact distance permits advancing by d / bound. A finite GJK iterate need not be a lower
+// bound: this implementation is not a certified intersection-free trajectory algorithm. The
+// remaining advancement/budget and multi-body clamping limitations are recorded in docs/22.
 
 #include "rigid/GjkEpa.h"
 
@@ -36,6 +37,9 @@ struct ToiResult {
     float s = 1;        // fraction of the step at the time of impact
     int iterations = 0;
 };
+
+// Contains the entire interpolated motion, including the arc between the endpoint orientations.
+AABB sweptBounds(const SweptPose& sweep, float tolerance = 0);
 
 // Time of impact between two swept convex shapes (either may be static: p0 == p1, dTheta == 0).
 // Pairs already overlapping at s = 0 report no hit (resting contacts belong to the discrete solver).
