@@ -1,0 +1,6 @@
+  eight tori, mouse pull/release, 6 s: first break -1, tip excursion 276.0 mm, sampled peak overlap 0.102 mm; step median/p95 14.492/18.700 ms
+[ OK ] standard rigid: short torus chain survives mouse pulls (5438 ms)
+  seven rings sleep 8.800 / 8.600 s after release; re-grab wakes all, tip moves 339.8 mm
+[ OK ] standard rigid: short torus chain sleeps and wakes on re-grab (23997 ms)
+
+ALL PASSED

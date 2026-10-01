@@ -1,0 +1,16 @@
+{
+  "tested_commit": "ba5f34700f61907d4169ce8c31a43728816622dc",
+  "note": "SDK unchanged since the 191/191 native and 5/5 strict-FP verification recorded in nut-bolt-20261001. This recheck runs five native cases and two saved-pose SAT audits.",
+  "sha256": {
+    "src/rigid/ContactSolver.cpp": "75a84440a9f4fbeeaf2318e24d3ddf0e07d1405d0e5fb5da4e90d326aa7933a9",
+    "src/rigid/RigidStep.cpp": "64c8d8d72865275e482d54759d6728bde1f0891196d484d62841be85224af277",
+    "src/rigid/Joints.cpp": "4710d09ce7fbdd773c0ec31734acc7d46b3b364eebae5f4c7e89a6f96e185367",
+    "samples/ChainWheelScene.cpp": "0d1b537bf5d933fc7fcd811be7e1aaf687bbbe59691740d81255e724ab521f3c",
+    "samples/HangingTorusScene.cpp": "abf0f01b7a977b529583097b1b237b06251da3074548f346533494d3b1914d7b",
+    "tests/ChainWheelTests.cpp": "31c053e7ee363a40d6bda603671b8434e13f98a4fc2c2208ed51e8aa5125ee6c",
+    "tests/HangingTorusTests.cpp": "64cf2008409d43f2a68fb7caa61e9b2fad46da89209b4564f525f41a2b0b68ab",
+    "build-core/rf_tests": "1cebff5412686767fe598ac1f843e8dc20735c0b1832d515a9fe88c6bb61651b",
+    "/tmp/phys-chain-recheck-20261001/audit": "fe42697ef2e0f18c0cf956436b70cc81d70c9df0e51301cfc2d1081bc8c61456",
+    "/tmp/phys-realflow-editor-standard-build/realflow": "f80f631154b0affa43d895e61ae2161220ba1af38c1e3a2dbbb0c407e00ec523"
+  }
+}

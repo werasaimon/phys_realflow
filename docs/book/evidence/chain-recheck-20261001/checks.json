@@ -1,0 +1,170 @@
+[
+  {
+    "name": "chain-wheel",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/chain-wheel.resources",
+      "build-core/rf_tests"
+    ],
+    "pattern": "chain wheel",
+    "exit_code": 0,
+    "seconds": 24.59248185699107,
+    "junit": {
+      "name": "rf_tests",
+      "tests": "2",
+      "failures": "0",
+      "time": "24.585"
+    }
+  },
+  {
+    "name": "chain-drive",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/chain-drive.resources",
+      "build-core/rf_tests"
+    ],
+    "pattern": "chain drive",
+    "exit_code": 0,
+    "seconds": 46.42800061398884,
+    "junit": {
+      "name": "rf_tests",
+      "tests": "1",
+      "failures": "0",
+      "time": "46.420"
+    }
+  },
+  {
+    "name": "hanging-chain",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/hanging-chain.resources",
+      "build-core/rf_tests"
+    ],
+    "pattern": "short torus chain",
+    "exit_code": 0,
+    "seconds": 29.443415243993513,
+    "junit": {
+      "name": "rf_tests",
+      "tests": "2",
+      "failures": "0",
+      "time": "29.435"
+    }
+  },
+  {
+    "name": "audit-build",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/audit-build.resources",
+      "c++",
+      "-std=c++17",
+      "-O3",
+      "-Isrc",
+      "-I.",
+      "tools/TorusGeometryAudit.cpp",
+      "build-core/librfsamples.a",
+      "build-core/librfcore.a",
+      "-pthread",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/audit"
+    ],
+    "pattern": null,
+    "exit_code": 0,
+    "seconds": 2.3250694760354236
+  },
+  {
+    "name": "wheel-sat",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/wheel-sat.resources",
+      "/tmp/phys-chain-recheck-20261001/audit",
+      "/tmp/phys-chain-recheck-20261001/wheel-sat",
+      "/tmp/phys-chain-recheck-20261001/chain-wheel-poses.csv",
+      "-2",
+      "41"
+    ],
+    "pattern": null,
+    "exit_code": 0,
+    "seconds": 1.742983653966803
+  },
+  {
+    "name": "drive-sat",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-recheck-20261001/drive-sat.resources",
+      "/tmp/phys-chain-recheck-20261001/audit",
+      "/tmp/phys-chain-recheck-20261001/drive-sat",
+      "/tmp/phys-chain-recheck-20261001/chain-drive-poses.csv",
+      "-2",
+      "42"
+    ],
+    "pattern": null,
+    "exit_code": 0,
+    "seconds": 3.2438522140146233
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "wheel-sat": {
+    "checkpoints": 14,
+    "pairs_per_pose": 136,
+    "initial_depth_m": 0.0,
+    "max_child_depth_m": 0.00010048895
+  },
+  "drive-sat": {
+    "checkpoints": 21,
+    "pairs_per_pose": 136,
+    "initial_depth_m": 0.0,
+    "max_child_depth_m": 0.0001003656
+  },
+  "pose_repeats": {
+    "wheel": {
+      "byte_equal": true,
+      "sha256": "9b1327570ea5717c368535c49543d661c915724993ca41a6f843db6f96808c72",
+      "reference": "docs/book/evidence/chain-wheel-20261001/chain-wheel-poses.csv"
+    },
+    "drive": {
+      "byte_equal": true,
+      "sha256": "e654d84e7b6aa96719f86df21ee416b5349d0b80a9389919c07f67cb79e63c2a",
+      "reference": "docs/book/evidence/nut-bolt-20261001/chain-drive-poses.csv"
+    }
+  },
+  "tests": 5,
+  "failures": 0
+}

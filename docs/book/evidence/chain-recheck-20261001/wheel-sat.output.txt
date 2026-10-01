@@ -1,0 +1,1 @@
+Analytic checks PASS; sampled geometry written. This is not swept CCD or an exact union penetration depth.

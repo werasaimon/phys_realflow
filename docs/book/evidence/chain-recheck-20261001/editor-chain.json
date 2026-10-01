@@ -1,0 +1,24 @@
+{
+  "pid": 1729124,
+  "window": "0x6c00007",
+  "preset": 40,
+  "binary": "/tmp/phys-realflow-editor-standard-build/realflow",
+  "log": "/tmp/phys-chain-recheck-20261001/editor-chain.log",
+  "screenshots": [
+    "/tmp/phys-chain-recheck-20261001/editor-chain-1.png",
+    "/tmp/phys-chain-recheck-20261001/editor-chain-2.png"
+  ],
+  "running": true,
+  "resources": [
+    {
+      "VmHWM": "184900 kB",
+      "VmRSS": "183856 kB",
+      "Threads": "23"
+    },
+    {
+      "VmHWM": "188820 kB",
+      "VmRSS": "188820 kB",
+      "Threads": "23"
+    }
+  ]
+}

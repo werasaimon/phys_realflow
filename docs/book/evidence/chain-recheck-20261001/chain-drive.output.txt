@@ -1,0 +1,4 @@
+  driven chain: 20 s / 2 cycles, minimum lift 69.13 mm, return error 0.165 mm, hold speed 0.000059 rad/s, sampled depth 0.101 mm
+[ OK ] standard rigid: chain drive lifts, holds and reverses (46420 ms)
+
+ALL PASSED
