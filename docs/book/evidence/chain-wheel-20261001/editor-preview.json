@@ -1,0 +1,20 @@
+{
+  "pid": 1682834,
+  "window": "0x6e00007",
+  "preset": 41,
+  "binary": "/tmp/phys-realflow-editor-standard-build/realflow",
+  "log": "/tmp/phys-chain-wheel-20261001/editor-chain.log",
+  "screenshots": [
+    "/tmp/phys-chain-wheel-20261001/editor-chain-1.png",
+    "/tmp/phys-chain-wheel-20261001/editor-chain-2.png"
+  ],
+  "running": true,
+  "visual_verification": {
+    "title": "Цепь на неподвижной звёздочке: 16 торов и груз",
+    "simulation_times_s": [
+      1.82,
+      3.6
+    ],
+    "note": "Window was shown and advanced. It was no longer running at the later process check; GUI memory was not measured."
+  }
+}

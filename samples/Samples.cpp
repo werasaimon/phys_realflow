@@ -22,6 +22,8 @@ const std::vector<SampleEntry>& samples() {
         addNonConvexSamples(v);
         addTorusChainSamples(v);
         addHangingTorusSample(v);
+        addChainWheelSample(v);
+        addNutBoltSample(v);
         std::sort(v.begin(), v.end(), [](const SampleEntry& a, const SampleEntry& b) { return a.id < b.id; });
         for (size_t i = 0; i < v.size(); ++i)
             if (int(v[i].id) != int(i)) throw std::logic_error("samples(): a Preset without a scene, or registered twice");

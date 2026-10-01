@@ -88,6 +88,12 @@ public:
 // Jolt's compound-shape samples. These are actual parts, not convex hulls closing their holes.
 class SandboxScene : public Scene {
 public:
+    void configure(Simulation& sim) override {
+        // The cups have 4 mm walls: the default 4 mm slop is too large for this scene.
+        // Half-step and tolerance controls: docs/book/15-contact-convergence.md.
+        sim.rigid.params.substeps = 20;
+        sim.rigid.params.slop = 0.0001f;
+    }
     void build(Simulation& sim) override {
         sim.useRigidArena(AABB({-2, 0, -2}, {2, 5, 2}));
         const std::shared_ptr<const CompoundShape> shapes[] = {tableShape(), teapotShape(), ringShape(), cupShape()};

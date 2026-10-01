@@ -1,0 +1,5 @@
+  nut: lift 2.624 mm, return 1.294 mm, pitch error 0.037 mm, sampled depth 0.052 mm, unexplained gain 0 J
+  FAIL /home/wera_n/GIT/PHYSICS/phys_realflow/tests/NutBoltTests.cpp:89: lift>0.003f && returnError<0.0015f && worstPitch<0.0015f  contact did not follow pitch within backlash
+[FAIL] standard rigid: nut bolt lifts and reverses by thread contact (86718 ms)
+
+1 FAILURE(S)

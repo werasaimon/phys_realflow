@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="0" time="5.099">
+  <testcase classname="rf_tests" name="presets" time="5.099"/>
+</testsuite>

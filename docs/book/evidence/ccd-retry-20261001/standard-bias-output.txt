@@ -1,0 +1,130 @@
+  column-100: median 0.122 ms, active median 4.690 ms, p95 4.690 ms; asleep 100/100 (first all 1.017 s); floor 0.000 mm, late part overlap 0.004 mm; late path 0.000 mm, speed 0.00000 m/s, spin 0.00000 rad/s; chain separation 0.000 mm
+  column-100: height error -0.044 mm, top drift 4.394 mm
+  column-200: median 0.280 ms, active median 11.334 ms, p95 12.292 ms; asleep 200/200 (first all 1.283 s); floor 0.000 mm, late part overlap 0.011 mm; late path 0.000 mm, speed 0.00000 m/s, spin 0.00000 rad/s; chain separation 0.000 mm
+  column-200: height error -0.378 mm, top drift 1.652 mm
+[ OK ] standard rigid: sample columns 100 and 200 (1264 ms)
+  compound-chains-14: median 24.436 ms, active median 24.436 ms, p95 39.776 ms; asleep 0/32 (first all -1.000 s); floor 3.485 mm, late part overlap 5.603 mm; late path 1274.864 mm, speed 1.13434 m/s, spin 1.48954 rad/s; chain separation 80.368 mm
+[ OK ] standard rigid: sample chains of 14 interlocked rings (15586 ms)
+  compound-sandbox-sleep: median 0.045 ms, active median 1.888 ms, p95 3.307 ms; asleep 24/24 (first all 3.217 s); floor 3.972 mm, late part overlap 0.194 mm; late path 0.000 mm, speed 0.00000 m/s, spin 0.00000 rad/s; chain separation 0.000 mm
+  compound-sandbox-awake: median 3.231 ms, active median 3.231 ms, p95 4.906 ms; asleep 0/24 (first all -1.000 s); floor 3.972 mm, late part overlap 0.128 mm; late path 0.006 mm, speed 0.00008 m/s, spin 0.00024 rad/s; chain separation 0.000 mm
+[ OK ] standard rigid: mixed non-convex sandbox, sleep on and off (3218 ms)
+  preset 37, 180 frames, 1/2/10 threads: f6152b906af2094a / f6152b906af2094a / f6152b906af2094a
+  preset 31, 180 frames, 1/2/10 threads: 53033fdd4a2e77f1 / 53033fdd4a2e77f1 / 53033fdd4a2e77f1
+  preset 38, 180 frames, 1/2/10 threads: b6bd65b4bea64b9e / b6bd65b4bea64b9e / b6bd65b4bea64b9e
+[ OK ] standard rigid: new samples give the same state on 1, 2 and all threads (18140 ms)
+  dense preset 12, 480 frames, 2 threads: first differing frame -1, hash 486a96c4d774bb89
+  dense preset 12, 480 frames, 10 threads: first differing frame -1, hash 486a96c4d774bb89
+  dense preset 12, 480 frames, 10 threads: first differing frame -1, hash 486a96c4d774bb89
+  dense preset 18, 420 frames, 2 threads: first differing frame -1, hash 4cf405275b2446e9
+  dense preset 18, 420 frames, 10 threads: first differing frame -1, hash 4cf405275b2446e9
+  dense preset 18, 420 frames, 10 threads: first differing frame -1, hash 4cf405275b2446e9
+[ OK ] standard rigid: dense piles repeat on 1, 2 and all threads (67465 ms)
+[ OK ] standard rigid: torus chains: linking meter (3852 ms)
+  120 tori / 117 links / 4 fixed / 0 joints: 600 frames, first break -1, worst broken 0; initial/late overlap 0.000/0.368 mm; max separation 76.464 mm; floor 0.000 mm; energy gain 0.000000/4547.257 J; step median/p95 304.926/329.348 ms
+[ OK ] standard rigid: torus chains: loaded, released and suspended, 120 tori (182128 ms)
+  120 tori, 120 frames, 1/2/10 threads: c9531e8adfaf4bc3 / c9531e8adfaf4bc3 / c9531e8adfaf4bc3
+[ OK ] standard rigid: torus chains: determinism on 1, 2 and all threads (130233 ms)
+  eight tori, mouse pull/release, 6 s: first break -1, tip excursion 276.0 mm, sampled peak overlap 0.102 mm; step median/p95 18.223/22.195 ms
+[ OK ] standard rigid: short torus chain survives mouse pulls (6494 ms)
+  seven rings sleep 8.800 / 8.600 s after release; re-grab wakes all, tip moves 339.8 mm
+[ OK ] standard rigid: short torus chain sleeps and wakes on re-grab (28434 ms)
+  cold two-torus replay: initial/final penetration 14.101/4.000 mm, first contacts 1, slop 4.000 mm
+[ OK ] standard rigid: torus chains: intersecting stationary pair retains contacts (5 ms)
+  100-stack: top y=19.9000 (expect 19.9000)  drift=0.0044  max|v|=0.0000 max|w|=0.0000  contacts=0
+[ OK ] standard rigid: stack of 100 boxes dropped from 1 cm (274 ms)
+  200-stack: top y=39.8996 (expect 39.9000)  sideways 0.0017 m  max tilt 0.00e+00 rad  max|v|=0.0000 max|w|=0.0000  asleep 200/200  mean step 0.13 ms
+[ OK ] standard rigid: stack of 200 boxes dropped from 1 cm (808 ms)
+  1000 cubes, 10 threads, medians per 1/60 s frame:
+  fall 0-60      step  20.74 ms = collide  3.57 + solve 13.91 + integrate  1.02 (of it ccd  0.23);  4253 contacts, 1002 awake
+  settle 60-180  step   1.38 ms = collide  0.15 + solve  0.10 + integrate  0.25 (of it ccd  0.02);     0 contacts,    1 awake
+  rest 180-300   step   1.24 ms = collide  0.14 + solve  0.09 + integrate  0.22 (of it ccd  0.02);     0 contacts,    1 awake
+[ OK ] standard rigid: rigid perf: 1000 cubes fall (1408 ms)
+  pendulum: T=2.0083 s (theory 2.0061)  anchor drift=1.59e-05 m
+  hinge: off-axis |w|=1.79e-07 rad/s  anchor drift=5.34e-07 m  angle=0.980 rad
+  motor: w=3.000 rad/s (target 3)
+  slider: travel=-0.5000 (limit -0.50)  off-rail=2.46e-05 m  |w|=4.09e-02
+  fixed: max relative offset change=7.42e-04 m
+  distance rod: max length error=1.31e-06 m
+[ OK ] standard rigid: joints: ball, hinge+motor, slider, fixed, distance (41 ms)
+  bullet 300 m/s vs 2 cm wall, furthest x: without CCD 5.268, with CCD -0.085
+  bullet vs free box: box v=16.14 m/s, bullet v=-133.76 m/s, momentum 80.42 -> 80.37
+  cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=0.080/1.652, 10 stops, 2 unresolved, stall 0 substeps
+  TOI: s=0.6666 (exact 0.6667), 2 iterations
+[ OK ] standard rigid: continuous collision (GJK conservative advancement) (2 ms)
+  head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.108, max overlap 0.0000 m, A bounces at -34.5 m/s
+  bullets into a stack: max overlap 0.0045 m, stack pushed by 3.81 m
+[ OK ] standard rigid: CCD between moving bodies (no superposition) (22 ms)
+  spinning plate 200 rad/s vs 2 cm post: without CCD w_y=66.2 |L| 33% overlap 0.0159 m; with CCD w_y=66.6 |L| 33% overlap 0.0000 m, 3 CCD stops
+[ OK ] standard rigid: CCD for a fast-spinning plate (1 ms)
+[ OK ] standard rigid: CCD bounds contain the full rotation arc (0 ms)
+  100 analytic sphere impacts, plane and sub-1e-6 impact fractions checked
+[ OK ] standard rigid: CCD query analytic impacts (0 ms)
+[ OK ] standard rigid: CCD query statuses and invalid inputs (0 ms)
+[ OK ] standard rigid: CCD query sliding along large triangle faces (0 ms)
+[ OK ] standard rigid: CCD primitive separating planes and mixed bullets (25 ms)
+[ OK ] standard rigid: CCD world propagates uncertainty (0 ms)
+[ OK ] standard rigid: CCD also checks slow motion when requested (0 ms)
+[ OK ] standard rigid: CCD retry integrates external loads once (0 ms)
+[ OK ] standard rigid: CCD retry restores the whole requested interval (2 ms)
+  allMoving=0 dt=1/600: E0=204366.895 peak=204366.895 final=364.551845 J; manifold=6.27652 wall=1.55798 mm; accepted=1275 rejected=75
+  allMoving=0 dt=1/1200: E0=204366.895 peak=204366.895 final=372.931181 J; manifold=21.6183 wall=21.6183 mm; accepted=2442 rejected=42
+  allMoving=0 dt=1/2400: E0=204366.895 peak=204366.895 final=389.109884 J; manifold=3.0449 wall=3.0449 mm; accepted=4823 rejected=23
+  allMoving=1 dt=1/600: E0=204366.895 peak=204366.895 final=370.695083 J; manifold=0.602379 wall=0 mm; accepted=1317 rejected=117
+  allMoving=1 dt=1/1200: E0=204366.895 peak=204366.895 final=372.687771 J; manifold=0.601508 wall=0 mm; accepted=2492 rejected=92
+  allMoving=1 dt=1/2400: E0=204366.895 peak=204366.895 final=411.862251 J; manifold=0.316404 wall=0.00113249 mm; accepted=4845 rejected=45
+[ OK ] standard rigid: CCD retry mixed scene energy at three time steps (1091 ms)
+[ OK ] standard rigid: CCD retry reduces initial penetration recovery (0 ms)
+  relative=1 boost=0: outgoing relative to boost 0.25/0.75 m/s
+  relative=1 boost=99: outgoing relative to boost 0.25/0.75 m/s
+  relative=100 boost=0: outgoing relative to boost 25/75 m/s
+  relative=100 boost=99: outgoing relative to boost 25/75 m/s
+[ OK ] standard rigid: CCD contact impulse uses relative velocity (0 ms)
+  four feet: 4 loaded points, support / (m g dt) 0.999510, spin 0.000000 rad/s
+[ OK ] standard rigid: floor contacts retain the loaded support region (0 ms)
+  tilted cup / plane: support depth 0.999998 mm, contact depth 0.999999 mm
+[ OK ] standard rigid: floor contacts include the extreme hull witness (0 ms)
+  moving support, 1 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 2 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 2 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 1 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+[ OK ] standard rigid: shock pass with a shared moving support is deterministic (85 ms)
+  beam 25 m/s + 40 rad/s onto 6 cubes: max overlap 0.0011 m, y=0.030; spin at 2/3 s 2.17659/1.44322e-10 rad/s
+[ OK ] standard rigid: long beam onto cubes (no pass-through) (67 ms)
+  box sliding over 512 floor triangles: max |vy| 0.0000 m/s, max |w| 0.0000 rad/s, height 0.1000..0.1000 m (0.1), speed 4.08 m/s
+  Jenga tower 16 x 3 blocks after 5 s: max drift 0.0002 m, top at 2.3251 (start 2.3250), max speed 0.0000 m/s, max overlap 0.0001 m, 0 contacts
+  diamond beam dropped across a ridge: max overlap 0.0010 m, energy max/start 1.0000, beam comes to y 0.554 m
+[ OK ] standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop (294 ms)
+  100 teapots, 7 s: 6.6 ms/frame (peak 26), worst part overlap 0.0022 m, max |v| 0.000 m/s, sleeping 100, outside 0
+[ OK ] standard rigid: 100 non-convex teapots (3418 ms)
+  ring: 13 parts in 55 ms, reach into the hole 2.9 mm; cup: 24 parts in 121 ms, reach 18.1 mm, 0 of 120 points of its hollow inside a part
+[ OK ] standard rigid: non-convex: the parts of a ring and a cup keep the hole and the hollow (219 ms)
+  chain of 8 rings after 10 s: neighbours 71.3..81.0 mm apart (tubes touching: 76.0 mm); energy never above the start by more than 0.0000 J; of the 2.377 J the drop gave, 0.0007 J still moving
+[ OK ] standard rigid: non-convex: a chain of rings hangs interlocked (293 ms)
+  ring over a peg: rests with its centre at 11.8 mm (on the floor: 12.0 mm, on the peg's top: 312 mm)
+[ OK ] standard rigid: non-convex: a ring dropped over a peg slides down to the floor (72 ms)
+  ball dropped into a cup: rests 1.5 mm above its bottom
+  box tilted 17 deg dropped into a cup: rests -1.5 mm above its bottom
+  box tilted 40 deg dropped into a cup: rests 0.4 mm above its bottom
+[ OK ] standard rigid: non-convex: a ball and boxes dropped into a cup land on its bottom (148 ms)
+  bowl, 6 s: 0 of 60 outside, 0 awake, the lowest point 43.0 mm above the floor (the inner bottom 40 mm), energy gain 0.0000 J
+[ OK ] standard rigid: non-convex: 60 bodies poured into a bowl stay in it and sleep (851 ms)
+  8 tables, 4 s: top 3.5200 m (stacked 3.5200 m), sideways at most 0.6 mm, 0 awake
+[ OK ] standard rigid: non-convex: a stack of eight tables stands and sleeps (31 ms)
+  six cups: the parts nest 30.3 mm apart (exact cups 20.4 mm), stack 249.4 mm (from the parts 251.3 mm), 0 awake, kinetic energy after 1.5 s at most 0.00e+00 J
+[ OK ] standard rigid: non-convex: six cups nest as their parts allow and sleep (2677 ms)
+  45 models on the terrain, 10 s: 0 awake, 0 under the surface, the deepest point 1.0 mm below it
+[ OK ] standard rigid: non-convex: teapots, bunnies and rings on the terrain mesh (4821 ms)
+  Newton's cradle on the floor: last ball 2.0000 m/s (expected 2), others at most 0.0000 m/s
+[ OK ] standard rigid: Newton's cradle on the floor: the hit passes down the row (4 ms)
+  terrain: 51200 triangles
+  terrain: 150 bodies, 0 below the surface, 150 asleep after 12 s, max speed 0.000 m/s; 5.27 ms/frame (worst 19.27)
+[ OK ] standard rigid: terrain: 150 bodies on a static mesh of 51 200 triangles (3826 ms)
+  sleeping on:  50 of 50 barrels asleep at t = 8 s, all asleep at t = 4.65 s, hash 31da2c69b637fe9b
+  sleeping off: t = 5 .. 8 s the longest way a barrel went 1.67 mm, the fastest 1.23e-03 m/s and 8.83e-03 rad/s, warm start 99.84 % of 97078 points
+[ OK ] standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps (2269 ms)
+
+ALL PASSED

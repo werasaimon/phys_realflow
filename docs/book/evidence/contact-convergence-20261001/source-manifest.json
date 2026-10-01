@@ -1,0 +1,15 @@
+{
+  "note": "Follow-up after Parallel.cpp include fix and SandboxScene configuration; rotationalLock production formula unchanged. Older variational manifests retain their original meaning.",
+  "files": {
+    "src/rigid/ContactSolver.cpp": "5cd4565519bebea0828c011640055a589aaf4e1bb2ac5d9a4338f4766c77c3ed",
+    "src/core/Parallel.cpp": "141c0cddef823074557fc246735c7c9624dd2dba5c479925e563844b83826370",
+    "samples/NonConvexScenes.cpp": "089641af36f217623ff7df48c87859945f4cdb3ccf8c73335109bb230049817c",
+    "build-core/rf_tests": "cd08079d3c1b11d51de0e87d58e208fd9be294075f327e81ef2eb3ae2bb11f9a",
+    "build-core/librfcore.a": "7e2dabc91c2d14b83306adee44132302ba4b0d2249b58a623540ee63f5cdffa1",
+    "build-core/librfsamples.a": "1233fd55013a42422d7fb9bde62fb46b47bda4b1c6610a132696c9eb6a396530",
+    "/tmp/phys-impact-research-20261001/build-strict/rf_tests": "34ba78d4ea3724c5273477cce0a2cd6d3f9ab649215a9f2d2e234f713047e15e",
+    "/tmp/phys-impact-research-20261001/build-strict/librfcore.a": "dfb53f01887f6d008a91889ef648aca6c2c8ab64d1b15a75e1228495a65dc744",
+    "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests": "c69d9102b8eaa9607c1691b5c1eee9773df46cc33aa9635fc227362c8f5006dc",
+    "/tmp/phys-impact-research-20261001/build-angular-trial/librfcore.a": "8f8586becf9cfa510986bc492b35d760e1d0543d3f6faecbfb49bb65d203dd3b"
+  }
+}

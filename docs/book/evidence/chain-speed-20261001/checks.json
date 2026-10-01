@@ -1,0 +1,118 @@
+[
+  {
+    "name": "short-chain",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "build-core/rf_tests"
+    ],
+    "filter": "short torus chain",
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 25.323943789000623
+  },
+  {
+    "name": "sandbox",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "build-core/rf_tests"
+    ],
+    "filter": "mixed non-convex sandbox",
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 4.975684692966752
+  },
+  {
+    "name": "rigid-determinism",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "build-core/rf_tests"
+    ],
+    "filter": "new samples give",
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 18.20627207303187
+  },
+  {
+    "name": "chain-determinism",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "build-core/rf_tests"
+    ],
+    "filter": "torus chains: determinism",
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 130.49388061201898
+  },
+  {
+    "name": "default",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "build-core/rf_tests"
+    ],
+    "filter": null,
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 473.3189410989871
+  },
+  {
+    "name": "readability",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "python3",
+      "tools/readability.py",
+      "."
+    ],
+    "filter": null,
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 0.06435983395203948
+  },
+  {
+    "name": "diff-check",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "git",
+      "diff",
+      "--check"
+    ],
+    "filter": null,
+    "threads": 5,
+    "exit_code": 0,
+    "seconds": 0.015896904980763793
+  }
+]

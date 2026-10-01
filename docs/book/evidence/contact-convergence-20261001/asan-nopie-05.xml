@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="4" failures="0" time="0.320">
+  <testcase classname="rf_tests" name="variational: unequal masses, boost and simultaneous impact" time="0.003"/>
+  <testcase classname="rf_tests" name="mass properties" time="0.000"/>
+  <testcase classname="rf_tests" name="rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts" time="0.222"/>
+  <testcase classname="rf_tests" name="light deflection by a mass: 4M/b + second order" time="0.094"/>
+</testsuite>

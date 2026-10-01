@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="3" failures="3" time="15.011">
+  <testcase classname="rf_tests" name="nested cups" time="9.768">
+    <failure message="1 failed CHECK(s), see the log"/>
+  </testcase>
+  <testcase classname="rf_tests" name="barrel pile" time="5.209">
+    <failure message="2 failed CHECK(s), see the log"/>
+  </testcase>
+  <testcase classname="rf_tests" name="golden hash" time="0.034">
+    <failure message="1 failed CHECK(s), see the log"/>
+  </testcase>
+</testsuite>

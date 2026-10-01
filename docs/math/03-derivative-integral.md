@@ -36,7 +36,7 @@ $$
 
 Так движок делает шаг любого твёрдого тела. Сначала скорость получает ускорение от силы тяжести и сил:
 
-[src/rigid/RigidWorld.cpp:401](../../src/rigid/RigidWorld.cpp#L401)
+[src/rigid/RigidWorld.cpp:406](../../src/rigid/RigidWorld.cpp#L406)
 ```cpp
 void RigidWorld::integrateVelocities(float dt) {
     for (RigidBody& b : bodies_) {
@@ -47,7 +47,7 @@ void RigidWorld::integrateVelocities(float dt) {
 }
 ```
 
-Потом, уже после контактов, положение сдвигается на новую скорость, умноженную на шаг: строка `b.pos += (b.vel + b.biasVel) * dt;` в [RigidWorld.cpp:500](../../src/rigid/RigidWorld.cpp#L500). Это и есть интеграл, сложенный кусочками.
+Потом, уже после контактов, положение сдвигается на новую скорость, умноженную на шаг: строка `b.pos += (b.vel + b.biasVel) * dt;` в [RigidWorld.cpp:510](../../src/rigid/RigidWorld.cpp#L510). Это и есть интеграл, сложенный кусочками.
 
 ## Тест
 
@@ -64,7 +64,7 @@ void RigidWorld::integrateVelocities(float dt) {
 
 ![Вдвое меньше шаг — вдвое меньше ошибка](../img/math/step-order.svg)
 
-Ошибка 16 см выглядит пугающе. Но в настоящей сцене кадр 1/60 с делится ещё на 10 малых шагов ([`RigidParams::substeps`](../../src/rigid/RigidWorld.h#L37)), и ошибка за 2 с падения становится 1,6 см. Тест нарочно делает один шаг на кадр, чтобы ошибку было видно.
+Ошибка 16 см выглядит пугающе. Но в настоящей сцене кадр 1/60 с делится ещё на 10 малых шагов ([`RigidParams::substeps`](../../src/rigid/RigidWorld.h#L41)), и ошибка за 2 с падения становится 1,6 см. Тест нарочно делает один шаг на кадр, чтобы ошибку было видно.
 
 ## Физика
 

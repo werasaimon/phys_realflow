@@ -1,0 +1,27 @@
+{
+  "accepted": {
+    "teeth": 10,
+    "rings": 16,
+    "tooth_tangential_half_width_m": 0.004,
+    "tooth_axial_half_thickness_m": 0.008,
+    "tip_minus_pitch_radius_m": 0.005,
+    "initial_max_gjk_epa_depth_m": 0
+  },
+  "rejected_initial_assembly": {
+    "teeth": 10,
+    "rings": 16,
+    "tooth_tangential_half_width_m": 0.012,
+    "tooth_axial_half_thickness_m": 0.012,
+    "tip_minus_pitch_radius_m": 0.025,
+    "initial_max_gjk_epa_depth_m_rounded": 0.009837,
+    "reason": "Invalid initial overlap before simulation; narrowed/shortened teeth before integration."
+  },
+  "smaller_trial": {
+    "teeth": 8,
+    "rings": 14,
+    "initial_max_gjk_epa_depth_m": 0,
+    "simulated_seconds": 2,
+    "broken_pairs": 0,
+    "production": false
+  }
+}

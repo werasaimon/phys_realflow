@@ -27,9 +27,11 @@ struct JacobianRow {
     float hi = std::numeric_limits<float>::infinity();
     float softness = 0;  // gamma of a soft constraint (springs), 0 = rigid
     float lambda = 0;    // accumulated impulse
+    bool motor = false; // marks actuator work separately from passive constraint rows
 };
 
 class Joint {
+    friend class RigidStepCheckpoint;
 public:
     Joint(int a, int b) : a(a), b(b) {}
     virtual ~Joint() = default;
@@ -37,7 +39,7 @@ public:
     virtual const char* name() const = 0;
 
     // Velocity stage.
-    void prepare(std::vector<RigidBody>& bodies, float h, bool warmStart);
+    void prepare(std::vector<RigidBody>& bodies, float h, bool warmStart, bool measureMotorWork = false);
     void solveVelocity(std::vector<RigidBody>& bodies);
     // Position stage; returns the remaining error (m or rad) for convergence checks.
     virtual float solvePosition(std::vector<RigidBody>& bodies) = 0;
@@ -46,6 +48,9 @@ public:
     Vector3 worldAnchorB(const std::vector<RigidBody>& bodies) const;
     Vector3 worldAxis(const std::vector<RigidBody>& bodies) const; // axis of A (hinge / slider)
     float appliedImpulse() const;
+    double motorWork() const { return motorWork_; } // signed discrete work of the last prepared trial [J]
+    void captureMotorMotion(const std::vector<RigidBody>& bodies);
+    void finishMotorWork(const std::vector<RigidBody>& bodies);
 
     int a, b;
     Vector3 localAnchorA, localAnchorB; // B's anchor is in world space when b < 0
@@ -55,6 +60,7 @@ public:
 protected:
     virtual void buildRows(const std::vector<RigidBody>& bodies, float h) = 0;
     void addRow(const std::vector<RigidBody>& bodies, JacobianRow r);
+    void applyRow(std::vector<RigidBody>& bodies, const JacobianRow& row, float impulse);
     // Helpers for the position stage.
     float correctPoint(std::vector<RigidBody>& bodies, const Vector3& C, const Vector3& pA, const Vector3& pB, float beta);
     float correctAngle(std::vector<RigidBody>& bodies, Vector3 e, float beta);
@@ -63,6 +69,9 @@ protected:
 
     std::vector<JacobianRow> rows_;
     std::vector<float> warm_;
+    bool measureMotorWork_ = false;
+    double motorWork_ = 0;
+    Vector3 motorStartLinA_, motorStartAngA_, motorStartLinB_, motorStartAngB_;
 };
 
 // 3 linear rows: a point of A coincides with a point of B.

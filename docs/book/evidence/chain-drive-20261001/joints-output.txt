@@ -1,0 +1,9 @@
+  pendulum: T=2.0083 s (theory 2.0061)  anchor drift=1.59e-05 m
+  hinge: off-axis |w|=1.79e-07 rad/s  anchor drift=5.34e-07 m  angle=0.980 rad
+  motor: w=3.000 rad/s (target 3)
+  slider: travel=-0.5000 (limit -0.50)  off-rail=2.46e-05 m  |w|=4.09e-02
+  fixed: max relative offset change=7.42e-04 m
+  distance rod: max length error=1.31e-06 m
+[ OK ] standard rigid: joints: ball, hinge+motor, slider, fixed, distance (60 ms)
+
+ALL PASSED

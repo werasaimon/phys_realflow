@@ -1,0 +1,46 @@
+{
+  "author_commit": "3fd17646352f4c1c2c3108f93dae00f2a2d60097",
+  "author_commit_date": "2021-09-05T19:45:51Z",
+  "author_root_tree": "056213f66d512a60992837c5e624bf99b36dac7a",
+  "raw_directory": "/tmp/simbenchmark-final-bouncing-v2-20261001",
+  "raw_traces_retained_in_repository": false,
+  "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+  "upstream_sources": [
+    {
+      "author_path": "benchmark/res/yaml/bouncing.yaml",
+      "git_blob_sha1": "236e6907297e9cb4d129e23057c991dc7cdef8c5",
+      "sha256": "9c3a39696448bd577e7720472b2e3c21e05fff97e8408c33bfaa2dd57bd8f799",
+      "bytes": 501
+    },
+    {
+      "author_path": "benchmark/include/BouncingBenchmark.hpp",
+      "git_blob_sha1": "5afbbf8d2144f5e157ecf3fcd3cf35e1610e9005",
+      "sha256": "a77fbd8f003394543a7ee7c3efecb7ed8c7da7b4be4be748a4c7cae9f2ccddc4",
+      "bytes": 10857
+    },
+    {
+      "author_path": "benchmark/bulletSim/BouncingBenchmark.cpp",
+      "git_blob_sha1": "acedbdb723aa2ae0f8dcdc2ddc9677aea75638d0",
+      "sha256": "a827b21718187731e3178c846142db868f4ea52f0f0b92db51024be089a2f138",
+      "bytes": 5427
+    },
+    {
+      "author_path": "res/benchmark/bouncing-benchmark/bullet/ball.urdf",
+      "git_blob_sha1": "90bb1dc882d23b1ad9f749d2181ce805c98a1fd8",
+      "sha256": "53ea08bf86abddbb10d316478b13fb6031d522320a28235fbedb1b3d0e131c6d",
+      "bytes": 626
+    },
+    {
+      "author_path": "res/benchmark/bouncing-benchmark/bullet/plane.urdf",
+      "git_blob_sha1": "3a3aa3591d5ac16c7d42acc3da181aa46a0276c5",
+      "sha256": "56a9e6a0304bf2a69d57292f13df917c669522f0fd6b02ad2a954e1e8be08594",
+      "bytes": 727
+    }
+  ],
+  "diagnostic_source_sha256": "5db4ec2ca6fd331535b364adbd934e098d144d9e19e0750482100ac293b619ea",
+  "sdk_code_changed_during_comparison": false,
+  "mujoco": {
+    "status": "not run",
+    "reason": "Not installed; elastic-contact model needs an explicit separate protocol."
+  }
+}

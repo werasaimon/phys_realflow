@@ -1,0 +1,30 @@
+[
+  {
+    "artifact": "chain-wheel.xml",
+    "name": "rf_tests",
+    "tests": "2",
+    "failures": "0",
+    "time": "25.326"
+  },
+  {
+    "artifact": "default.xml",
+    "name": "rf_tests",
+    "tests": "188",
+    "failures": "0",
+    "time": "453.711"
+  },
+  {
+    "artifact": "short-chain.xml",
+    "name": "rf_tests",
+    "tests": "2",
+    "failures": "0",
+    "time": "24.247"
+  },
+  {
+    "artifact": "strict-chain-wheel.xml",
+    "name": "rf_tests",
+    "tests": "2",
+    "failures": "0",
+    "time": "24.344"
+  }
+]

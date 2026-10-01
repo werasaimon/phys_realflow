@@ -139,9 +139,9 @@ $$
 
 ### Код
 
-- Скорость и сила тяжести: [RigidWorld.cpp:401](../src/rigid/RigidWorld.cpp#L401), `integrateVelocities`.
+- Скорость и сила тяжести: [RigidWorld.cpp:406](../src/rigid/RigidWorld.cpp#L406), `integrateVelocities`.
 - Свободный поворот расщеплением: [FreeRotation.cpp](../src/rigid/FreeRotation.cpp), `turnFreely`.
-- Положение, поворот и затухание: [RigidWorld.cpp:491](../src/rigid/RigidWorld.cpp#L491), `integratePoses`.
+- Положение, поворот и затухание: [RigidWorld.cpp:501](../src/rigid/RigidWorld.cpp#L501), `integratePoses`.
 
 ### Графики
 
@@ -202,7 +202,7 @@ $M\dot{\mathbf v} = \mathbf f - J^{\mathsf T}\boldsymbol\lambda$ вместе с
 - Одно многообразие, импульсы по точкам и трение: [ContactSolver.cpp:744](../src/rigid/ContactSolver.cpp#L744), `solveManifold`.
 - Точный LCP для нормальных импульсов многообразия: [ContactSolver.cpp:656](../src/rigid/ContactSolver.cpp#L656), `blockNormalSolve`.
 - Отскок отдельным проходом: [ContactSolver.cpp:698](../src/rigid/ContactSolver.cpp#L698), `applyRestitution`.
-- Суставы, ограничение на скорости: [Joints.cpp:101](../src/rigid/Joints.cpp#L101), `Joint::solveVelocity`; коррекция положения: [Joints.cpp:120](../src/rigid/Joints.cpp#L120), `Joint::correctPoint`.
+- Суставы, ограничение на скорости: [Joints.cpp:131](../src/rigid/Joints.cpp#L131), `Joint::solveVelocity`; коррекция положения: [Joints.cpp:149](../src/rigid/Joints.cpp#L149), `Joint::correctPoint`.
 
 ### Графики
 

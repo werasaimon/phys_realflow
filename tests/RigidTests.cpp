@@ -419,16 +419,35 @@ void testCcd() {
     RigidWorld w;
     w.setDomain(AABB({-5, -5, -5}, {5, 5, 5}));
     w.params.gravity = Vector3(0.0f);
-    TriMesh plate = primitives::box({1, 0.005f, 1});
+    // Cover the domain: a finite 2 m plate let a correctly bounced cube fly around its edge,
+    // then finish below it after wall rebounds. Final y alone mislabelled that as tunnelling.
+    TriMesh plate = primitives::box({5, 0.005f, 5});
     MeshBVH bvh;
     bvh.build(plate);
     w.setStaticMesh(&bvh);
     int cube = w.addBox({0, 2, 0}, Vector3(0.05f), Quaternion::fromAxisAngle({1, 0, 1}, 0.5f), 500, Vector3(1));
     w.bodies()[cube].vel = {0, -200, 0};
+    float minimumY = w.bodies()[cube].pos.y;
+    size_t meshStops = 0, meshContacts = 0, meshUnresolved = 0;
+    int stalled = 0, longestStall = 0;
     for (int f = 0; f < 30; ++f)
-        for (int k = 0; k < w.params.substeps; ++k) w.step(1.0f / 60 / w.params.substeps);
-    std::printf("  cube 200 m/s vs 1 cm mesh plate: final y=%.3f\n", w.bodies()[cube].pos.y);
-    CHECK(w.bodies()[cube].pos.y > 0.0f, "cube tunnelled through the mesh (y=%f)", w.bodies()[cube].pos.y);
+        for (int k = 0; k < w.params.substeps; ++k) {
+            const Vector3 previous = w.bodies()[cube].pos;
+            w.step(1.0f / 60 / w.params.substeps);
+            minimumY = std::min(minimumY, w.bodies()[cube].pos.y);
+            meshStops += w.ccdHits();
+            meshContacts += w.contactCount();
+            meshUnresolved += w.ccdDiagnostics().unresolved;
+            // One uncertain query may clamp motion; repeated unchanged poses with a fast COM
+            // expose a frozen simulation masquerading as successful nonpenetration.
+            stalled = length2(w.bodies()[cube].pos - previous) == 0 && length(w.bodies()[cube].vel) > 1 ? stalled + 1 : 0;
+            longestStall = std::max(longestStall, stalled);
+        }
+    std::printf("  cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=%.3f/%.3f, %zu stops, %zu unresolved, stall %d substeps\n",
+                minimumY, w.bodies()[cube].pos.y, meshStops, meshUnresolved, longestStall);
+    CHECK(minimumY > 0.0f && meshStops > 0, "cube crossed the mesh: minimum y=%f, stops=%zu", minimumY, meshStops);
+    CHECK(minimumY < 0.1f && meshContacts > 0, "CCD froze the cube before reaching the plate");
+    CHECK(longestStall < w.params.substeps, "CCD froze a moving cube for a full frame");
 
     // Time of impact accuracy: sphere r=0.5 at x=-3 moving +6 over the step towards a sphere at x=2.
     SphereShape s1(0.5f), s2(0.5f);
@@ -693,15 +712,37 @@ void testBeamOverCubes() {
     int beam = w.addBox({0, 1.5f, 0}, {1.0f, 0.03f, 0.03f}, Quaternion::fromAxisAngle({0, 1, 0}, 0.3f), 800, Vector3(1));
     w.bodies()[beam].vel = {0, -25, 0};
     w.bodies()[beam].angVel = {0, 40, 0};
+    auto energy = [&]() {
+        double total = w.kineticEnergy();
+        for (const RigidBody& b : w.bodies()) total -= b.mass * dot(w.params.gravity, b.pos);
+        return total;
+    };
+    const double initialEnergy = energy();
+    double peakEnergy = initialEnergy;
     float worst = 0;
-    for (int f = 0; f < 120; ++f)
+    float spinAtTwoSeconds = 0;
+    // Full-time reintegration changes the impact trajectory: the beam still spins at 2 s
+    // and stops by 2.5 s in the captured regression. Two seconds was not an analytic settling
+    // time. Check a 3 s horizon without changing the overlap, energy or terminal-speed limits.
+    for (int f = 0; f < 180; ++f)
         for (int k = 0; k < w.params.substeps; ++k) {
             w.step(1.0f / 60 / w.params.substeps);
+            const double currentEnergy = energy();
+            CHECK(std::isfinite(currentEnergy), "beam scene has a non-finite state at substep %d", f * w.params.substeps + k);
+            if (!std::isfinite(currentEnergy)) return;
+            peakEnergy = std::max(peakEnergy, currentEnergy);
             worst = std::max(worst, maxOverlap(w));
+            if (f == 119 && k + 1 == w.params.substeps) spinAtTwoSeconds = length(w.bodies()[beam].angVel);
         }
-    std::printf("  beam 25 m/s + 40 rad/s onto 6 cubes: max overlap %.4f m, beam y=%.3f\n", worst, w.bodies()[beam].pos.y);
+    std::printf("  beam 25 m/s + 40 rad/s onto 6 cubes: max overlap %.4f m, y=%.3f; spin at 2/3 s %.6g/%.6g rad/s\n",
+                worst, w.bodies()[beam].pos.y, spinAtTwoSeconds, length(w.bodies()[beam].angVel));
     CHECK(worst < 0.01f, "beam and cubes interpenetrated by %f m", worst);
     CHECK(w.bodies()[beam].pos.y > 0.02f, "beam fell through (y=%f)", w.bodies()[beam].pos.y);
+    // Dissipative, unforced scene: a 5% allowance covers discretisation, not a frozen pose with
+    // continuing spin integration (that failure heated this scene without bound).
+    CHECK(peakEnergy < 1.05 * initialEnergy, "beam gained energy: %g -> %g J", initialEnergy, peakEnergy);
+    CHECK(length(w.bodies()[beam].vel) < 0.1f && length(w.bodies()[beam].angVel) < 0.1f,
+          "beam did not settle on the floor");
 }
 
 void testConvexRest() {

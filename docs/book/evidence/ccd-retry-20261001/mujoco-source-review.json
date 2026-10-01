@@ -1,0 +1,22 @@
+{
+  "commit": "d10ff846277e75ecfee72caa9d8a2518e5c2bdc0",
+  "retrieved_utc_date": "2026-10-01",
+  "mode": "source review only; no MuJoCo execution; no code imported",
+  "files": {
+    "engine_collision_continuous.c": {
+      "git_blob_sha1": "7367fdf8d04f32b57dfdd1281a1efd7e4ee3b3cb",
+      "sha256": "eb6603a5ffca81711eca114ba712c62e20afb4e18667a9d4cc090b149008a9e7",
+      "url": "https://github.com/google-deepmind/mujoco/blob/d10ff846277e75ecfee72caa9d8a2518e5c2bdc0/src/engine/engine_collision_continuous.c"
+    },
+    "engine_collision_continuous.h": {
+      "git_blob_sha1": "f5d0e1cbae28158cef79bd4ea536fa09b30f03e2",
+      "sha256": "8b96a0a729af4320cf24d09746650c6deacda60fd66114368602cacabed690d0",
+      "url": "https://github.com/google-deepmind/mujoco/blob/d10ff846277e75ecfee72caa9d8a2518e5c2bdc0/src/engine/engine_collision_continuous.h"
+    },
+    "engine_ipc.c": {
+      "git_blob_sha1": "62dba5253b84fbfb1a14190a1bf6ad2e8c510c32",
+      "sha256": "db110bb814d4b43f47ceb95cb7ea48be4c7b67d6766e39c74e7d2c1643de52ef",
+      "url": "https://github.com/google-deepmind/mujoco/blob/d10ff846277e75ecfee72caa9d8a2518e5c2bdc0/src/engine/engine_ipc.c"
+    }
+  }
+}

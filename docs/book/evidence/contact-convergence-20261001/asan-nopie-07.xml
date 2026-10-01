@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="4" failures="0" time="208.955">
+  <testcase classname="rf_tests" name="rigid bodies" time="0.080"/>
+  <testcase classname="rf_tests" name="gas &lt;-&gt; rigid bodies (moving solids, two-way)" time="130.406"/>
+  <testcase classname="rf_tests" name="gas + soft bodies + cloth + rigid bodies" time="78.225"/>
+  <testcase classname="rf_tests" name="Noether: energy, momentum and angular momentum of rigid bodies" time="0.242"/>
+</testsuite>

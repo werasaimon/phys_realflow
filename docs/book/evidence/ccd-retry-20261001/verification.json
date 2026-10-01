@@ -1,0 +1,55 @@
+{
+  "status": "regressions_passed_not_accuracy_certified",
+  "final_source_manifest": "source-manifest.json",
+  "build": {
+    "type": "Release",
+    "compiler": "GCC 11.4.0",
+    "werror": true,
+    "strict_fp": false,
+    "sanitize": false,
+    "lto": false
+  },
+  "threads": 10,
+  "cpu_affinity": "1-5,7-11",
+  "runs": {
+    "default-bias": {
+      "tests": 182,
+      "failures": 0,
+      "seconds": 435.343
+    },
+    "standard-bias": {
+      "tests": 47,
+      "failures": 0,
+      "seconds": 479.569
+    },
+    "ccd-bias": {
+      "tests": 14,
+      "failures": 0,
+      "seconds": 1.169
+    },
+    "standard-original": {
+      "tests": 45,
+      "failures": 1,
+      "seconds": 440.102
+    },
+    "particles-many-bias": {
+      "tests": 1,
+      "failures": 1,
+      "seconds": 10.056
+    }
+  },
+  "historical_abort": {
+    "log": "default-original-aborted-output.txt",
+    "completed_tests": 101,
+    "completed_failures": 1,
+    "next_test": "particles vs many bodies: the world tree",
+    "exit_code": 134
+  },
+  "limitations": [
+    "Not an official external benchmark result",
+    "CCD slow-motion selection remains false by default; mixed-scene wall penetration 21.6183 mm",
+    "No certified continuous geometry or robot validation",
+    "Atomicity is one RigidWorld call, not Simulation frame",
+    "Beam settling test horizon changed from 2 to 3 s; original failure preserved"
+  ]
+}

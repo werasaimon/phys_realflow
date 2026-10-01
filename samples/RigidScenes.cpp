@@ -209,6 +209,8 @@ public:
     void build(Simulation& sim) override {
         sim.useRigidArena(Simulation::kDefaultArena);
         RigidWorld& rigid = sim.rigid;
+        // Thin walls also need sweeps for boxes accelerated by bullets below the speed threshold.
+        rigid.params.ccdAllMoving = true;
         rigid.addBox({0.5f, 1.5f, 0.0f}, {0.01f, 1.5f, 1.5f}, Quaternion(), 0.0f, {0.6f, 0.62f, 0.66f});
         for (int i = 0; i < 12; ++i) {
             int b = rigid.addSphere({-1.8f, 0.4f + 0.2f * i, -1.0f + 0.18f * i}, 0.03f, 8000.0f, {1.0f, 0.9f, 0.3f});

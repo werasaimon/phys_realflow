@@ -38,7 +38,7 @@ $$
 
 ### Код
 
-Свободный поворот: [FreeRotation.cpp](../src/rigid/FreeRotation.cpp). Положение и поворот: [RigidWorld.cpp:491](../src/rigid/RigidWorld.cpp#L491). Одно многообразие контакта: [ContactSolver.cpp:744](../src/rigid/ContactSolver.cpp#L744). Суставы: [Joints.cpp:102](../src/rigid/Joints.cpp#L102).
+Свободный поворот: [FreeRotation.cpp](../src/rigid/FreeRotation.cpp). Положение и поворот: [RigidWorld.cpp:501](../src/rigid/RigidWorld.cpp#L501). Одно многообразие контакта: [ContactSolver.cpp:744](../src/rigid/ContactSolver.cpp#L744). Суставы: [Joints.cpp:131](../src/rigid/Joints.cpp#L131).
 
 ### Графики
 
@@ -63,7 +63,7 @@ $$
 
 ## 2.1 Один шаг мира
 
-`RigidWorld::step` ([RigidWorld.cpp:319](../src/rigid/RigidWorld.cpp#L319)) по умолчанию использует решатель **последовательных импульсов** (`RigidSolver::SequentialImpulse`):
+`RigidWorld::step` ([RigidStep.cpp:39](../src/rigid/RigidStep.cpp#L39)) по умолчанию использует решатель **последовательных импульсов** (`RigidSolver::SequentialImpulse`):
 
 ```mermaid
 flowchart TB
@@ -75,7 +75,7 @@ flowchart TB
     F --> G["shock propagation: уровни от земли, 2 прохода"]
     G --> H["кэш импульсов для следующего шага"]
     H --> I["демпфирование, x += (v + v_bias) Δt, q = exp(ω Δt/2) q"]
-    I --> J["CCD: быстрые тела останавливаются в момент удара"]
+    I --> J["CCD: проверить пробу, при необходимости пересчитать полушаги"]
     J --> K["позиционная стадия сочленений (NGS)"]
     K --> L["острова: заснуть, если все тела медленные ≥ 0.5 с"]
 ```
@@ -434,7 +434,7 @@ $$
 | `BruteForceBroadPhase` | все пары, $O(n^2)$ | эталон для тестов |
 | `BvhBroadPhase` | BVH перестраивается каждый шаг, запросы параллельно | много быстро движущихся тел |
 | `AABBTreeBroadPhase` | постоянное динамическое дерево (гл. 1.8), переставляются только тела, покинувшие толстый бокс | большие сцены с покоем |
-| `SweepAndPruneBroadPhase` | **по умолчанию** (`fatten = 0.1`, [RigidWorld.h:306](../src/rigid/RigidWorld.h#L306)) | когерентное движение |
+| `SweepAndPruneBroadPhase` | **по умолчанию** (`fatten = 0.1`, [RigidWorld.h:516](../src/rigid/RigidWorld.h#L516)) | когерентное движение |
 
 ### Инкрементальный Sweep and Prune
 
@@ -470,7 +470,7 @@ while (j > 0 && before(e, E[j - 1])) {
 
 Дерево обновляется в начале каждого прохода столкновений и перед каждым проходом частиц; лист трогает дерево только когда тело покидает свой раздутый бокс, так что покоящаяся стопка не стоит ничего. Частицы перед проходом задают радиус запроса: радиус частицы плюс наибольший сдвиг и поворот тела в этом подшаге (`bodyShift_`, `bodyTurn_`) — кандидаты заведомо покрывают всё, что примет точная проверка, и контакты те же, что при полном переборе (все тесты частиц печатают прежние числа). Один вектор кандидатов на рабочий поток: проходы не выделяют память; обход дерева — со стеком фиксированной глубины 128 (высота сбалансированного дерева $\approx 1.5\log_2 n$).
 
-[src/rigid/RigidWorld.cpp:215](../src/rigid/RigidWorld.cpp#L215)
+[src/rigid/RigidWorld.cpp:220](../src/rigid/RigidWorld.cpp#L220)
 ```cpp
 void RigidWorld::updateWorldTree() const {
     // New bodies get a leaf; every body's leaf follows its box (the tree changes only when a body
@@ -716,7 +716,7 @@ applyPairImpulse(m, m.t1 * (m.jt1 - old), m.center);
 
 ### Порядок и параллельность
 
-- Многообразия сортируются **снизу вверх вдоль гравитации**, статические контакты первыми ([RigidWorld.cpp:295](../src/rigid/RigidWorld.cpp#L295)). В Гаусс–Зейделе опора проходит через всю стопку за первые итерации, а не по уровню за итерацию. Сортируются не сами записи — в каждой точки, трение и блочная матрица, и их перестановка стоила 12 мс на кадр для тысячи кубов, — а список их номеров `solveOrder_` и место каждой в нём `solveRank_`; раскраска, отскоки и проход удара читают порядок через них.
+- Многообразия сортируются **снизу вверх вдоль гравитации**, статические контакты первыми ([RigidWorld.cpp:300](../src/rigid/RigidWorld.cpp#L300)). В Гаусс–Зейделе опора проходит через всю стопку за первые итерации, а не по уровню за итерацию. Сортируются не сами записи — в каждой точки, трение и блочная матрица, и их перестановка стоила 12 мс на кадр для тысячи кубов, — а список их номеров `solveOrder_` и место каждой в нём `solveRank_`; раскраска, отскоки и проход удара читают порядок через них.
 - При ≥ 256 многообразиях граф контактов **раскрашивается** жадно (до 63 цветов): многообразия одного цвета не делят динамических тел и решаются параллельно ([ContactSolver.cpp:397](../src/rigid/ContactSolver.cpp#L397)).
 
 ### Детерминизм: одни и те же биты
@@ -834,48 +834,41 @@ void RigidWorld::releaseHeld() {
 
 Пуля 300 м/с за подшаг 1/600 с пролетает 50 см и может проскочить стену толщиной 2 см между двумя проверками. CCD (B. Mirtich, 1996) находит **момент удара**.
 
-Движение за шаг параметризуется $s\in[0,1]$: положение линейно, ориентация — экспонентой вектора поворота $\Delta\boldsymbol\theta$ ([TimeOfImpact.h:15](../src/rigid/TimeOfImpact.h#L15)). Расстояние между телами не может уменьшаться быстрее, чем
+Движение за шаг параметризуется $s\in[0,1]$: положение линейно, ориентация — экспонентой вектора поворота $\Delta\boldsymbol\theta$ ([TimeOfImpact.h:17](../src/rigid/TimeOfImpact.h#L17)). Расстояние между телами не может уменьшаться быстрее, чем
 
 $$
 \text{bound} = |\Delta\mathbf p_A - \Delta\mathbf p_B| + |\Delta\boldsymbol\theta_A|\,r_A + |\Delta\boldsymbol\theta_B|\,r_B \quad\text{на единицу } s,
 $$
 
-где $r$ — радиус описанной сферы. Значит, если GJK даёт текущее расстояние $d$, можно безопасно продвинуться на $\Delta s = d/\text{bound}$:
+где $r$ включает смещение выпуклой части относительно центра тела.
+GJK выбирает направление $n$, а два опорных запроса дают зазор разделяющей
+плоскости $g_n$. В точной арифметике $0 < g_n \le \operatorname{dist}(A,B)$,
+поэтому можно ограничить продвижение величиной
+$\Delta s=(g_n-\tau/2)/\text{bound}$ при $g_n>\tau$.
+Само расстояние конечного симплекса GJK не является гарантированной нижней
+оценкой. Реализация: [ConservativeAdvancement.cpp](../src/rigid/ConservativeAdvancement.cpp).
 
-[src/rigid/TimeOfImpact.cpp:32](../src/rigid/TimeOfImpact.cpp#L32)
-```cpp
-for (int it = 0; it < maxIt; ++it) {
-    r.iterations = it + 1;
-    GjkResult g = gjk(A.at(s), B.at(s));
-    if (g.intersect) {
-        if (s == 0) return r; // already touching: the discrete solver owns this pair
-        r.hit = true;         // overshot inside the tolerance band: report the last safe s
-        r.s = s;
-        return r;
-    }
-    if (g.distance < tol) {
-        // Touching at the start of the step: a resting/sliding contact owned by the discrete
-        // (speculative) solver - never freeze such pairs.
-        if (s == 0) return r;
-        r.hit = true;
-        r.s = s;
-        return r;
-    }
-    // Conservative step: the gap cannot close faster than `bound` per unit s. Aim slightly
-    // short of contact so the next GJK still sees separated shapes.
-    s += std::max((g.distance - 0.5f * tol) / bound, 1e-6f);
-    if (s > 1.0f) return r;
-}
-```
+Объект `ConservativeAdvancement` хранит состояние одного запроса и возвращает
+`Separated`, `Impact`, `InitialContact` либо `Unresolved`. Принудительного
+минимального продвижения нет. Исчерпание бюджета не трактуется как отсутствие
+столкновения. Опорные функции и вращения пока используют `float`, поэтому
+доказанной гарантии для всех входов нет.
 
-Метод работает для любых выпуклых форм (нужна только опорная функция). У сферы вращение не меняет формы, поэтому `angularReach() = 0`.
+**В мире** ([TimeOfImpact.cpp](../src/rigid/TimeOfImpact.cpp)):
 
-**В мире** (`continuousCollision`, [TimeOfImpact.cpp:154](../src/rigid/TimeOfImpact.cpp#L154)):
+1. По умолчанию выбираются тела, движение которых превышает `ccdThreshold`
+   относительно размера. `ccdAllMoving=true` включает также медленные активные тела.
+2. По заметённым боксам выбираются кандидаты. Составные тела раскрываются во
+   все соответствующие пары выпуклых частей; отверстия не заменяются оболочкой.
+3. Удар или неопределённость отклоняет пробный шаг. `RigidStep` восстанавливает
+   полный мир и пересчитывает два полушага. При исчерпании бюджета весь вызов
+   откатывается; `tryStep` возвращает отказ без принятого времени.
+4. Начальные контакты и реакцию на удар обслуживает дискретный решатель.
+   Последующие позиционные поправки суставов не проверяются этим этапом CCD.
 
-1. «Быстрое» тело — то, что за шаг смещается больше чем на `ccdThreshold` × половину своего наименьшего размера (как в Bullet). Сначала дешёвая оценка, без логарифма поворота: поворот за шаг $\Delta q = q_1 q_0^{-1}$ с векторной частью $\mathbf v$ имеет угол $2\arcsin|\mathbf v| \le \pi|\mathbf v|$, так что ни одна точка тела не ушла дальше $|\Delta\mathbf p| + \pi|\mathbf v|\,r$. Тело, медленное даже по этой оценке, медленное; точный тест — только для остальных ([TimeOfImpact.cpp:187](../src/rigid/TimeOfImpact.cpp#L187)). Если быстрых нет — выход сразу.
-2. Кандидаты. Когда быстрых тел мало (быстрые × все ≤ 200 000), заметание медленного тела строится, только если его грубый бокс — бокс широкой фазы, расширенный на ту же оценку пути ([TimeOfImpact.cpp:207](../src/rigid/TimeOfImpact.cpp#L207)), — задевает заметённый бокс быстрого. Когда быстрых много, заметаются все, и по их боксам строится BVH. Раньше заметалось каждое тело на каждом подшаге: в падении тысячи кубов CCD стоил 13.9 мс на кадр, теперь 1.3 мс.
-3. Оба тела пары останавливаются в общем моменте удара (motion clamping), **скорость сохраняется**. Остановленное тело становится статичным до конца шага, и проходы повторяются (до 8): так ловятся цепочки «A бьёт B, B бьёт C».
-4. Удар разрешает спекулятивный контакт следующего шага, с отскоком (`clamped && vn < -1` в `prepareManifold`).
+Геометрический запрос и повторное интегрирование не являются реализацией Rigid IPC.
+Формулы, API, тесты и компромиссы — в [главе 9](book/09-ccd-contract.md)
+и [главе 11 книги](book/11-atomic-rigid-step.md).
 
 ---
 
@@ -904,7 +897,7 @@ struct JacobianRow {
 | `FixedJoint` (сварка) | шаровое + 3 угловые | — |
 | `DistanceJoint` | 1 строка вдоль отрезка | `rope` (только тянет), `frequency`, `dampingRatio` (пружина) |
 
-**Скоростная стадия** — последовательные импульсы по строкам с ограничением накопленного импульса и тёплым стартом ([Joints.cpp:102](../src/rigid/Joints.cpp#L102)):
+**Скоростная стадия** — последовательные импульсы по строкам с ограничением накопленного импульса и тёплым стартом ([Joints.cpp:131](../src/rigid/Joints.cpp#L131)):
 
 $$
 \lambda \leftarrow \operatorname{clamp}\!\big(\lambda - m_{eff}(\mathbf J\mathbf v + b + \gamma\lambda),\ \lambda_{lo},\ \lambda_{hi}\big).
@@ -925,7 +918,7 @@ $$
 \mathbf K = (w_A + w_B)\mathbb 1 - [\mathbf r_A]_\times\mathbf I_A^{-1}[\mathbf r_A]_\times - [\mathbf r_B]_\times\mathbf I_B^{-1}[\mathbf r_B]_\times,
 $$
 
-$\beta = 0.5$, шаг ограничен 0.2 м и 0.5 рад ([Joints.cpp:43](../src/rigid/Joints.cpp#L43)). Угловая ошибка берётся на $SO(3)$ как логарифм: $\mathbf e = \log\big((q_B^{-1}q_A)\,q_{ref}^{-1}\big)$ ([Joints.cpp:170](../src/rigid/Joints.cpp#L170)).
+$\beta = 0.5$, шаг ограничен 0.2 м и 0.5 рад ([Joints.cpp:43](../src/rigid/Joints.cpp#L43)). Угловая ошибка берётся на $SO(3)$ как логарифм: $\mathbf e = \log\big((q_B^{-1}q_A)\,q_{ref}^{-1}\big)$ ([Joints.cpp:198](../src/rigid/Joints.cpp#L198)).
 
 **Мышь** (`GrabJoint`, как `b2MouseJoint`) — мягкая точечная связь 5 Гц, $\zeta = 0.7$, с ограничением силы ([Grab.cpp:21](../src/rigid/Grab.cpp#L21)).
 
@@ -987,13 +980,13 @@ $g$ читается из поля расстояний: для каждого �
 
 `RigidSolver::XPBD` ([XpbdSolver.cpp](../src/rigid/XpbdSolver.cpp)) — Müller et al. 2020, *Detailed Rigid Body Simulation with Extended Position Based Dynamics*: интегрирование → позиционные контакты со статическим трением → скорости из смещений → динамическое трение и отскок. Контакты хранят якоря в локальных системах тел, поэтому глубина пересчитывается каждый подшаг, а обнаружение столкновений идёт раз в `collisionInterval` подшагов.
 
-> **Важно:** по умолчанию используется `SequentialImpulse` ([RigidWorld.h:32](../src/rigid/RigidWorld.h#L32)). Комментарий в `enum RigidSolver` называет XPBD «default» — это устаревшая пометка. XPBD-путь экспериментальный: высокие стопки на нём неустойчивы. Идея XPBD-контакта с обобщёнными обратными массами используется в связи частиц с телами (гл. 3.5).
+> **Важно:** по умолчанию используется `SequentialImpulse` ([RigidWorld.h:36](../src/rigid/RigidWorld.h#L36)). XPBD-путь экспериментальный: высокие стопки на нём неустойчивы. Идея XPBD-контакта с обобщёнными обратными массами используется в связи частиц с телами (гл. 3.5).
 
 ---
 
 ## 2.12 Параметры (`RigidParams`)
 
-[src/rigid/RigidWorld.h:31](../src/rigid/RigidWorld.h#L31)
+[src/rigid/RigidWorld.h:35](../src/rigid/RigidWorld.h#L35)
 
 | Параметр | Смысл | Ед. | По умолчанию |
 |---|---|---|---|

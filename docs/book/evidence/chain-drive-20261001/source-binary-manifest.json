@@ -1,0 +1,26 @@
+{
+  "head": "2d0adca5174542df89e9a090e6c26ced96d7a6b1",
+  "note": "Dirty worktree; HEAD alone does not identify the tested code. SHA256 captured after checks.",
+  "sha256": {
+    "CMakeLists.txt": "3bf00f5b0ee0f7998d9fac0871ff1b8d78bf7d5f39a0a7f178a862da36d9e6fc",
+    "samples/ChainWheelScene.cpp": "0d1b537bf5d933fc7fcd811be7e1aaf687bbbe59691740d81255e724ab521f3c",
+    "samples/ChainWheelScene.h": "28ab438fa305ca7e66a1b8d2664dc7c42611a3d36eff770a126f19c2e9801cb8",
+    "samples/Samples.cpp": "d9e28edb4c65dae2057ca27f2daa234b41698845509eefdc6e37a46d17cd5ad4",
+    "samples/Samples.h": "3d00197fc9353967f3a22c1835a1150ac13d4e0b045ecf1a97d666b4f7bc7978",
+    "tests/ChainWheelTests.cpp": "31c053e7ee363a40d6bda603671b8434e13f98a4fc2c2208ed51e8aa5125ee6c",
+    "tests/Tests.h": "5aea8f6af9b3921ee2f34bdbbad2971675b600a7eee1bcaffae4cf7ea8defb69",
+    "tests/main.cpp": "587fec6bcd5f7c9962794d8e72ea69b6b9584cfa76f8b88c3b3b2b2280afd0f1",
+    "tools/TorusGeometryAudit.cpp": "aedb41b1844d572feb0ec394f5affe04c375c2ecabf5c4621d8502169e54a316",
+    "tools/plot_chain_drive.py": "ba4b07b68a3a9e831e256afd13e44a5cde5228007312f9dce63fd783c47d18b7",
+    "src/rigid/Joints.cpp": "346931d533c9938e2e074c84d148ea17c39310a3081c68c65c9ec046e071bb77",
+    "src/rigid/Joints.h": "3ad26c9953f08f3131a83fd7a266b2023e3e9b1cbbe1ff83dd8336df0efba3b3",
+    "src/rigid/ContactSolver.cpp": "75a84440a9f4fbeeaf2318e24d3ddf0e07d1405d0e5fb5da4e90d326aa7933a9",
+    "build-core/rf_tests": "ee19c5cd9bc89a7312b960c514735a1dd777d7553e4a31d6234dda7cdf2d41a6",
+    "build-core/librfcore.a": "cc7021cac016b6d10a038ff7266008aa4832366d214fe5803d9e7123eea94b9b",
+    "build-core/librfsamples.a": "485623a45909a874797af015fe125311e4f3d32331a486bd8167b7a18ffbb4fb",
+    "/tmp/phys-impact-research-20261001/build-strict/librfcore.a": "bc131a2777f8b38a20866fd0ce28208609a43a28813258a5552c90e59fa050ce",
+    "/tmp/phys-impact-research-20261001/build-strict/librfsamples.a": "2585a2aa01a4ea140e875674f684d3b3f33f7d2fb3518661c2e08a2af0253072",
+    "/tmp/phys-chain-drive-20261001/strict-check": "0f756114e7a6e9830991b6fab6185dd1c5f40dd6db206979b2e691ab13a95c50",
+    "/tmp/phys-realflow-editor-standard-build/realflow": "65004383e670eb84d0270d8c370134b93e9a3bbb5c6a635fbdfe6c5db9cf5b1e"
+  }
+}

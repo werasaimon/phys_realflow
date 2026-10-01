@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="15" failures="0" time="1.135">
+  <testcase classname="rf_tests" name="variational: CCD follows acceleration between identical endpoints" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD between moving bodies (no superposition)" time="0.021"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD for a fast-spinning plate" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD bounds contain the full rotation arc" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query analytic impacts" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query statuses and invalid inputs" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query sliding along large triangle faces" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD primitive separating planes and mixed bullets" time="0.024"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD world propagates uncertainty" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD also checks slow motion when requested" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry integrates external loads once" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry restores the whole requested interval" time="0.002"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry mixed scene energy at three time steps" time="1.087"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry reduces initial penetration recovery" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD contact impulse uses relative velocity" time="0.000"/>
+</testsuite>

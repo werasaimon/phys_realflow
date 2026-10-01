@@ -30,9 +30,19 @@ void testCcdSweptBounds() {
     world.addBox({0, 0.4f, 0}, {0.02f, 0.02f, 0.02f}, Quaternion(), 0, Vector3(1));
     const int plate = world.addBox(Vector3(0), {0.5f, 0.01f, 0.01f}, Quaternion(), 800, Vector3(1));
     world.bodies()[size_t(plate)].angVel = {0, 0, 0.95f * kPi * 60};
+    const RigidBody& body = world.bodies()[size_t(plate)];
+    SweptPose moving{body.shape.get(), body.pos, body.pos, body.rot, body.angVel / 60};
+    SweptPose post; post.shape = world.bodies()[0].shape.get(); post.p0 = post.p1 = {0, 0.4f, 0};
+    const ToiResult impact = timeOfImpact(moving, post, world.params.ccdTolerance);
+    const float impactAngle = impact.s * 0.95f * kPi;
+    CHECK(impact.hit && impactAngle > 1.3f && impactAngle < 1.55f, "incorrect first impact angle %.6f", impactAngle);
+    const float initialEnergy = world.kineticEnergy();
     world.step(1.0f / 60);
     const float turn = length(world.bodies()[size_t(plate)].rot.log());
     CHECK(world.ccdHits() > 0, "171-degree sweep missed a post outside both endpoint boxes");
-    CHECK(turn > 1.3f && turn < 1.55f, "plate must stop just before crossing the post, angle %.6f", turn);
-    CHECK(maxOverlap(world) < 1e-4f, "CCD stopped the plate inside the post");
+    // The full interval now includes impact response and translation away from the post;
+    // its final orientation is not the pose at first impact.
+    CHECK(turn < 0.95f * kPi && length(body.vel) > 0, "impact did not deflect the plate");
+    CHECK(world.kineticEnergy() <= initialEnergy * 1.001f, "passive impact creates energy");
+    CHECK(maxOverlap(world) < 1e-4f, "CCD left the plate inside the post");
 }

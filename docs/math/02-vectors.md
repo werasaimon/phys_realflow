@@ -47,7 +47,7 @@ constexpr Vector3 cross(const Vector3& a, const Vector3& b) {
 
 Толчок в точку тела меняет его скорость и закручивает его. Это решатель контактов делает тысячи раз за шаг, и снова работает векторное произведение:
 
-[src/rigid/RigidWorld.h:135](../../src/rigid/RigidWorld.h#L135)
+[src/rigid/RigidWorld.h:151](../../src/rigid/RigidWorld.h#L151)
 ```cpp
 void applyImpulse(int i, const Vector3& J, const Vector3& p) {
     RigidBody& b = bodies_[i];

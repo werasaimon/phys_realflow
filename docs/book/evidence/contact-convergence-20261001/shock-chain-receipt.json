@@ -1,0 +1,26 @@
+{
+  "exit_code": 0,
+  "seconds": 85.494587174966,
+  "build_command": [
+    "c++",
+    "-std=c++17",
+    "-O3",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Isrc",
+    "-I.",
+    "/tmp/phys-impact-research-20261001/shock_chain_probe.cpp",
+    "build-core/librfsamples.a",
+    "build-core/librfcore.a",
+    "-pthread",
+    "-o",
+    "/tmp/phys-impact-research-20261001/shock_chain_probe"
+  ],
+  "sha256": {
+    "/tmp/phys-impact-research-20261001/shock_chain_probe.cpp": "b41b0854169cd8f6af9c7020e301ff7162629a9992d4785d970556f53f899ead",
+    "/tmp/phys-impact-research-20261001/shock_chain_probe": "303bc02a18788526a78f0a038270e9b396d29a19a5864189de191d4cf31ced2b",
+    "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/librfcore.a": "7e2dabc91c2d14b83306adee44132302ba4b0d2249b58a623540ee63f5cdffa1",
+    "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/librfsamples.a": "8832ce4be32233131612726213de946a42fe653655ce1b4060ee4c7c66175a33"
+  }
+}

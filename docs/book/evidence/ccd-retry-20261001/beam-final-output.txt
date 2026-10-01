@@ -1,0 +1,4 @@
+  beam 25 m/s + 40 rad/s onto 6 cubes: max overlap 0.0011 m, y=0.030; spin at 2/3 s 2.17659/1.44322e-10 rad/s
+[ OK ] standard rigid: long beam onto cubes (no pass-through) (111 ms)
+
+ALL PASSED

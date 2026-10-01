@@ -1,0 +1,6 @@
+  wheel: 12 s, excursion 98.73 mm, sampled overlap 0.101 mm, passive gain 0 J, late T 1.09047e-07 J, step median/p95 33.890/39.324 ms
+[ OK ] standard rigid: chain wheel loaded, pulled and released (25362 ms)
+  16 rings, wheel radius 0.223736 m, initial sampled depth 0.000 mm, 15 links
+[ OK ] standard rigid: chain wheel assembly (6 ms)
+
+ALL PASSED

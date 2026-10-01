@@ -84,18 +84,47 @@ void Joint::addRow(const std::vector<RigidBody>& bodies, JacobianRow r) {
     rows_.push_back(r);
 }
 
-void Joint::prepare(std::vector<RigidBody>& bodies, float h, bool warmStart) {
-    rows_.clear();
-    buildRows(bodies, h);
+void Joint::applyRow(std::vector<RigidBody>& bodies, const JacobianRow& r, float impulse) {
     RigidBody& A = bodyOf(bodies, a);
     RigidBody& B = bodyOf(bodies, b);
+    applyRowImpulse(A, r.linA, r.angA, impulse);
+    applyRowImpulse(B, r.linB, r.angB, impulse);
+}
+
+void Joint::captureMotorMotion(const std::vector<RigidBody>& bodies) {
+    const auto& A = bodyOf(bodies, a);
+    const auto& B = bodyOf(bodies, b);
+    motorStartLinA_ = A.vel; motorStartAngA_ = A.angVel;
+    motorStartLinB_ = B.vel; motorStartAngB_ = B.angVel;
+}
+
+void Joint::finishMotorWork(const std::vector<RigidBody>& bodies) {
+    motorWork_ = 0;
+    if (!measureMotorWork_) return;
+    const auto& A = bodyOf(bodies, a);
+    const auto& B = bodyOf(bodies, b);
+    for (const auto& r : rows_) if (r.motor) {
+        // Trapezoidal physical velocity, total converged impulse, including the warm start.
+        // W = lambda J(v_before + v_after)/2; intermediate solver iterations are not time.
+        const double start = double(dot(r.linA, motorStartLinA_)) + dot(r.angA, motorStartAngA_)
+            + dot(r.linB, motorStartLinB_) + dot(r.angB, motorStartAngB_);
+        const double finish = double(dot(r.linA, A.vel)) + dot(r.angA, A.angVel)
+            + dot(r.linB, B.vel) + dot(r.angB, B.angVel);
+        motorWork_ += 0.5 * double(r.lambda) * (start + finish);
+    }
+}
+
+void Joint::prepare(std::vector<RigidBody>& bodies, float h, bool warmStart, bool measureMotorWork) {
+    measureMotorWork_ = measureMotorWork;
+    motorWork_ = 0;
+    rows_.clear();
+    buildRows(bodies, h);
     const bool warm = warmStart && warm_.size() == rows_.size();
     for (size_t i = 0; i < rows_.size(); ++i) {
         JacobianRow& r = rows_[i];
         r.lambda = warm ? clampv(warm_[i], r.lo, r.hi) : 0.0f;
         if (r.lambda == 0) continue;
-        applyRowImpulse(A, r.linA, r.angA, r.lambda);
-        applyRowImpulse(B, r.linB, r.angB, r.lambda);
+        applyRow(bodies, r, r.lambda);
     }
 }
 
@@ -109,8 +138,7 @@ void Joint::solveVelocity(std::vector<RigidBody>& bodies) {
         r.lambda = clampv(old + d, r.lo, r.hi);
         d = r.lambda - old;
         if (d == 0) continue;
-        applyRowImpulse(A, r.linA, r.angA, d);
-        applyRowImpulse(B, r.linB, r.angB, d);
+        applyRow(bodies, r, d);
     }
     warm_.resize(rows_.size());
     for (size_t i = 0; i < rows_.size(); ++i) warm_[i] = rows_[i].lambda;
@@ -221,6 +249,7 @@ void HingeJoint::buildRows(const std::vector<RigidBody>& bodies, float h) {
     }
     if (motorEnabled) { // drive (wA - wB).axis to motorSpeed with a bounded torque
         JacobianRow r;
+        r.motor = true;
         r.angA = axis;
         r.angB = -axis;
         r.bias = -motorSpeed;

@@ -1,0 +1,167 @@
+{
+  "beam": {
+    "completed_steps": 880,
+    "maximum_finite_energy_j": 6.15039225e+36,
+    "selected_steps": [
+      {
+        "step": 0,
+        "energy_j": 3445.30737,
+        "max_linear_speed_m_s": 25.0155163,
+        "max_angular_speed_rad_s": 39.996666,
+        "beam_y_m": 1.4583075,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 35,
+        "energy_j": 1181.15556,
+        "max_linear_speed_m_s": 1.40018904,
+        "max_angular_speed_rad_s": 40.4105377,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 2,
+        "unresolved": 1
+      },
+      {
+        "step": 36,
+        "energy_j": 1178.03352,
+        "max_linear_speed_m_s": 1.39269483,
+        "max_angular_speed_rad_s": 36.424736,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 2,
+        "unresolved": 1
+      },
+      {
+        "step": 100,
+        "energy_j": 1153.3077,
+        "max_linear_speed_m_s": 0.853049755,
+        "max_angular_speed_rad_s": 34.0015221,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 2,
+        "unresolved": 1
+      },
+      {
+        "step": 500,
+        "energy_j": 1228.36427,
+        "max_linear_speed_m_s": 6.20829678,
+        "max_angular_speed_rad_s": 33.064167,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 2,
+        "unresolved": 1
+      },
+      {
+        "step": 870,
+        "energy_j": 12134723.0,
+        "max_linear_speed_m_s": 38.8952713,
+        "max_angular_speed_rad_s": 4358.50928,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 4,
+        "unresolved": 2
+      },
+      {
+        "step": 878,
+        "energy_j": 6.15039225e+36,
+        "max_linear_speed_m_s": 14453220400.0,
+        "max_angular_speed_rad_s": 7.41846598e+18,
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 2,
+        "unresolved": 2
+      },
+      {
+        "step": 879,
+        "energy_j": "inf",
+        "max_linear_speed_m_s": 1.03010685e+17,
+        "max_angular_speed_rad_s": "inf",
+        "beam_y_m": 0.244616494,
+        "ccd_clamped": 3,
+        "unresolved": 2
+      }
+    ]
+  },
+  "beam_sat": {
+    "completed_steps": 1200,
+    "maximum_finite_energy_j": 3445.30737,
+    "selected_steps": [
+      {
+        "step": 0,
+        "energy_j": 3445.30737,
+        "max_linear_speed_m_s": 25.0155163,
+        "max_angular_speed_rad_s": 39.996666,
+        "beam_y_m": 1.4583075,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 35,
+        "energy_j": 1180.90558,
+        "max_linear_speed_m_s": 1.40018904,
+        "max_angular_speed_rad_s": 40.4105377,
+        "beam_y_m": 0.244957045,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 36,
+        "energy_j": 1178.01077,
+        "max_linear_speed_m_s": 1.37149668,
+        "max_angular_speed_rad_s": 35.1839447,
+        "beam_y_m": 0.246692896,
+        "ccd_clamped": 2,
+        "unresolved": 0
+      },
+      {
+        "step": 100,
+        "energy_j": 1147.60975,
+        "max_linear_speed_m_s": 0.86128056,
+        "max_angular_speed_rad_s": 35.2156639,
+        "beam_y_m": 0.354475141,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 500,
+        "energy_j": 740.472934,
+        "max_linear_speed_m_s": 8.68590069,
+        "max_angular_speed_rad_s": 49.9990196,
+        "beam_y_m": 0.489997774,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 870,
+        "energy_j": 25.9028657,
+        "max_linear_speed_m_s": 0.480052233,
+        "max_angular_speed_rad_s": 2.78366133e-05,
+        "beam_y_m": 0.0300000031,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 878,
+        "energy_j": 25.6981176,
+        "max_linear_speed_m_s": 0.399195492,
+        "max_angular_speed_rad_s": 2.7836606e-05,
+        "beam_y_m": 0.0300000031,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 879,
+        "energy_j": 25.6766807,
+        "max_linear_speed_m_s": 0.38976106,
+        "max_angular_speed_rad_s": 2.78365987e-05,
+        "beam_y_m": 0.0300000031,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      },
+      {
+        "step": 1199,
+        "energy_j": 25.2391693,
+        "max_linear_speed_m_s": 3.57004888e-06,
+        "max_angular_speed_rad_s": 2.78366024e-05,
+        "beam_y_m": 0.0300000031,
+        "ccd_clamped": 0,
+        "unresolved": 0
+      }
+    ]
+  }
+}

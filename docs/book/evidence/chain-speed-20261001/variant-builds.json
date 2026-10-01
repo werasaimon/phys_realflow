@@ -1,0 +1,82 @@
+[
+  {
+    "variant": "grain1",
+    "compile": [
+      "/usr/bin/c++",
+      "-I/home/wera_n/GIT/PHYSICS/phys_realflow/src",
+      "-O3",
+      "-DNDEBUG",
+      "-std=gnu++17",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Werror",
+      "-O3",
+      "-march=native",
+      "-o",
+      "/tmp/phys-chain-speed-20261001/grain1/ContactSolver.cpp.o",
+      "-c",
+      "/tmp/phys-chain-speed-20261001/grain1/ContactSolver.cpp"
+    ]
+  },
+  {
+    "variant": "spin100us",
+    "compile": [
+      "/usr/bin/c++",
+      "-I/home/wera_n/GIT/PHYSICS/phys_realflow/src",
+      "-O3",
+      "-DNDEBUG",
+      "-std=gnu++17",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Werror",
+      "-O3",
+      "-march=native",
+      "-o",
+      "/tmp/phys-chain-speed-20261001/spin100us/Parallel.cpp.o",
+      "-c",
+      "/tmp/phys-chain-speed-20261001/spin100us/Parallel.cpp"
+    ]
+  },
+  {
+    "variant": "grain1-spin100us",
+    "compile": [
+      "/usr/bin/c++",
+      "-I/home/wera_n/GIT/PHYSICS/phys_realflow/src",
+      "-O3",
+      "-DNDEBUG",
+      "-std=gnu++17",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Werror",
+      "-O3",
+      "-march=native",
+      "-o",
+      "/tmp/phys-chain-speed-20261001/grain1-spin100us/ContactSolver.cpp.o",
+      "-c",
+      "/tmp/phys-chain-speed-20261001/grain1-spin100us/ContactSolver.cpp"
+    ]
+  },
+  {
+    "variant": "grain1-spin100us",
+    "compile": [
+      "/usr/bin/c++",
+      "-I/home/wera_n/GIT/PHYSICS/phys_realflow/src",
+      "-O3",
+      "-DNDEBUG",
+      "-std=gnu++17",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Werror",
+      "-O3",
+      "-march=native",
+      "-o",
+      "/tmp/phys-chain-speed-20261001/grain1-spin100us/Parallel.cpp.o",
+      "-c",
+      "/tmp/phys-chain-speed-20261001/grain1-spin100us/Parallel.cpp"
+    ]
+  }
+]

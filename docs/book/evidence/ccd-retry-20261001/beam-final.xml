@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="0" time="0.111">
+  <testcase classname="rf_tests" name="standard rigid: long beam onto cubes (no pass-through)" time="0.111"/>
+</testsuite>

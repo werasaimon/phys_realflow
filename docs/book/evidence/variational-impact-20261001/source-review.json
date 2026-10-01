@@ -1,0 +1,20 @@
+{
+  "url": "https://lagrange.mechse.illinois.edu/pubs/FeMaOrWe2003/FeMaOrWe2003.pdf",
+  "version": "November 17, 2003 author version, 42 PDF pages",
+  "sha256": "7840278d3c9a1e88584ff5e8f175669ae1cb4a080e619b99213a70b6d0aabb88",
+  "read_sections": [
+    "3.1",
+    "3.2",
+    "4.1"
+  ],
+  "equations": [
+    "47",
+    "48",
+    "50",
+    "54",
+    "55",
+    "56",
+    "71"
+  ],
+  "scope": "Exact constant-force discrete action specialization; no imported implementation; float event geometry approximate."
+}

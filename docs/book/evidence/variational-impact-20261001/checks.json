@@ -1,0 +1,78 @@
+[
+  {
+    "name": "bouncing",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "python3",
+      "tools/run_simbenchmark_bouncing.py",
+      "--binary",
+      "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+      "--upstream",
+      "/tmp/phys-ccd-retry-20261001",
+      "--output",
+      "/tmp/phys-impact-research-20261001/bouncing",
+      "--provenance",
+      "/tmp/simbenchmark-reference-provenance-20261001.json",
+      "--engines",
+      "sdk",
+      "sdk-ccd",
+      "sdk-variational",
+      "jolt",
+      "bullet",
+      "box3d",
+      "box3d-native"
+    ],
+    "exit_code": 0,
+    "seconds": 30.103089966985863
+  },
+  {
+    "name": "default",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 491.38047785300296
+  },
+  {
+    "name": "verify-quick",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_verify",
+      "--quick",
+      "--out",
+      "/tmp/phys-impact-research-20261001/verify-results"
+    ],
+    "exit_code": 0,
+    "seconds": 93.40995120402658
+  },
+  {
+    "name": "tokamak",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 1,
+    "seconds": 50.58925757097313
+  }
+]

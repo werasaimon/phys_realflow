@@ -1,0 +1,23 @@
+{
+  "engine": "bullet",
+  "complete": true,
+  "dt_s": 0.0005,
+  "iterations": 20,
+  "frames": 40000,
+  "reference_energy_J": 24034.5,
+  "accuracy_accepted_time_s": 20,
+  "accuracy_accepted_substeps": 40000,
+  "accuracy_rejected_trials": 0,
+  "energy_mse_J2": 512371330.0,
+  "relative_energy_rmse": 0.941797,
+  "max_relative_energy_error": 0.98,
+  "position_rmse_m": 3.444847,
+  "velocity_rmse_m_s": 5.471601,
+  "sampled_max_penetration_m": 4.6789646e-07,
+  "timing_accepted_time_s": 20,
+  "timing_accepted_substeps": 40000,
+  "timing_rejected_trials": 0,
+  "timing_pass_wall_s": 1.7545333,
+  "bullet_header_version": 305,
+  "sizeof_bullet_scalar": 4
+}

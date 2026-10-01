@@ -1,0 +1,1 @@
+completed=0 status=3 accepted=0 rejected=17 x=0.100000001 energy=0

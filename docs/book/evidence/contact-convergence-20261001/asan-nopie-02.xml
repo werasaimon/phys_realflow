@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="11" failures="0" time="0.246">
+  <testcase classname="rf_tests" name="math: vectors, matrices, quaternions, N x N solvers" time="0.000"/>
+  <testcase classname="rf_tests" name="math: tensors - Einstein summation vs loops, raise / lower / trace, refusals" time="0.002"/>
+  <testcase classname="rf_tests" name="math: outer, Kronecker, QR, SVD, matrix exponential" time="0.001"/>
+  <testcase classname="rf_tests" name="mathbook: float and double - what survives a long sum and a small difference" time="0.012"/>
+  <testcase classname="rf_tests" name="mathbook: vectors - a charge circles in a field, a push off centre spins a body" time="0.000"/>
+  <testcase classname="rf_tests" name="mathbook: the slope of the height is the speed; the step is first order" time="0.011"/>
+  <testcase classname="rf_tests" name="mathbook: a pendulum by Euler, symplectic Euler and Runge-Kutta 4" time="0.000"/>
+  <testcase classname="rf_tests" name="mathbook: a big linear system by Jacobi and CG; inertia eigenvalues" time="0.046"/>
+  <testcase classname="rf_tests" name="mathbook: the tennis-racket flip in quaternions, engine vs Euler's equations" time="0.133"/>
+  <testcase classname="rf_tests" name="mathbook: div u before and after the pressure projection" time="0.038"/>
+  <testcase classname="rf_tests" name="mathbook: the spread of an average falls as 1 / sqrt(N)" time="0.003"/>
+</testsuite>

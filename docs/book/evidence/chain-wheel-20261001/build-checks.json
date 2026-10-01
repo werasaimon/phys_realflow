@@ -1,0 +1,96 @@
+[
+  {
+    "name": "strict-samples-build",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "cmake",
+      "--build",
+      "/tmp/phys-impact-research-20261001/build-strict",
+      "--target",
+      "rfsamples",
+      "--parallel",
+      "2"
+    ],
+    "exit_code": 0,
+    "seconds": 5.9337846640264615
+  },
+  {
+    "name": "strict-check-build",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "c++",
+      "-std=c++17",
+      "-O3",
+      "-ffp-contract=off",
+      "-DRF_STRICT_FP=1",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Isrc",
+      "-I.",
+      "/tmp/phys-chain-wheel-20261001/strict_main.cpp",
+      "tests/ChainWheelTests.cpp",
+      "/tmp/phys-impact-research-20261001/build-strict/librfsamples.a",
+      "/tmp/phys-impact-research-20261001/build-strict/librfcore.a",
+      "-pthread",
+      "-o",
+      "/tmp/phys-chain-wheel-20261001/strict-checks"
+    ],
+    "exit_code": 0,
+    "seconds": 2.3482484300038777
+  },
+  {
+    "name": "strict-chain-wheel",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "240s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/tmp/phys-chain-wheel-20261001/strict-checks"
+    ],
+    "exit_code": 0,
+    "seconds": 24.348453807993792
+  },
+  {
+    "name": "editor-build",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "360s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "cmake",
+      "--build",
+      "/tmp/phys-realflow-editor-standard-build",
+      "--parallel",
+      "2"
+    ],
+    "exit_code": 0,
+    "seconds": 13.714816937048454
+  }
+]

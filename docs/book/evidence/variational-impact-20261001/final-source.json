@@ -1,0 +1,10 @@
+{
+  "AGENTS.md": "e44d1554f6ca92f710104ac579efdce7fd44eb65bd6db5a4fd40b4dd7f1a1106",
+  "build-core/rf_tests": "729fd95d3459e2ebdc54bf257014d9193383531679a9e0753cd23dd8f4533093",
+  "build-core/librfcore.a": "7e2dabc91c2d14b83306adee44132302ba4b0d2249b58a623540ee63f5cdffa1",
+  "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing": "9d5b373c4a15f407ee34b9913fc7717fc95a7733cb6d56182d6e57e7a0a08178",
+  "src/rigid/VariationalImpactStep.cpp": "3b67908d712f3714798f011d785a1f2d396a039b9a47804c30fcfac31f885267",
+  "src/rigid/VariationalFlight.cpp": "3fc5a2fd4f0d37a591cf0f9fae08fd0adf9d74a74b4d2c656cb568de7a489f67",
+  "src/rigid/TimeOfImpact.h": "396cd7562552851f0833744c0b310b384781cd47036d76e5bb2cad97efe35323",
+  "src/rigid/ConservativeAdvancement.cpp": "1f4d862333a15ddceca6e1cbfd4e72eb500c1008313e06d8b726afb614b03170"
+}

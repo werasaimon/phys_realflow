@@ -1,0 +1,226 @@
+[
+  {
+    "name": "asan-nopie-00",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.9163451539934613
+  },
+  {
+    "name": "asan-nopie-01",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 12.476454212970566
+  },
+  {
+    "name": "asan-nopie-02",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2646910729818046
+  },
+  {
+    "name": "asan-nopie-03",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03221818897873163
+  },
+  {
+    "name": "asan-nopie-04",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 15.929746548994444
+  },
+  {
+    "name": "asan-nopie-05",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.365058190014679
+  },
+  {
+    "name": "asan-nopie-06",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.016321946983225644
+  },
+  {
+    "name": "asan-nopie-07",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 209.02505009097513
+  },
+  {
+    "name": "asan-nopie-08",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.265695882961154
+  },
+  {
+    "name": "asan-nopie-09",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2659936510026455
+  },
+  {
+    "name": "asan-nopie-10",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.4160415109945461
+  },
+  {
+    "name": "asan-nopie-11",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.032109480001963675
+  },
+  {
+    "name": "asan-nopie-12",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.21489465999184176
+  },
+  {
+    "name": "asan-nopie-13",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.3658754440257326
+  },
+  {
+    "name": "asan-nopie-14",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 65.28216868604068
+  },
+  {
+    "name": "asan-nopie-15",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-sanitize/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.7185399019508623
+  }
+]

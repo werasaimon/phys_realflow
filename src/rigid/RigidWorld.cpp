@@ -206,7 +206,12 @@ void RigidWorld::clear() {
     islandParent_.clear();
     ccdClamped_.clear();
     ccdHits_ = 0;
+    ccdDiagnostics_ = CcdDiagnostics();
     contactCount_ = 0;
+    lastStepResult_ = RigidStepResult();
+    trialMotorWork_ = motorWorkTotal_ = 0;
+    stepInitial_.reset();
+    stepTrial_.reset();
     // XPBD keeps its contacts between collision passes: they belong to the old bodies.
     xcontacts_.clear();
     substepCounter_ = 0;
@@ -316,12 +321,13 @@ void RigidWorld::solve() {
     forEachManifold([&](Manifold& m) { solveManifold(m); });
 }
 
-void RigidWorld::step(float dt) {
+void RigidWorld::stepUnchecked(float dt, float correctionDt) {
+    correctionDt_ = correctionDt;
+    ccdHits_ = 0;
+    ccdDiagnostics_ = CcdDiagnostics();
     if (bodies_.empty()) return;
     if (params.solver == RigidSolver::XPBD) {
-        // The XPBD path has no islands: every body is awake (a body that fell asleep under the
-        // impulse solver would otherwise keep the flag while it moves, and be frozen mid-air by the
-        // next impulse step; the gas also reuses the cells of "resting" bodies).
+        // XPBD has no islands: clear old sleep flags so switching solvers cannot freeze moving bodies.
         for (RigidBody& b : bodies_) {
             b.sleeping = false;
             b.sleepTimer = 0;
@@ -374,7 +380,6 @@ void RigidWorld::step(float dt) {
     }
     finishStep(dt, tStart); // the ccd, the joints' positions, the islands: each has its own timer
     countAllocations("memory/rigid integrate"); // poses, CCD, joints, islands
-    reportStep();
 }
 
 // Before anything moves: the inertia tensors follow the orientations (which may have been edited
@@ -411,9 +416,10 @@ void RigidWorld::integrateVelocities(float dt) {
 // bounces, then the shock propagation pass that lets tall stacks stand. Its time is timings_.solve.
 void RigidWorld::solveContacts(float dt) {
     auto ts = std::chrono::steady_clock::now();
+    if (params.measureMotorWork) for (auto& j : joints_) j->captureMotorMotion(bodies_);
     prepare(dt);
     prepareGrab(dt);
-    for (auto& j : joints_) j->prepare(bodies_, dt, params.warmStarting);
+    for (auto& j : joints_) j->prepare(bodies_, dt, params.warmStarting, params.measureMotorWork);
     for (int it = 0; it < params.iterations; ++it) {
         solve();
         for (auto& j : joints_) j->solveVelocity(bodies_);
@@ -423,6 +429,10 @@ void RigidWorld::solveContacts(float dt) {
     // separation back, but it does absorb the downward half of a bounce inside a stack.
     applyRestitution();
     if (params.shockPropagation && !manifolds_.empty()) propagateShock();
+    trialMotorWork_ = 0;
+    if (params.measureMotorWork) for (auto& j : joints_) {
+        j->finishMotorWork(bodies_); trialMotorWork_ += j->motorWork();
+    }
     timings_.solve = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - ts).count();
 }
 
@@ -508,8 +518,8 @@ void RigidWorld::integratePoses(float dt) {
     }
 }
 
-// After the poses moved: the continuous collision clamps fast bodies to their time of impact (no
-// tunnelling), the joints correct the new poses (nonlinear Gauss-Seidel), the frozen sleepers are
+// After the poses moved: continuous collision checks selected sweeps, then joints correct the
+// new poses (these later corrections are not covered by CCD). The frozen sleepers are
 // released, and the islands decide who falls asleep. The timings of these stages are recorded.
 void RigidWorld::finishStep(float dt, std::chrono::steady_clock::time_point tStart) {
     auto tc = std::chrono::steady_clock::now();
@@ -538,6 +548,10 @@ void RigidWorld::reportStep() const {
     Probe::set("rigid/contacts", double(contactCount_));
     Probe::set("rigid/manifolds", double(manifolds_.size()));
     Probe::add("rigid/ccd hits", double(ccdHits_));
+    Probe::add("rigid/ccd queries", double(ccdDiagnostics_.queries));
+    Probe::add("rigid/ccd unresolved", double(ccdDiagnostics_.unresolved));
+    Probe::add("rigid/ccd initial contacts", double(ccdDiagnostics_.initialContacts));
+    Probe::add("rigid/ccd pass limit", ccdDiagnostics_.passLimitReached ? 1.0 : 0.0);
 }
 
 

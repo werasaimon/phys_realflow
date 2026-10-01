@@ -1,0 +1,79 @@
+{
+  "energy-30s": {
+    "frames": 1800,
+    "load": 2,
+    "substeps": 40,
+    "measured": true,
+    "motor_work_J": 0.33691606,
+    "peak_residual_J": 0,
+    "peak_frame_residual_J": 0,
+    "peak_after_settle_J": 0,
+    "final_residual_J": -3.0888922,
+    "trajectory_hash": "20209c697b7f6883",
+    "broken_pairs": 0
+  },
+  "energy-disabled": {
+    "frames": 600,
+    "load": 2,
+    "substeps": 40,
+    "measured": false,
+    "motor_work_J": 0,
+    "peak_residual_J": 0,
+    "peak_frame_residual_J": 0.02065204,
+    "peak_after_settle_J": 1.0410599,
+    "final_residual_J": -2.6456475,
+    "trajectory_hash": "6d9340514620d8c2",
+    "broken_pairs": 0
+  },
+  "energy-heavy": {
+    "frames": 600,
+    "load": 3,
+    "substeps": 40,
+    "measured": true,
+    "motor_work_J": -0.01817703,
+    "peak_residual_J": 0,
+    "peak_frame_residual_J": 7.308753e-05,
+    "peak_after_settle_J": 0,
+    "final_residual_J": -2.9007206,
+    "trajectory_hash": "e0619c4861928389",
+    "broken_pairs": 0
+  },
+  "energy-refined": {
+    "frames": 600,
+    "load": 2,
+    "substeps": 80,
+    "measured": true,
+    "motor_work_J": 0.04639772,
+    "peak_residual_J": 0,
+    "peak_frame_residual_J": 0,
+    "peak_after_settle_J": 0,
+    "final_residual_J": -2.6717088,
+    "trajectory_hash": "7516a5428a41da4a",
+    "broken_pairs": 0
+  },
+  "measurement_changes_no_dynamics": true,
+  "legacy_30s_hash_matches": true,
+  "nut-sat": {
+    "checkpoints": 13,
+    "initial_depth_m": 0.0,
+    "max_child_depth_m": 5.2355073e-05
+  },
+  "chain-sat": {
+    "checkpoints": 21,
+    "initial_depth_m": 0.0,
+    "max_child_depth_m": 0.0001003656
+  },
+  "nut": {
+    "lift_m": 0.0045086000000000015,
+    "return_error_m": 3.7829999999988706e-05,
+    "max_pitch_error_m": 2.8300099e-05,
+    "max_sampled_depth_m": 5.2357675e-05,
+    "peak_residual_J": 0
+  },
+  "refinement_40_80": {
+    "angle_rad": 0.0007895499999999722,
+    "tip_y_m": 0.0003938199999999892,
+    "energy_J": 0.02033000000000129,
+    "motor_work_J": 0.008101000000000136
+  }
+}

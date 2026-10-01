@@ -1,0 +1,27 @@
+[
+  {
+    "name": "chain-determinism",
+    "tests": 1,
+    "failed": 0
+  },
+  {
+    "name": "default",
+    "tests": 187,
+    "failed": 0
+  },
+  {
+    "name": "rigid-determinism",
+    "tests": 1,
+    "failed": 0
+  },
+  {
+    "name": "sandbox",
+    "tests": 1,
+    "failed": 0
+  },
+  {
+    "name": "short-chain",
+    "tests": 2,
+    "failed": 0
+  }
+]

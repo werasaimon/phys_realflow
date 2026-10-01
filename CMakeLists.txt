@@ -40,10 +40,15 @@ add_library(rfcore STATIC
   src/rigid/NarrowPhase.h         src/rigid/NarrowPhase.cpp
   src/rigid/BroadPhase.h          src/rigid/BroadPhase.cpp
   src/rigid/TimeOfImpact.h        src/rigid/TimeOfImpact.cpp
+  src/rigid/ConservativeAdvancement.h src/rigid/ConservativeAdvancement.cpp
   src/rigid/Fracture.h            src/rigid/Fracture.cpp
   src/rigid/Joints.h              src/rigid/Joints.cpp
   src/rigid/ConvexDecomposition.h src/rigid/ConvexDecomposition.cpp
   src/rigid/RigidWorld.h          src/rigid/RigidWorld.cpp
+  src/rigid/RigidStep.h           src/rigid/RigidStep.cpp
+  src/rigid/RigidStepCheckpoint.h src/rigid/RigidStepCheckpoint.cpp
+  src/rigid/VariationalFlight.h src/rigid/VariationalFlight.cpp
+  src/rigid/VariationalImpactStep.h src/rigid/VariationalImpactStep.cpp
   src/rigid/ContactSolver.cpp
   src/rigid/Islands.cpp
   src/rigid/ShockPropagation.cpp
@@ -118,6 +123,8 @@ add_library(rfsamples STATIC
   samples/NonConvexScenes.cpp
   samples/TorusChainsScene.h       samples/TorusChainsScene.cpp
   samples/HangingTorusScene.h      samples/HangingTorusScene.cpp
+  samples/ChainWheelScene.h        samples/ChainWheelScene.cpp
+  samples/NutBoltScene.h           samples/NutBoltScene.cpp
   samples/WindTunnelScenes.cpp
   samples/SmokeScenes.cpp
   samples/FireScene.cpp
@@ -225,7 +232,10 @@ if(RF_BUILD_TESTS)
     tests/CoreTests.cpp
     tests/DebugDrawTests.cpp
     tests/MathTests.cpp
-    tests/RigidTests.cpp tests/HardContactTests.h tests/CcdBoundsTests.cpp
+    tests/RigidTests.cpp tests/HardContactTests.h tests/CcdBoundsTests.cpp tests/CcdQueryTests.cpp tests/RigidStepTests.cpp
+    tests/VariationalTests.cpp
+    tests/MotorWorkTests.cpp
+    tests/NutBoltTests.cpp
     tests/NonConvexTests.cpp tests/WallContactTests.cpp tests/ShockPropagationTests.cpp
     tests/PileTests.cpp
     tests/ParticleTests.cpp
@@ -248,7 +258,7 @@ if(RF_BUILD_TESTS)
     tests/SymplecticTests.cpp
     tests/PerfTests.cpp
     tests/StandardRigidTests.cpp
-    tests/TorusChainTests.cpp tests/HangingTorusTests.cpp)
+    tests/TorusChainTests.cpp tests/HangingTorusTests.cpp tests/ChainWheelTests.cpp)
   target_link_libraries(rf_tests PRIVATE rfcore rfsamples)
   if(RF_BUILD_VERIFY) # the smoke test of the registry
     target_sources(rf_tests PRIVATE tests/VerificationTests.cpp)

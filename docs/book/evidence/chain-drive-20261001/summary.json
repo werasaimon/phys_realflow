@@ -1,0 +1,37 @@
+{
+  "sat_checkpoints": 21,
+  "initial_sat_depth_m": 0.0,
+  "sampled_max_child_sat_depth_m": 0.0001003656,
+  "cases": {
+    "native": {
+      "model_seconds": 20,
+      "cycles": 2,
+      "minimum_lift_m": 0.06913209000000003,
+      "maximum_return_error_m": 0.00016471999999995157,
+      "maximum_sampled_hold_speed_rad_s": 5.883262e-05,
+      "sampled_max_gjk_epa_depth_m": 0.00010052247,
+      "test_seconds": 42.879,
+      "failures": 0
+    },
+    "strict": {
+      "model_seconds": 20,
+      "cycles": 2,
+      "minimum_lift_m": 0.06914614999999996,
+      "maximum_return_error_m": 0.0001724800000000304,
+      "maximum_sampled_hold_speed_rad_s": 4.9530474e-05,
+      "sampled_max_gjk_epa_depth_m": 0.0001004033,
+      "test_seconds": 52.666,
+      "failures": 0
+    }
+  },
+  "gui_observation": {
+    "model_times_s": [
+      1.85,
+      3.72
+    ],
+    "wheel_rotation_and_tip_lift_visible": true,
+    "max_sampled_rss_kib": 177232,
+    "later_process_absent": true,
+    "exit_reason": "not captured"
+  }
+}

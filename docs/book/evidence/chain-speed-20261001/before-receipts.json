@@ -1,0 +1,62 @@
+[
+  {
+    "threads": 6,
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-chain-speed-20261001/chain_profile_before"
+    ],
+    "exit_code": 0,
+    "seconds": 4.454551588976756,
+    "stderr": ""
+  },
+  {
+    "threads": 1,
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-chain-speed-20261001/chain_profile_before"
+    ],
+    "exit_code": 0,
+    "seconds": 7.653181908011902,
+    "stderr": ""
+  },
+  {
+    "threads": 3,
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-chain-speed-20261001/chain_profile_before"
+    ],
+    "exit_code": 0,
+    "seconds": 4.83289264398627,
+    "stderr": ""
+  },
+  {
+    "threads": 10,
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-chain-speed-20261001/chain_profile_before"
+    ],
+    "exit_code": 0,
+    "seconds": 6.168677992012817,
+    "stderr": ""
+  }
+]

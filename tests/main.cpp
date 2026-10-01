@@ -29,6 +29,11 @@ void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
 void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
 
 int main() {
+    run("variational: exact action and variable-step free flight", testVariationalFlight);
+    run("variational: elastic bounce at five steps and adaptive cadence", testVariationalBounce);
+    run("variational: unequal masses, boost and simultaneous impact", testVariationalImpacts);
+    run("variational: unsupported physics and persistent contact roll back", testVariationalRejections);
+    run("variational: CCD follows acceleration between identical endpoints", testVariationalCurvedCcd);
     // Extended stress scenarios are opt-in, like the long fire and gas benchmarks below.
     // RF_TEST="standard rigid:" includes both these targets and the existing rigid checks.
     if (const char* only = std::getenv("RF_TEST"); only && *only) {
@@ -42,7 +47,14 @@ int main() {
         run("standard rigid: torus chains: determinism on 1, 2 and all threads", testTorusChainDeterminism);
         run("standard rigid: short torus chain survives mouse pulls", testHangingTorusMouse);
         run("standard rigid: short torus chain sleeps and wakes on re-grab", testHangingTorusSleep);
+        run("standard rigid: chain wheel loaded, pulled and released", testChainWheelLoaded);
+        run("standard rigid: chain drive lifts, holds and reverses", testChainDriveCycle);
+        run("standard rigid: nut bolt lifts and reverses by thread contact", testNutBoltCycle);
     }
+    run("standard rigid: chain wheel assembly", testChainWheelAssembly);
+    run("standard rigid: nut bolt assembly and analytic screw clearance", testNutBoltAssembly);
+    run("standard rigid: motor work matches analytical energy and leaves dynamics unchanged", testMotorWork);
+    run("standard rigid: motor work counts accepted CCD subdivisions only", testMotorWorkRollback);
     run("standard rigid: torus chains: intersecting stationary pair retains contacts", testTorusContactStarvation);
     run("probe: channels, counters, timers, debug drawing", testProbe);
     run("math: vectors, matrices, quaternions, N x N solvers", testMath);
@@ -68,10 +80,21 @@ int main() {
     run("GJK robustness on thin boxes", testGjkRandomThin);
     run("standard rigid: CCD for a fast-spinning plate", testCcdSpinningPlate);
     run("standard rigid: CCD bounds contain the full rotation arc", testCcdSweptBounds);
+    run("standard rigid: CCD query analytic impacts", testCcdQueryAnalytic);
+    run("standard rigid: CCD query statuses and invalid inputs", testCcdQueryStatuses);
+    run("standard rigid: CCD query sliding along large triangle faces", testCcdQuerySliding);
+    run("standard rigid: CCD primitive separating planes and mixed bullets", testCcdQueryBoxSeparation);
+    run("standard rigid: CCD world propagates uncertainty", testCcdWorldUncertainty);
+    run("standard rigid: CCD also checks slow motion when requested", testCcdAllMoving);
+    run("standard rigid: CCD retry integrates external loads once", testRigidStepLoads);
+    run("standard rigid: CCD retry restores the whole requested interval", testRigidStepRollback);
+    run("standard rigid: CCD retry mixed scene energy at three time steps", testRigidStepMixedEnergy);
+    run("standard rigid: CCD retry reduces initial penetration recovery", testRigidStepRecovery);
+    run("standard rigid: CCD contact impulse uses relative velocity", testRigidStepRelativeImpact);
     run("standard rigid: floor contacts retain the loaded support region", testWallSupportRegion);
     run("standard rigid: floor contacts include the extreme hull witness", testWallExtremeWitness);
     run("standard rigid: shock pass with a shared moving support is deterministic", testShockSharedSupport);
-    run("long beam onto cubes (no pass-through)", testBeamOverCubes);
+    run("standard rigid: long beam onto cubes (no pass-through)", testBeamOverCubes);
     run("hard contacts: edge-edge, rotated faces, 1:1000, deep EPA vs SAT", testHardContacts);
     run("standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop", testHardContactDynamics);
     run("convex hull + convex decomposition (teapot)", testConvexHullAndDecomposition);

@@ -1,0 +1,6 @@
+  nut: lift 4.509 mm, return 0.038 mm, pitch error 0.028 mm, sampled depth 0.052 mm, unexplained gain 0 J
+[ OK ] standard rigid: nut bolt lifts and reverses by thread contact (83952 ms)
+  bolt/nut convex pieces 234/80, pitch 12.0 mm
+[ OK ] standard rigid: nut bolt assembly and analytic screw clearance (12 ms)
+
+ALL PASSED

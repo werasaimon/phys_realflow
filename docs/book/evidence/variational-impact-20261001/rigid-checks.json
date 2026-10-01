@@ -1,0 +1,174 @@
+[
+  {
+    "name": "strict-configure",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "cmake",
+      "-S",
+      ".",
+      "-B",
+      "/tmp/phys-impact-research-20261001/build-strict",
+      "-G",
+      "Ninja",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DRF_WERROR=ON",
+      "-DRF_STRICT_FP=ON"
+    ],
+    "exit_code": 0,
+    "seconds": 0.31488027097657323
+  },
+  {
+    "name": "strict-build",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "cmake",
+      "--build",
+      "/tmp/phys-impact-research-20261001/build-strict",
+      "--parallel",
+      "6"
+    ],
+    "exit_code": 0,
+    "seconds": 50.14142358599929
+  },
+  {
+    "name": "strict-variational",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16488300502533093
+  },
+  {
+    "name": "strict-standard",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 4,
+    "seconds": 603.1381889830227
+  },
+  {
+    "name": "strict-noether",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06423730397364125
+  },
+  {
+    "name": "strict-golden",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 1,
+    "seconds": 0.06648243498057127
+  },
+  {
+    "name": "asan-configure",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "cmake",
+      "-S",
+      ".",
+      "-B",
+      "/tmp/phys-impact-research-20261001/build-sanitize",
+      "-G",
+      "Ninja",
+      "-DCMAKE_CXX_COMPILER=clang++",
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "-DRF_WERROR=ON",
+      "-DRF_SANITIZE=ON",
+      "-DRF_STRICT_FP=ON"
+    ],
+    "exit_code": 0,
+    "seconds": 0.5661084869643673
+  },
+  {
+    "name": "asan-build",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "cmake",
+      "--build",
+      "/tmp/phys-impact-research-20261001/build-sanitize",
+      "--parallel",
+      "6"
+    ],
+    "exit_code": 1,
+    "seconds": 4.525071858952288
+  },
+  {
+    "name": "readability",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "python3",
+      "tools/readability.py",
+      "."
+    ],
+    "exit_code": 0,
+    "seconds": 0.11449261399684474
+  },
+  {
+    "name": "diff-check",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0329683439922519
+  }
+]

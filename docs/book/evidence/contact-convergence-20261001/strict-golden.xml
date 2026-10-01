@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="1" time="0.040">
+  <testcase classname="rf_tests" name="determinism: golden hash of the rigid benchmark scene" time="0.040">
+    <failure message="1 failed CHECK(s), see the log"/>
+  </testcase>
+</testsuite>

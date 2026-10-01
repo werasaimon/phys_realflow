@@ -1,7 +1,8 @@
 // Continuous collision detection: the time of impact of two moving shapes by conservative
 // advancement (the distance shrinks no faster than the bound on the relative speed), and the
-// motion-clamping stage of RigidWorld for fast bodies. See TimeOfImpact.h for its limitations.
+// trial-checking stage of RigidWorld for fast bodies. See TimeOfImpact.h for its limitations.
 #include "rigid/TimeOfImpact.h"
+#include "rigid/ConservativeAdvancement.h"
 #include "rigid/RigidWorld.h"
 
 #include "core/Parallel.h"
@@ -19,66 +20,18 @@ AABB sweptBounds(const SweptPose& sweep, float tolerance) {
     // between its endpoints has error <= max|x''| s(1-s)/2 <= |theta|^2 r/8.
     // Translation is linear; r includes the offset of a compound child. See docs/22.
     const float arc = 0.125f * length(sweep.dTheta) * sweep.angularReach();
-    box.lo -= Vector3(tolerance + arc);
-    box.hi += Vector3(tolerance + arc);
+    const Vector3 padding = Vector3(tolerance + arc) + vabs(sweep.translationCurve) * 0.25f;
+    box.lo -= padding;
+    box.hi += padding;
     return box;
 }
 
 ToiResult timeOfImpact(const SweptPose& A, const SweptPose& B, float tol, int maxIt) {
-    ToiResult r;
-    const float bound = length((A.p1 - A.p0) - (B.p1 - B.p0)) + A.angularReach() + B.angularReach();
-    if (bound < 1e-9f) return r;
-    float s = 0;
-    for (int it = 0; it < maxIt; ++it) {
-        r.iterations = it + 1;
-        GjkResult g = gjk(A.at(s), B.at(s));
-        if (g.intersect) {
-            if (s == 0) return r; // already touching: the discrete solver owns this pair
-            r.hit = true;         // intersecting iterate; no earlier safe bracket is retained here
-            r.s = s;
-            return r;
-        }
-        if (g.distance < tol) {
-            // Touching at the start of the step: a resting/sliding contact owned by the discrete
-            // (speculative) solver - never freeze such pairs.
-            if (s == 0) return r;
-            r.hit = true;
-            r.s = s;
-            return r;
-        }
-        // Conservative step: the gap cannot close faster than `bound` per unit s. Aim slightly
-        // short of contact so the next GJK still sees separated shapes.
-        s += std::max((g.distance - 0.5f * tol) / bound, 1e-6f);
-        if (s > 1.0f) return r;
-    }
-    return r;
+    return ConservativeAdvancement(tol, maxIt).between(A, B);
 }
 
 ToiResult timeOfImpactPlane(const SweptPose& A, const Vector3& n, float d, float tol, int maxIt) {
-    ToiResult r;
-    const float bound = std::fabs(dot(A.p1 - A.p0, n)) + A.angularReach();
-    if (bound < 1e-9f) return r;
-    float s = 0;
-    for (int it = 0; it < maxIt; ++it) {
-        r.iterations = it + 1;
-        PosedShape ps = A.at(s);
-        float dist = dot(ps.support(-n), n) - d; // exact distance of the shape to the plane
-        if (dist < 0) {
-            if (s == 0) return r;
-            r.hit = true;
-            r.s = s;
-            return r;
-        }
-        if (dist < tol) {
-            if (s == 0) return r; // touching the plane already: discrete contact
-            r.hit = true;
-            r.s = s;
-            return r;
-        }
-        s += std::max((dist - 0.5f * tol) / bound, 1e-6f);
-        if (s > 1.0f) return r;
-    }
-    return r;
+    return ConservativeAdvancement(tol, maxIt).againstPlane(A, n, d);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,38 +75,29 @@ void partsOf(const SweptPose& sp, std::vector<SweptPose>& out) {
     }
 }
 
-// Earliest time of impact of any part of A with any part of B.
-ToiResult partsTimeOfImpact(const SweptPose& A, const SweptPose& B, float tol) {
+// Inspect every child pair, including uncertainty in a pair later than the earliest impact.
+float partsTimeOfImpact(const SweptPose& A, const SweptPose& B, float tol, int maxIt, CcdDiagnostics& diagnostics) {
     std::vector<SweptPose> pa, pb;
     partsOf(A, pa);
     partsOf(B, pb);
-    ToiResult first;
+    float first = 1;
+    ConservativeAdvancement query(tol, maxIt);
     for (const SweptPose& a : pa)
-        for (const SweptPose& b : pb) {
-            ToiResult r = timeOfImpact(a, b, tol);
-            if (r.hit && r.s < first.s) first = r;
-        }
+        for (const SweptPose& b : pb)
+            first = std::min(first, diagnostics.observe(query.between(a, b)));
     return first;
 }
 
 } // namespace
 
-// Fast bodies are stopped at the moment they would touch something, so nothing tunnels through
-// a wall between two steps. Passes: find the times of impact of all fast bodies with the motions
-// of this pass; both bodies of a colliding pair stop at their common time of impact (motion
-// clamping); a stopped body stays put for the rest of the step (its sweep becomes static), and
-// the pass repeats so bodies that would now run into it are caught too (A hits B, B hits C, ...).
-//
-// What it costs: only the fast bodies are swept against the others, as Box2D's "bullet" bodies and
-// Bullet's ccdMotionThreshold do - the slow ones are left to the speculative contacts. The fast
-// list is made once per step, not once per pass (a pass only refreshes the bodies it clamped). The
-// candidates come from a plain scan while the fast bodies are few - a tree over a thousand swept
-// boxes costs a millisecond to build, a scan of them for one fast body a microsecond - and a slow
-// body gets its exact sweep only when its coarse box (coarseSweepBox) reaches a fast body's sweep.
-// A pile of a thousand falling cubes spent 14 ms a frame here before.
+// Check the completed trial trajectory without changing any pose or velocity. A hit or an
+// unresolved query rejects the entire trial in RigidStep, which restores and reintegrates it.
+// Candidate selection still uses the motion threshold (or ccdAllMoving); initial contacts are
+// handled by the discrete solver. This is not an interval-certified collision-free integrator.
 void RigidWorld::continuousCollision() {
     Probe::Timer timer("rigid/ccd ms");
     ccdHits_ = 0;
+    ccdDiagnostics_ = CcdDiagnostics();
     ccdClamped_.assign(bodies_.size(), 0);
     if (!params.ccd) return;
     // 1. Who is fast this step (the usual answer: nobody, and nothing else is done).
@@ -171,11 +115,12 @@ void RigidWorld::continuousCollision() {
     } else {
         for (int i : fastBodies_) sweepBody(i), sweepReady_[size_t(i)] = 1;
     }
-    // 3. The passes: times of impact, then the clamping, until nothing more is stopped.
-    for (int pass = 0; pass < 8; ++pass) {
-        impactTimes_.assign(bodies_.size(), 1.0f);
-        findTimesOfImpact(impactTimes_, useTree);
-        if (!clampToTimesOfImpact(impactTimes_)) break;
+    impactTimes_.assign(n, 1.0f);
+    findTimesOfImpact(impactTimes_, useTree);
+    for (size_t i = 0; i < n; ++i) {
+        if (impactTimes_[i] >= 1) continue;
+        ccdClamped_[i] = 1; // compatibility diagnostic: this body's trial needs rejection
+        ++ccdHits_;
     }
 }
 
@@ -189,11 +134,12 @@ bool RigidWorld::findFastBodies() {
     motionBound_.assign(bodies_.size(), 0.0f);
     for (int i = 0; i < int(bodies_.size()); ++i) {
         const RigidBody& b = bodies_[i];
-        if (b.invMass == 0 || b.sleeping) continue;
+        if (!b.alive || b.invMass == 0 || b.sleeping) continue;
         const Quaternion dq = b.rot * b.prevRot.conjugate();
         const float turnBound = kPi * std::sqrt(dq.x * dq.x + dq.y * dq.y + dq.z * dq.z);
         const float reachBound = length(b.pos - b.prevPos) + turnBound * b.shape->boundingRadius();
         motionBound_[size_t(i)] = reachBound; // no point of the body moved further this step
+        if (params.ccdAllMoving && reachBound > 0) { fastBodies_.push_back(i); continue; }
         const float minExtent = std::max(0.5f * minComp(b.shape->localBounds().extent()), 1e-3f);
         if (reachBound < params.ccdThreshold * minExtent) continue; // slow even by the bound
         if (isFast(b, sweptOf(b), params.ccdThreshold)) fastBodies_.push_back(i);
@@ -226,23 +172,19 @@ void RigidWorld::sweepBodies() {
     for (int i = 0; i < int(bodies_.size()); ++i) sweepBody(i);
 }
 
-// For every fast body not yet stopped, the earliest moment (0..1 of the step) it touches another
-// body, a domain wall or the static mesh: conservative advancement (timeOfImpact) on the pairs
-// whose swept boxes meet. The candidates come from the tree over the swept boxes (built once per
-// step: a stopped body's new box lies inside its old one, so the tree stays conservative) or from a
-// plain scan of all boxes. Both bodies of a pair stop together.
+// Earliest impact/uncertainty for each selected body against every candidate body, domain
+// wall or mesh triangle. Both bodies of a dynamic pair contribute to the rejection diagnostic.
 void RigidWorld::findTimesOfImpact(std::vector<float>& sMin, bool useTree) {
     const float tol = params.ccdTolerance;
     const std::vector<SweptPose>& sw = sweeps_;
     const std::vector<AABB>& swBox = sweepBoxes_;
     for (int i : fastBodies_) {
-        if (ccdClamped_[size_t(i)]) continue; // stopped by an earlier pass: static now
         auto tryPair = [&](int j) {
             if (j == i || !swBox[size_t(j)].overlaps(swBox[size_t(i)])) return;
-            ToiResult r = partsTimeOfImpact(sw[size_t(i)], sw[size_t(j)], tol);
-            if (!r.hit) return;
-            sMin[size_t(i)] = std::min(sMin[size_t(i)], r.s);
-            if (bodies_[j].invMass > 0) sMin[size_t(j)] = std::min(sMin[size_t(j)], r.s); // the pair stops together
+            if (!bodies_[j].alive) return;
+            const float stop = partsTimeOfImpact(sw[size_t(i)], sw[size_t(j)], tol, params.ccdMaxIterations, ccdDiagnostics_);
+            sMin[size_t(i)] = std::min(sMin[size_t(i)], stop);
+            if (bodies_[j].invMass > 0) sMin[size_t(j)] = std::min(sMin[size_t(j)], stop);
         };
         if (useTree) sweptTree_.queryAABB(swBox[size_t(i)], [&](uint32_t j) { tryPair(int(j)); });
         else
@@ -258,8 +200,8 @@ void RigidWorld::findTimesOfImpact(std::vector<float>& sMin, bool useTree) {
             const Vector3 normals[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
             const Vector3 points[6] = {domain_.lo, domain_.hi, domain_.lo, domain_.hi, domain_.lo, domain_.hi};
             for (int w = 0; w < 6; ++w) {
-                ToiResult r = timeOfImpactPlane(sw[i], normals[w], dot(normals[w], points[w]), tol);
-                if (r.hit) sMin[i] = std::min(sMin[i], r.s);
+                const ToiResult r = timeOfImpactPlane(sw[i], normals[w], dot(normals[w], points[w]), tol, params.ccdMaxIterations);
+                sMin[i] = std::min(sMin[i], ccdDiagnostics_.observe(r));
             }
         }
         if (mesh_ && !mesh_->empty() && mesh_->bounds().overlaps(swBox[i])) {
@@ -269,34 +211,11 @@ void RigidWorld::findTimesOfImpact(std::vector<float>& sMin, bool useTree) {
                 TriangleShape tri(a, b, c);
                 SweptPose T;
                 T.shape = &tri;
-                ToiResult r = partsTimeOfImpact(sw[i], T, tol);
-                if (r.hit) sMin[i] = std::min(sMin[i], r.s);
+                const float stop = partsTimeOfImpact(sw[i], T, tol, params.ccdMaxIterations, ccdDiagnostics_);
+                sMin[i] = std::min(sMin[i], stop);
             });
         }
     }
-}
-
-// Every body with an impact before the end of the step is put back to that moment, keeping its
-// velocity: the speculative contact of the next step resolves the impact (with restitution, see
-// prepareManifold). Returns whether anything was clamped (then another pass is due).
-bool RigidWorld::clampToTimesOfImpact(const std::vector<float>& sMin) {
-    const std::vector<SweptPose>& sw = sweeps_;
-    bool any = false;
-    for (int i = 0; i < int(bodies_.size()); ++i) {
-        if (sMin[i] >= 1.0f) continue;
-        RigidBody& b = bodies_[i];
-        b.pos = sw[i].p0 + (sw[i].p1 - sw[i].p0) * sMin[i];
-        b.rot = sw[i].q0.integrated(sw[i].dTheta, sMin[i]);
-        b.prevPos = b.pos; // static for the remaining passes of this step
-        b.prevRot = b.rot;
-        b.updateInertia();
-        sweepBody(i); // its sweep is now a point: the next pass sees it standing there
-        sweepReady_[size_t(i)] = 1;
-        if (!ccdClamped_[i]) ++ccdHits_;
-        ccdClamped_[i] = 1;
-        any = true;
-    }
-    return any;
 }
 
 } // namespace rf

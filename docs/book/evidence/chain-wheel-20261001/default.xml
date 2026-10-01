@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="188" failures="0" time="453.711">
+  <testcase classname="rf_tests" name="variational: exact action and variable-step free flight" time="0.001"/>
+  <testcase classname="rf_tests" name="variational: elastic bounce at five steps and adaptive cadence" time="0.123"/>
+  <testcase classname="rf_tests" name="variational: unequal masses, boost and simultaneous impact" time="0.000"/>
+  <testcase classname="rf_tests" name="variational: unsupported physics and persistent contact roll back" time="0.002"/>
+  <testcase classname="rf_tests" name="variational: CCD follows acceleration between identical endpoints" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: chain wheel assembly" time="0.068"/>
+  <testcase classname="rf_tests" name="standard rigid: torus chains: intersecting stationary pair retains contacts" time="0.006"/>
+  <testcase classname="rf_tests" name="probe: channels, counters, timers, debug drawing" time="0.004"/>
+  <testcase classname="rf_tests" name="math: vectors, matrices, quaternions, N x N solvers" time="0.000"/>
+  <testcase classname="rf_tests" name="math: tensors - Einstein summation vs loops, raise / lower / trace, refusals" time="0.000"/>
+  <testcase classname="rf_tests" name="math: outer, Kronecker, QR, SVD, matrix exponential" time="0.000"/>
+  <testcase classname="rf_tests" name="primitives" time="0.000"/>
+  <testcase classname="rf_tests" name="bvh" time="0.755"/>
+  <testcase classname="rf_tests" name="mass properties" time="0.000"/>
+  <testcase classname="rf_tests" name="gjk / epa / sat" time="0.000"/>
+  <testcase classname="rf_tests" name="rigid bodies" time="0.008"/>
+  <testcase classname="rf_tests" name="box stack" time="0.017"/>
+  <testcase classname="rf_tests" name="convex bodies at rest" time="0.011"/>
+  <testcase classname="rf_tests" name="dynamic AABB tree (insert, move, remove, query)" time="0.016"/>
+  <testcase classname="rf_tests" name="broad phase BVH, SAP, AABB tree == brute force" time="0.137"/>
+  <testcase classname="rf_tests" name="tall stack (10 boxes)" time="0.025"/>
+  <testcase classname="rf_tests" name="standard rigid: stack of 100 boxes dropped from 1 cm" time="0.252"/>
+  <testcase classname="rf_tests" name="standard rigid: stack of 200 boxes dropped from 1 cm" time="0.736"/>
+  <testcase classname="rf_tests" name="standard rigid: rigid perf: 1000 cubes fall" time="1.813"/>
+  <testcase classname="rf_tests" name="ray cast + mouse joint" time="0.004"/>
+  <testcase classname="rf_tests" name="standard rigid: joints: ball, hinge+motor, slider, fixed, distance" time="0.047"/>
+  <testcase classname="rf_tests" name="standard rigid: continuous collision (GJK conservative advancement)" time="0.003"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD between moving bodies (no superposition)" time="0.024"/>
+  <testcase classname="rf_tests" name="GJK robustness on thin boxes" time="0.002"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD for a fast-spinning plate" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD bounds contain the full rotation arc" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query analytic impacts" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query statuses and invalid inputs" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query sliding along large triangle faces" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD primitive separating planes and mixed bullets" time="0.025"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD world propagates uncertainty" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD also checks slow motion when requested" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry integrates external loads once" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry restores the whole requested interval" time="0.001"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry mixed scene energy at three time steps" time="1.152"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD retry reduces initial penetration recovery" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD contact impulse uses relative velocity" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: floor contacts retain the loaded support region" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: floor contacts include the extreme hull witness" time="0.723"/>
+  <testcase classname="rf_tests" name="standard rigid: shock pass with a shared moving support is deterministic" time="0.076"/>
+  <testcase classname="rf_tests" name="standard rigid: long beam onto cubes (no pass-through)" time="0.076"/>
+  <testcase classname="rf_tests" name="hard contacts: edge-edge, rotated faces, 1:1000, deep EPA vs SAT" time="0.003"/>
+  <testcase classname="rf_tests" name="standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop" time="0.247"/>
+  <testcase classname="rf_tests" name="convex hull + convex decomposition (teapot)" time="0.154"/>
+  <testcase classname="rf_tests" name="standard rigid: 100 non-convex teapots" time="3.682"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: the parts of a ring and a cup keep the hole and the hollow" time="0.284"/>
+  <testcase classname="rf_tests" name="non-convex: a ring lying on the floor does not sink" time="0.082"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a chain of rings hangs interlocked" time="0.259"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a ring dropped over a peg slides down to the floor" time="0.069"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a ball and boxes dropped into a cup land on its bottom" time="0.153"/>
+  <testcase classname="rf_tests" name="non-convex: a ball, a cylinder and a wheel of boxes roll down a slope, each by its law" time="0.039"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: 60 bodies poured into a bowl stay in it and sleep" time="0.904"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: a stack of eight tables stands and sleeps" time="0.027"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: six cups nest as their parts allow and sleep" time="2.365"/>
+  <testcase classname="rf_tests" name="standard rigid: non-convex: teapots, bunnies and rings on the terrain mesh" time="4.740"/>
+  <testcase classname="rf_tests" name="particles rest" time="0.466"/>
+  <testcase classname="rf_tests" name="particles floating" time="0.937"/>
+  <testcase classname="rf_tests" name="soft bodies and cloth (unified particles)" time="14.029"/>
+  <testcase classname="rf_tests" name="soft bodies: six barrels stacked do not sink into each other" time="4.696"/>
+  <testcase classname="rf_tests" name="soft bodies: two thrown together bounce apart, a box rests on a jelly" time="2.602"/>
+  <testcase classname="rf_tests" name="soft benchmark: cantilever under its own weight vs Timoshenko, three grids" time="2.797"/>
+  <testcase classname="rf_tests" name="soft benchmark: virtual work - the rest state balances the weight and is an energy minimum" time="1.129"/>
+  <testcase classname="rf_tests" name="soft benchmark: first bending frequency of the cantilever" time="4.142"/>
+  <testcase classname="rf_tests" name="soft benchmark: hanging bar - extension, Poisson, no volume locking at nu 0.49" time="0.842"/>
+  <testcase classname="rf_tests" name="soft benchmark: a spinning box keeps its momentum and angular momentum" time="0.774"/>
+  <testcase classname="rf_tests" name="soft benchmark: a cube dragged inside out through its clamped half comes back to its shape" time="0.650"/>
+  <testcase classname="rf_tests" name="soft benchmark: a jelly at rest on the floor neither jitters nor creeps" time="1.008"/>
+  <testcase classname="rf_tests" name="soft benchmark: the static answer does not depend on the step; energy never grows" time="8.153"/>
+  <testcase classname="rf_tests" name="soft bodies sleep: still to the bit, woken by a box dropped on them and by the mouse" time="0.635"/>
+  <testcase classname="rf_tests" name="cloth: a sheet swinging on its pinned edge loses no thread" time="8.737"/>
+  <testcase classname="rf_tests" name="cloth: threads carry the static load and tear at their strength" time="1.952"/>
+  <testcase classname="rf_tests" name="grid uniform flow" time="0.065"/>
+  <testcase classname="rf_tests" name="grid sphere drag" time="4.037"/>
+  <testcase classname="rf_tests" name="surface loads per triangle (Cp, Cf, forces)" time="4.181"/>
+  <testcase classname="rf_tests" name="grid wing lift" time="6.843"/>
+  <testcase classname="rf_tests" name="smoke closed box" time="3.620"/>
+  <testcase classname="rf_tests" name="gas &lt;-&gt; rigid bodies (moving solids, two-way)" time="10.494"/>
+  <testcase classname="rf_tests" name="gas + soft bodies + cloth + rigid bodies" time="10.621"/>
+  <testcase classname="rf_tests" name="hydrodynamics: water + air + bodies" time="14.109"/>
+  <testcase classname="rf_tests" name="disturbance brush" time="0.008"/>
+  <testcase classname="rf_tests" name="combustion: exact radiative cooling, oxygen limit, energy" time="0.000"/>
+  <testcase classname="rf_tests" name="heat conduction (Fourier) in the gas and along cloth" time="0.291"/>
+  <testcase classname="rf_tests" name="cotton pyrolysis (Arrhenius) under radiant flux" time="0.001"/>
+  <testcase classname="rf_tests" name="fire: burner ignites a curtain, it burns through" time="29.753"/>
+  <testcase classname="rf_tests" name="liquid walls in the density (no corner jets)" time="31.101"/>
+  <testcase classname="rf_tests" name="light body in a wave (no kicks, floats)" time="47.411"/>
+  <testcase classname="rf_tests" name="MHD: resistive decay, Alfven wave, div B = 0" time="0.485"/>
+  <testcase classname="rf_tests" name="plasma wind vs magnet (magnetopause)" time="16.623"/>
+  <testcase classname="rf_tests" name="MHD: an Alfvénic state v = b is an exact nonlinear solution (Elsässer)" time="1.658"/>
+  <testcase classname="rf_tests" name="presets" time="3.904"/>
+  <testcase classname="rf_tests" name="coherence: scene switches, one gravity, Coulomb friction, burnt cloth" time="0.596"/>
+  <testcase classname="rf_tests" name="determinism: two runs agree to the bit (rigid, particles, gas)" time="2.343"/>
+  <testcase classname="rf_tests" name="determinism: the same bits on 1, 2 and all threads" time="19.293"/>
+  <testcase classname="rf_tests" name="determinism: golden hash of the rigid benchmark scene" time="0.024"/>
+  <testcase classname="rf_tests" name="determinism: rf::sin, cos, atan2 ... equal std:: to the bit (step 1 of 2)" time="0.003"/>
+  <testcase classname="rf_tests" name="benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996)" time="50.903"/>
+  <testcase classname="rf_tests" name="Noether: energy, momentum and angular momentum of rigid bodies" time="0.041"/>
+  <testcase classname="rf_tests" name="standard rigid: Newton's cradle on the floor: the hit passes down the row" time="0.004"/>
+  <testcase classname="rf_tests" name="grid convergence of the gas solver (Richardson order)" time="43.527"/>
+  <testcase classname="rf_tests" name="gas: multigrid pressure matches PCG and converges in few iterations" time="10.187"/>
+  <testcase classname="rf_tests" name="gas: advection-reflection keeps the inviscid Taylor-Green energy" time="0.893"/>
+  <testcase classname="rf_tests" name="benchmark: dam break front vs Martin &amp; Moyce 1952" time="2.267"/>
+  <testcase classname="rf_tests" name="standard rigid: terrain: 150 bodies on a static mesh of 51 200 triangles" time="3.493"/>
+  <testcase classname="rf_tests" name="Voronoi fracture: cells fill the body, convex and watertight" time="0.014"/>
+  <testcase classname="rf_tests" name="particles vs many bodies: the world tree" time="4.106"/>
+  <testcase classname="rf_tests" name="rigid: destroy one body, reuse its slot" time="0.038"/>
+  <testcase classname="rf_tests" name="rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts" time="0.025"/>
+  <testcase classname="rf_tests" name="rigid: restitution 0 - a dropped body stops at the touch" time="0.040"/>
+  <testcase classname="rf_tests" name="rigid: a cube dropped flat lands without turning or sliding" time="0.057"/>
+  <testcase classname="rf_tests" name="rigid: a barrel touching a wide floor gets the floor's normal and its true depth" time="0.002"/>
+  <testcase classname="rf_tests" name="standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps" time="1.878"/>
+  <testcase classname="rf_tests" name="particles: remove one group (soft body, liquid)" time="0.958"/>
+  <testcase classname="rf_tests" name="geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4)" time="0.223"/>
+  <testcase classname="rf_tests" name="light deflection by a mass: 4M/b + second order" time="0.011"/>
+  <testcase classname="rf_tests" name="photon sphere at 3M and the ISCO at 6M" time="0.010"/>
+  <testcase classname="rf_tests" name="perihelion precession: 6 pi M / (a (1 - e^2))" time="0.012"/>
+  <testcase classname="rf_tests" name="shadow of a Schwarzschild hole: 3 sqrt(3) M (ray tracer)" time="2.258"/>
+  <testcase classname="rf_tests" name="horizon crossing: Eddington-Finkelstein vs Boyer-Lindquist" time="0.003"/>
+  <testcase classname="rf_tests" name="curvature: flat space in spherical coordinates, the 2-sphere, loops vs einstein()" time="0.002"/>
+  <testcase classname="rf_tests" name="curvature: Schwarzschild, Kerr, Reissner-Nordstrom (Christoffels, Ricci, Kretschmann)" time="0.008"/>
+  <testcase classname="rf_tests" name="curvature: de Sitter, Friedmann, a wormhole's exotic matter" time="0.002"/>
+  <testcase classname="rf_tests" name="curvature: tides of a static observer, geodesics with Gamma vs Hamilton" time="0.020"/>
+  <testcase classname="rf_tests" name="symplectic geodesics: the exact Kerr gradient matches the metric" time="0.000"/>
+  <testcase classname="rf_tests" name="symplectic geodesics: energy bounded over thousands of orbits, RK4 drifts" time="0.321"/>
+  <testcase classname="rf_tests" name="symplectic geodesics: order 2 (midpoint, Tao-2) and 4 (Tao-4, RK4)" time="0.005"/>
+  <testcase classname="rf_tests" name="symplectic geodesics: forward then back returns to the start" time="0.005"/>
+  <testcase classname="rf_tests" name="scene graph: save -&gt; load -&gt; save gives the same text" time="0.000"/>
+  <testcase classname="rf_tests" name="scene graph: the file does not depend on the locale (decimal comma)" time="0.001"/>
+  <testcase classname="rf_tests" name="magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998)" time="0.000"/>
+  <testcase classname="rf_tests" name="magnets: two free magnets pull together, momentum conserved" time="0.007"/>
+  <testcase classname="rf_tests" name="scene graph: every role and shape builds and runs" time="0.490"/>
+  <testcase classname="rf_tests" name="scene graph: no invisible walls (a 28 m column in a 3 m room, a ball off the floor)" time="0.035"/>
+  <testcase classname="rf_tests" name="scene graph: soft bodies inside each other are pushed apart, not thrown" time="2.675"/>
+  <testcase classname="rf_tests" name="scene graph: a plane made cloth hangs from its pinned edge" time="1.817"/>
+  <testcase classname="rf_tests" name="scene graph: a smoke emitter on a thrown box leaves a trail" time="0.989"/>
+  <testcase classname="rf_tests" name="scene graph: a flammable curtain over a hot emitter catches fire" time="18.403"/>
+  <testcase classname="rf_tests" name="scene graph: a model from a file as rigid, soft and (not) cloth" time="0.031"/>
+  <testcase classname="rf_tests" name="scene graph: a shape with no role is geometry only" time="0.003"/>
+  <testcase classname="rf_tests" name="scene graph: the collider apart from the look (box collider slides, sphere collider rolls)" time="0.010"/>
+  <testcase classname="rf_tests" name="scene graph: a capsule fitted to a model, collider round trip, off-centre rebuild" time="0.010"/>
+  <testcase classname="rf_tests" name="scene graph: a collider alone is a static obstacle" time="0.004"/>
+  <testcase classname="rf_tests" name="scene graph: lights and cameras round trip, a spot's direction, a camera's frame" time="0.000"/>
+  <testcase classname="rf_tests" name="meta-objects: water -&gt; jelly -&gt; water -&gt; jelly in place, the rest untouched" time="0.376"/>
+  <testcase classname="rf_tests" name="meta-objects: a plane rigid -&gt; cloth -&gt; rigid, body slots reused" time="0.481"/>
+  <testcase classname="rf_tests" name="meta-objects: a magnet role off and on without a reload" time="0.000"/>
+  <testcase classname="rf_tests" name="meta-objects: fifty changes leave no trace in memory" time="0.152"/>
+  <testcase classname="rf_tests" name="scene graph: groups, instances and arrays round trip; a child of a turned group" time="0.000"/>
+  <testcase classname="rf_tests" name="array: line, grid and circle copies where the pattern puts them, seeded jitter" time="0.000"/>
+  <testcase classname="rf_tests" name="array: fifty cubes fall and sleep, the array grows to eighty during play" time="0.201"/>
+  <testcase classname="rf_tests" name="array: ten instances of one master all get heavier with it" time="0.006"/>
+  <testcase classname="rf_tests" name="array: a glued group of three boxes falls and tumbles as one body" time="0.006"/>
+  <testcase classname="rf_tests" name="debug layers: all off draws nothing and allocates nothing more (100 boxes)" time="0.239"/>
+  <testcase classname="rf_tests" name="debug layers: one point per contact point, contacts in the snapshot" time="0.043"/>
+  <testcase classname="rf_tests" name="debug layers: watched pair, GJK simplices, EPA depth == contact depth" time="0.000"/>
+  <testcase classname="rf_tests" name="debug layers: world AABB tree has 2 n - 1 nodes" time="0.000"/>
+  <testcase classname="rf_tests" name="debug layers: one line per cloth thread" time="0.079"/>
+  <testcase classname="rf_tests" name="debug layers: gas slice (grid, u, -grad p / rho, div u, curl u) and field lines B" time="1.074"/>
+  <testcase classname="rf_tests" name="debug layers: a layer stops at its cap with a label" time="0.001"/>
+  <testcase classname="rf_tests" name="memory: allocations per frame of every scene" time="10.695"/>
+  <testcase classname="rf_tests" name="profiler: the stage timers add up to the whole step, none inside another" time="12.832"/>
+  <testcase classname="rf_tests" name="action: friction takes mu m g per metre slid" time="0.011"/>
+  <testcase classname="rf_tests" name="action: a damped pendulum loses the damping's work, the joint none" time="0.012"/>
+  <testcase classname="rf_tests" name="action: viscous dissipation 2 nu |S|^2 of a Taylor-Green vortex" time="0.182"/>
+  <testcase classname="rf_tests" name="action: magnetic energy turns into Joule heat J^2 / sigma" time="0.013"/>
+  <testcase classname="rf_tests" name="action: a free spinning box keeps its energy and L (Noether)" time="0.027"/>
+  <testcase classname="rf_tests" name="channels: free fall keeps energy (up to the integrator) and gains m g t of momentum" time="0.001"/>
+  <testcase classname="rf_tests" name="channels: an elastic collision keeps momentum and energy; the pair's centre moves on" time="0.002"/>
+  <testcase classname="rf_tests" name="channels: friction takes mu m g per metre, read from the slab's own channels" time="0.009"/>
+  <testcase classname="rf_tests" name="channels: Newton's third law - the ground feels the stack, each box its weight" time="0.050"/>
+  <testcase classname="rf_tests" name="channels: the gas energy of a Taylor-Green vortex decays as exp(-4 nu pi^2 t)" time="0.165"/>
+  <testcase classname="rf_tests" name="channels: a probe line across a channel reads Poiseuille's parabola" time="0.849"/>
+  <testcase classname="rf_tests" name="channels: a probe line down a heavy gas reads p = rho g h" time="0.003"/>
+  <testcase classname="rf_tests" name="channels: nothing asked costs nothing; measuring changes no bit; same bits on any threads" time="0.210"/>
+  <testcase classname="rf_tests" name="channels: every name card has an id, a unit and a name" time="0.000"/>
+  <testcase classname="rf_tests" name="mathbook: float and double - what survives a long sum and a small difference" time="0.011"/>
+  <testcase classname="rf_tests" name="mathbook: vectors - a charge circles in a field, a push off centre spins a body" time="0.000"/>
+  <testcase classname="rf_tests" name="mathbook: the slope of the height is the speed; the step is first order" time="0.001"/>
+  <testcase classname="rf_tests" name="mathbook: a pendulum by Euler, symplectic Euler and Runge-Kutta 4" time="0.000"/>
+  <testcase classname="rf_tests" name="mathbook: a big linear system by Jacobi and CG; inertia eigenvalues" time="0.002"/>
+  <testcase classname="rf_tests" name="mathbook: the tennis-racket flip in quaternions, engine vs Euler's equations" time="0.035"/>
+  <testcase classname="rf_tests" name="mathbook: div u before and after the pressure projection" time="0.003"/>
+  <testcase classname="rf_tests" name="mathbook: the spread of an average falls as 1 / sqrt(N)" time="0.002"/>
+  <testcase classname="rf_tests" name="verification: registry runs quick and writes a board" time="0.021"/>
+</testsuite>

@@ -1,0 +1,38 @@
+[
+  {
+    "mode": "fixed-discrete",
+    "initial_J": 24034.5,
+    "final_J": 24058.127,
+    "impacts": 10,
+    "impact_gain_J": 4715.6064,
+    "free_flight_change_J": -4691.9795,
+    "predicted_euler_change_J": -4691.9907,
+    "accepted_time_s": 20,
+    "accepted": 2000,
+    "rejected": 0
+  },
+  {
+    "mode": "refined-discrete",
+    "initial_J": 24034.5,
+    "final_J": 19674.977,
+    "impacts": 11,
+    "impact_gain_J": 307.2728,
+    "free_flight_change_J": -4666.7954,
+    "predicted_euler_change_J": -4666.838,
+    "accepted_time_s": 20,
+    "accepted": 2330,
+    "rejected": 0
+  },
+  {
+    "mode": "atomic-ccd",
+    "initial_J": 24034.5,
+    "final_J": 19843.148,
+    "impacts": 10,
+    "impact_gain_J": 500.62775,
+    "free_flight_change_J": -4691.979,
+    "predicted_euler_change_J": -4691.9907,
+    "accepted_time_s": 20,
+    "accepted": 2032,
+    "rejected": 32
+  }
+]

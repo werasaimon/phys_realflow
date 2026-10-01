@@ -1,0 +1,1 @@
+{"frames":1800,"load":2,"substeps":40,"measured":true,"motor_work_J":0.33691606,"peak_residual_J":0,"peak_frame_residual_J":0,"peak_after_settle_J":0,"final_residual_J":-3.0888922,"trajectory_hash":"20209c697b7f6883","broken_pairs":0}

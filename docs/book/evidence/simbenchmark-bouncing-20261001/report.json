@@ -1,0 +1,1546 @@
+{
+  "benchmark": "adapted SimBenchmark Bouncing",
+  "author_commit": "3fd17646352f4c1c2c3108f93dae00f2a2d60097",
+  "engines": [
+    "sdk",
+    "bullet",
+    "jolt",
+    "box3d",
+    "box3d-native",
+    "sdk-ccd"
+  ],
+  "upstream_sources": [
+    {
+      "author_path": "benchmark/res/yaml/bouncing.yaml",
+      "git_blob_sha1": "236e6907297e9cb4d129e23057c991dc7cdef8c5",
+      "sha256": "9c3a39696448bd577e7720472b2e3c21e05fff97e8408c33bfaa2dd57bd8f799",
+      "bytes": 501
+    },
+    {
+      "author_path": "benchmark/include/BouncingBenchmark.hpp",
+      "git_blob_sha1": "5afbbf8d2144f5e157ecf3fcd3cf35e1610e9005",
+      "sha256": "a77fbd8f003394543a7ee7c3efecb7ed8c7da7b4be4be748a4c7cae9f2ccddc4",
+      "bytes": 10857
+    },
+    {
+      "author_path": "benchmark/bulletSim/BouncingBenchmark.cpp",
+      "git_blob_sha1": "acedbdb723aa2ae0f8dcdc2ddc9677aea75638d0",
+      "sha256": "a827b21718187731e3178c846142db868f4ea52f0f0b92db51024be089a2f138",
+      "bytes": 5427
+    },
+    {
+      "author_path": "res/benchmark/bouncing-benchmark/bullet/ball.urdf",
+      "git_blob_sha1": "90bb1dc882d23b1ad9f749d2181ce805c98a1fd8",
+      "sha256": "53ea08bf86abddbb10d316478b13fb6031d522320a28235fbedb1b3d0e131c6d",
+      "bytes": 626
+    },
+    {
+      "author_path": "res/benchmark/bouncing-benchmark/bullet/plane.urdf",
+      "git_blob_sha1": "3a3aa3591d5ac16c7d42acc3da181aa46a0276c5",
+      "sha256": "56a9e6a0304bf2a69d57292f13df917c669522f0fd6b02ad2a954e1e8be08594",
+      "bytes": 727
+    }
+  ],
+  "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+  "source_sha256": {
+    "tools/run_simbenchmark_bouncing.py": "88b772dd84a6db318dc2964fe136779c058b95dfa4c5fa835ce1af86d750f565",
+    "tools/SimBenchmarkBouncing.cpp": "dea3fede112f958c312bae8000ab2ac1d0054e63cd1286b641f70dd29926150e",
+    "tools/rigid_reference/BouncingBox3d.h": "a7b8f9dd01f9d41dd191e971bf757c4f3be158b412753ded103ae9bc74b9479c",
+    "tools/rigid_reference/BouncingBullet.h": "32c3d1add7cf57298ecbcd71b938a1c0945fa5cba58984600dbd76cf9630181a",
+    "tools/rigid_reference/BouncingCase.h": "b0c833e53ce880eb918807374c39990a5d1198d20a02317171a7f17b1f8087f1",
+    "tools/rigid_reference/BouncingJolt.h": "8622cc04f6699ba0ff6b0b47f6f36c799319c4ca9145ed631469134a63e49d3e",
+    "tools/rigid_reference/BouncingSdk.h": "16f3908d91bd122b08c6b62bb8faaf8584fa98480ff789a637a3f010b45cfe47",
+    "tools/rigid_reference/JoltRuntime.h": "eecc054312a9c100b1a195deb37ba8d1b2d3e1965530d6ca624880d5bc255f75",
+    "tools/rigid_reference/CMakeLists.txt": "0bd020bd563881d962e83a4bc9fa98ff6dd9549924005869e9ee1b0104b7c3dd",
+    "build-core/librfcore.a": "dfefd65ecf364d5842ad3615998ed659ebbaaafd1b1d61a74c62c13678e5398b"
+  },
+  "git_head": "2d0adca5174542df89e9a090e6c26ced96d7a6b1",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "rf_threads": "10",
+  "timestep_sweep_s": [
+    0.01,
+    0.005,
+    0.002,
+    0.001,
+    0.0005
+  ],
+  "iterations": 20,
+  "metric": "mean((E_before_step - 24034.5 J)^2)",
+  "additional_metrics": [
+    "relative energy RMSE",
+    "analytic position/velocity RMSE",
+    "sampled penetration",
+    "separate timing pass wall time"
+  ],
+  "runs": [
+    {
+      "engine": "sdk",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.11594838800374418,
+      "log_sha256": "26e22b9c1c104c68c9b91dc94ed217b0a39ef945b910182ad86789970d791ace",
+      "summary": {
+        "engine": "sdk",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 18808.766,
+        "relative_energy_rmse": 0.0057061748,
+        "max_relative_energy_error": 0.009812045,
+        "position_rmse_m": 0.32519153,
+        "velocity_rmse_m_s": 3.2035804,
+        "sampled_max_penetration_m": 0.054052185,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.033783287,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "ae2931012c59c6c66301a45d86f3152bebd0881ebc4f740ae3a2d7e89abb86ae",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 18808.763726179503,
+        "mse_rounding_bound_J2": 0.5029941800567486
+      }
+    },
+    {
+      "engine": "bullet",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "bullet",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/bullet-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.21554489596746862,
+      "log_sha256": "93ff543d7b5b23a1eba60f17b0eb719472fc9ae45642b5f72e874050060c6e58",
+      "summary": {
+        "engine": "bullet",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 18808.752,
+        "relative_energy_rmse": 0.0057061724,
+        "max_relative_energy_error": 0.009811479,
+        "position_rmse_m": 0.3254238,
+        "velocity_rmse_m_s": 3.2035809,
+        "sampled_max_penetration_m": 0.054056272,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.039579835,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "0db5b38a73496fc7ea163645139c3d4c1a09858f2123c1e2be9d777bdd359eba",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 18808.754430223027,
+        "mse_rounding_bound_J2": 0.5029654270107863
+      }
+    },
+    {
+      "engine": "jolt",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "jolt",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/jolt-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.11422735505038872,
+      "log_sha256": "cf126970556594af792e6ee89a8e0ddfbbfab837470928357881bb20b2487478",
+      "summary": {
+        "engine": "jolt",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 18808.734,
+        "relative_energy_rmse": 0.00570617,
+        "max_relative_energy_error": 0.009811965,
+        "position_rmse_m": 0.32539344,
+        "velocity_rmse_m_s": 3.2035806,
+        "sampled_max_penetration_m": 0.054053895,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.025184466,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "058781c7583490a061e6d0f592964670e77d3f2f42ed1b4561939516793af80c",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 18808.72461259453,
+        "mse_rounding_bound_J2": 0.5029900346931628
+      }
+    },
+    {
+      "engine": "box3d",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.06429811799898744,
+      "log_sha256": "b4bd1739c66fa86aaf40d54ec33d582348d459b16f2fadbe3875ec721c79db21",
+      "summary": {
+        "engine": "box3d",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 21065.406,
+        "relative_energy_rmse": 0.0060387887,
+        "max_relative_energy_error": 0.029626401,
+        "position_rmse_m": 0.32715374,
+        "velocity_rmse_m_s": 3.2035804,
+        "sampled_max_penetration_m": 0.1531413,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.019590354,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "0813116bde48375efe6a9e1ee22363dd28c92cb8ef5080d82cc26fe8386d9605",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 21065.400348532523,
+        "mse_rounding_bound_J2": 1.4830084823041
+      }
+    },
+    {
+      "engine": "box3d-native",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d-native",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-native-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.11458207597024739,
+      "log_sha256": "e14261a9af54ceeab7290e1d71ce54188abd37de0d05669d9b8c9f199834c49f",
+      "summary": {
+        "engine": "box3d-native",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 7127927,
+        "relative_energy_rmse": 0.111082725,
+        "max_relative_energy_error": 0.19280717,
+        "position_rmse_m": 1.354808,
+        "velocity_rmse_m_s": 5.754753,
+        "sampled_max_penetration_m": 0.05405146,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.020049797,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "34c9f61a30e9041a241a2a6867fd3fad1fefa1c94f1f4fc0edb3d639dd5c164a",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 7127927.151399702,
+        "mse_rounding_bound_J2": 16.63731746148027
+      }
+    },
+    {
+      "engine": "sdk-ccd",
+      "requested_dt_s": 0.01,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk-ccd",
+        "0.01",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-ccd-0.01",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.16472338698804379,
+      "log_sha256": "f08828942f38dceae31ced5e03d336fb30764e7e86ce45628eda643e1afb4047",
+      "summary": {
+        "engine": "sdk-ccd",
+        "complete": true,
+        "dt_s": 0.01,
+        "iterations": 20,
+        "frames": 2000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 2032,
+        "accuracy_rejected_trials": 32,
+        "energy_mse_J2": 5686576,
+        "relative_energy_rmse": 0.09921797,
+        "max_relative_energy_error": 0.17438896,
+        "position_rmse_m": 1.541817,
+        "velocity_rmse_m_s": 6.4069176,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 2032,
+        "timing_rejected_trials": 32,
+        "timing_pass_wall_s": 0.06471811,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "bc6ab09a7a907f3e44b37175f790095d395b1396c6a4b47673f0cb249b471990",
+        "trace_rows": 2000,
+        "recomputed_energy_mse_J2": 5686576.124538921,
+        "mse_rounding_bound_J2": 14.287101378369481
+      }
+    },
+    {
+      "engine": "sdk",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.2151193039608188,
+      "log_sha256": "fb3d0ff87c3fc9137d63d9b9a4f3f4f065924d47652002ef967d1059fac521fb",
+      "summary": {
+        "engine": "sdk",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 4667.4375,
+        "relative_energy_rmse": 0.002842524,
+        "max_relative_energy_error": 0.0049059186,
+        "position_rmse_m": 0.18158258,
+        "velocity_rmse_m_s": 2.3818355,
+        "sampled_max_penetration_m": 0.029523706,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.061741773,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "cd1dab1cb4d21e0a62822907a886557f109e29f9773efb79e3cbbe9d50c60969",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 4667.43552573298,
+        "mse_rounding_bound_J2": 0.2467565643562999
+      }
+    },
+    {
+      "engine": "bullet",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "bullet",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/bullet-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.21531153202522546,
+      "log_sha256": "eda4832102713162e4602e4864e9f60c67065aef74235c272a3f30137ebd5f7b",
+      "summary": {
+        "engine": "bullet",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 4667.4053,
+        "relative_energy_rmse": 0.0028425143,
+        "max_relative_energy_error": 0.004906451,
+        "position_rmse_m": 0.18178323,
+        "velocity_rmse_m_s": 2.381836,
+        "sampled_max_penetration_m": 0.029527767,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.069933616,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "15cc22e729bc3f1e1aa2dadb6f2057c7dd707f779b18dbd7e0a26cf71210f4a1",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 4667.408082839496,
+        "mse_rounding_bound_J2": 0.24678117441340397
+      }
+    },
+    {
+      "engine": "jolt",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "jolt",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/jolt-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.1647874429472722,
+      "log_sha256": "76d9a07a0a24fbe2fee5c3e33996953aeee2a5a86aec08185daa3e6eb1588ab5",
+      "summary": {
+        "engine": "jolt",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 4667.2837,
+        "relative_energy_rmse": 0.0028424773,
+        "max_relative_energy_error": 0.004906302,
+        "position_rmse_m": 0.1815927,
+        "velocity_rmse_m_s": 2.3818355,
+        "sampled_max_penetration_m": 0.02953027,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.047974575,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "268585fb742f3171fffa70b2545125d4610815283a5e08aa84e1144b10770903",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 4667.281021230009,
+        "mse_rounding_bound_J2": 0.2467728348517928
+      }
+    },
+    {
+      "engine": "box3d",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.11464914301177487,
+      "log_sha256": "b95b60807cc2ae1b0c3e5f685fe37d7dac8fe1971ba28ffa350733ee89e6c950",
+      "summary": {
+        "engine": "box3d",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 378316.97,
+        "relative_energy_rmse": 0.025591327,
+        "max_relative_energy_error": 0.046216153,
+        "position_rmse_m": 0.48809916,
+        "velocity_rmse_m_s": 3.5424442,
+        "sampled_max_penetration_m": 0.0502803,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.03706997,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "13478b5950afa6c4c484a82e56d494543fd7c336229c6edf62b98ce07e68ba26",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 378316.97612659703,
+        "mse_rounding_bound_J2": 2.6588902705821615
+      }
+    },
+    {
+      "engine": "box3d-native",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d-native",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-native-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.21706591895781457,
+      "log_sha256": "3e7bf92fab671adcdaecc2712a93de55162754804c606af5b8d8082fcf86c524",
+      "summary": {
+        "engine": "box3d-native",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 2130425.2,
+        "relative_energy_rmse": 0.06072927,
+        "max_relative_energy_error": 0.10372005,
+        "position_rmse_m": 1.0048699,
+        "velocity_rmse_m_s": 5.0949874,
+        "sampled_max_penetration_m": 0.0137030985,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.07248066,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "b77a0a84e1af7dab965a5ff332a9f902e1c68ff430b517c1e32b51fefd4f4c90",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 2130425.270343672,
+        "mse_rounding_bound_J2": 7.24736816792424
+      }
+    },
+    {
+      "engine": "sdk-ccd",
+      "requested_dt_s": 0.005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk-ccd",
+        "0.005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-ccd-0.005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.3160064530093223,
+      "log_sha256": "3237fe10d5919681a3c8d45aae294737acc53febd6837a26458b95482b55ac09",
+      "summary": {
+        "engine": "sdk-ccd",
+        "complete": true,
+        "dt_s": 0.005,
+        "iterations": 20,
+        "frames": 4000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 4020,
+        "accuracy_rejected_trials": 20,
+        "energy_mse_J2": 1037351.5,
+        "relative_energy_rmse": 0.04237677,
+        "max_relative_energy_error": 0.0739106,
+        "position_rmse_m": 0.8467392,
+        "velocity_rmse_m_s": 4.7087684,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 4020,
+        "timing_rejected_trials": 20,
+        "timing_pass_wall_s": 0.11188462,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "2fd5b05beb033156cc933612df3dd59baa365652fe9cc3a7ca41b777840854f9",
+        "trace_rows": 4000,
+        "recomputed_energy_mse_J2": 1037351.4608011373,
+        "mse_rounding_bound_J2": 4.6833206333817
+      }
+    },
+    {
+      "engine": "sdk",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.3659448369871825,
+      "log_sha256": "7345f899121ff6a10cf860939add88c7cbaa2bcbcb9b2a68bbddbd8170f2d9ec",
+      "summary": {
+        "engine": "sdk",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 739.02106,
+        "relative_energy_rmse": 0.00113108,
+        "max_relative_energy_error": 0.0019608592,
+        "position_rmse_m": 0.03695113,
+        "velocity_rmse_m_s": 0.97861785,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.1064969,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "dd7ba91533d04c9ad297ac55ee058aa867fece5c30fe25452c874de020405255",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 739.0211131780028,
+        "mse_rounding_bound_J2": 0.09750180306874608
+      }
+    },
+    {
+      "engine": "bullet",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "bullet",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/bullet-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.41653171402867883,
+      "log_sha256": "77525cbcde4f04c370a9a67eec77169c89e4a4b9172022e33d74daaf9972cb24",
+      "summary": {
+        "engine": "bullet",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 743.39716,
+        "relative_energy_rmse": 0.0011344239,
+        "max_relative_energy_error": 0.0019651449,
+        "position_rmse_m": 0.09348223,
+        "velocity_rmse_m_s": 1.6911606,
+        "sampled_max_penetration_m": 0.014807133,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.15766616,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "7e887671eb532ff9b56ac904f2a93acb2664dda916f2c44da3a6a29b42120d18",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 743.396646480799,
+        "mse_rounding_bound_J2": 0.0977135442270463
+      }
+    },
+    {
+      "engine": "jolt",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "jolt",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/jolt-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.41642058797879145,
+      "log_sha256": "abf2778ff8029e3ab07d9cd22d6fc9ad6c260b97501198211092a0a59cc24096",
+      "summary": {
+        "engine": "jolt",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 738.8876,
+        "relative_energy_rmse": 0.0011309778,
+        "max_relative_energy_error": 0.001962551,
+        "position_rmse_m": 0.03698793,
+        "velocity_rmse_m_s": 0.9786176,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.118636414,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "1ba6a83e63bc2792ebb61c8fbc73b078a1ff62af1cb5c558ea0096961d9146f0",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 738.887520732201,
+        "mse_rounding_bound_J2": 0.09758174135130165
+      }
+    },
+    {
+      "engine": "box3d",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.2655512309866026,
+      "log_sha256": "4440e3aed085397b82395db3c9238a6405588806ecfca05f85f6b0532f851bca",
+      "summary": {
+        "engine": "box3d",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 761.2098,
+        "relative_energy_rmse": 0.0011479345,
+        "max_relative_energy_error": 0.0058983276,
+        "position_rmse_m": 0.09332161,
+        "velocity_rmse_m_s": 1.6911603,
+        "sampled_max_penetration_m": 0.034466326,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.0845314,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "453231350a9f958f471690d0fb79413ff21b187c9e0b0fa4b614e3f266b55bd7",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 761.2096394603003,
+        "mse_rounding_bound_J2": 0.2918214759700251
+      }
+    },
+    {
+      "engine": "box3d-native",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d-native",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-native-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.36617777502397075,
+      "log_sha256": "19e93a5fd7f767ea49dd0ba625c32f5c3db1bb0952c138c1f27d3c4539bab55b",
+      "summary": {
+        "engine": "box3d-native",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 644902.44,
+        "relative_energy_rmse": 0.03341273,
+        "max_relative_energy_error": 0.06316772,
+        "position_rmse_m": 0.5188625,
+        "velocity_rmse_m_s": 3.4449346,
+        "sampled_max_penetration_m": 0.01926989,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.089572735,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "18fc368d745a1150c47267c4d169240143f0bfd84704cd2f9532feed87d3ada2",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 644902.4559082842,
+        "mse_rounding_bound_J2": 3.7617751566138518
+      }
+    },
+    {
+      "engine": "sdk-ccd",
+      "requested_dt_s": 0.002,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk-ccd",
+        "0.002",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-ccd-0.002",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.6184099050005898,
+      "log_sha256": "afdea679b38f963b32b4bd2e11ee32181cff97de90865419f23243b796f922ff",
+      "summary": {
+        "engine": "sdk-ccd",
+        "complete": true,
+        "dt_s": 0.002,
+        "iterations": 20,
+        "frames": 10000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 10000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 739.02106,
+        "relative_energy_rmse": 0.00113108,
+        "max_relative_energy_error": 0.0019608592,
+        "position_rmse_m": 0.03695113,
+        "velocity_rmse_m_s": 0.97861785,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 10000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.2200474,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "dd7ba91533d04c9ad297ac55ee058aa867fece5c30fe25452c874de020405255",
+        "trace_rows": 10000,
+        "recomputed_energy_mse_J2": 739.0211131780028,
+        "mse_rounding_bound_J2": 0.09750180306874608
+      }
+    },
+    {
+      "engine": "sdk",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.5669825220247731,
+      "log_sha256": "e4bdadec245f75ceebdb9b468806dbfff0001acbdc4ac34181349fadcf0bbcea",
+      "summary": {
+        "engine": "sdk",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 184.51654,
+        "relative_energy_rmse": 0.0005651745,
+        "max_relative_energy_error": 0.0009939533,
+        "position_rmse_m": 0.066770285,
+        "velocity_rmse_m_s": 1.3813807,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.1703235,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "b0db9fc2bd2632252aa7b0cf86ca32d27200c3117fdf56f94cd2b28e3db5731f",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 184.51609815220087,
+        "mse_rounding_bound_J2": 0.049232673053716994
+      }
+    },
+    {
+      "engine": "bullet",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "bullet",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/bullet-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.818609964044299,
+      "log_sha256": "cf006ccd786b4d453ccdbcb2efb3f7b70611029132252fab345ae4046fe76a2a",
+      "summary": {
+        "engine": "bullet",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 185.05083,
+        "relative_energy_rmse": 0.0005659922,
+        "max_relative_energy_error": 0.0009940567,
+        "position_rmse_m": 0.005462076,
+        "velocity_rmse_m_s": 0.0013336736,
+        "sampled_max_penetration_m": 9.3898176e-05,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.29789832,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "280e5ec81a48d3329a802aba4e5d88445b93ab9d6d236f15776fe5ad4ec5c9b0",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 185.0505186829985,
+        "mse_rounding_bound_J2": 0.04924141997424946
+      }
+    },
+    {
+      "engine": "jolt",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "jolt",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/jolt-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.9192999200313352,
+      "log_sha256": "8b1be4b563038d08371b59d1f3db48cb4c899094f6658c28e3354806fd836d42",
+      "summary": {
+        "engine": "jolt",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 184.45303,
+        "relative_energy_rmse": 0.00056507724,
+        "max_relative_energy_error": 0.0009919635,
+        "position_rmse_m": 0.06680803,
+        "velocity_rmse_m_s": 1.3813806,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.2642314,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "8c7b9a8daffd2b2522d8c55e121e5061e42da5d2a7c405f72c610e08f7645316",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 184.45313312559932,
+        "mse_rounding_bound_J2": 0.04913611321369314
+      }
+    },
+    {
+      "engine": "box3d",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.6183304670266807,
+      "log_sha256": "bd5e501eb5be588b8e90a95a32adb2b4755c16c7f7c21a0762b5d86ec451c772",
+      "summary": {
+        "engine": "box3d",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 201902.5,
+        "relative_energy_rmse": 0.018695442,
+        "max_relative_energy_error": 0.034023486,
+        "position_rmse_m": 0.361413,
+        "velocity_rmse_m_s": 2.9926887,
+        "sampled_max_penetration_m": 7.4356797e-07,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.17355359,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "a7f5415746910fc56129dd23b7b6fac4f8c07da369d802fa115901309694d263",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 201902.4941657296,
+        "mse_rounding_bound_J2": 1.8807705511212953
+      }
+    },
+    {
+      "engine": "box3d-native",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d-native",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-native-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 0.5670588340144604,
+      "log_sha256": "822567901d0dccf05ae9a58b24e073578c7c6e9dea579301f593fcceaef1bc28",
+      "summary": {
+        "engine": "box3d-native",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 296538.25,
+        "relative_energy_rmse": 0.02265715,
+        "max_relative_energy_error": 0.03901604,
+        "position_rmse_m": 0.46480936,
+        "velocity_rmse_m_s": 3.4584482,
+        "sampled_max_penetration_m": 8.031726e-07,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.15810943,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "e96325f6c0bb00a24b72497c5b271d763d29b9344b938a6b52f7969aecd75001",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 296538.2443418338,
+        "mse_rounding_bound_J2": 2.2217730887973977
+      }
+    },
+    {
+      "engine": "sdk-ccd",
+      "requested_dt_s": 0.001,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk-ccd",
+        "0.001",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-ccd-0.001",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 1.1707975339959376,
+      "log_sha256": "a2c36ada890cee58188573b9cb7bd1ffa4ab6fd214b6141d5f137132a6c28c2b",
+      "summary": {
+        "engine": "sdk-ccd",
+        "complete": true,
+        "dt_s": 0.001,
+        "iterations": 20,
+        "frames": 20000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 20000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 184.51654,
+        "relative_energy_rmse": 0.0005651745,
+        "max_relative_energy_error": 0.0009939533,
+        "position_rmse_m": 0.066770285,
+        "velocity_rmse_m_s": 1.3813807,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 20000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.43167233,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "b0db9fc2bd2632252aa7b0cf86ca32d27200c3117fdf56f94cd2b28e3db5731f",
+        "trace_rows": 20000,
+        "recomputed_energy_mse_J2": 184.51609815220087,
+        "mse_rounding_bound_J2": 0.049232673053716994
+      }
+    },
+    {
+      "engine": "sdk",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 1.2723040700075217,
+      "log_sha256": "e2b87f472f04bf76f58cc7372db4526a16809dbda85d48de065ee68205122779",
+      "summary": {
+        "engine": "sdk",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 46.300434,
+        "relative_energy_rmse": 0.00028311144,
+        "max_relative_energy_error": 0.0004966893,
+        "position_rmse_m": 0.016933855,
+        "velocity_rmse_m_s": 0.6571488,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.4194173,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "94734330628739627578080b6355221c8c9ab6214b177bcb5cd2da6954a073a4",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 46.30041839679999,
+        "mse_rounding_bound_J2": 0.024557560498959675
+      }
+    },
+    {
+      "engine": "bullet",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "bullet",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/bullet-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 5.500781217997428,
+      "log_sha256": "b9149ea5290764c1c8904196afc4e88671e898207f2fb901446ac5915e734bb2",
+      "summary": {
+        "engine": "bullet",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 512371330.0,
+        "relative_energy_rmse": 0.941797,
+        "max_relative_energy_error": 0.98,
+        "position_rmse_m": 3.444847,
+        "velocity_rmse_m_s": 5.471601,
+        "sampled_max_penetration_m": 4.6789646e-07,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 2.613699,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "3e34cd3e9296308d7ab3cf435a17822739d7fea4853e85b8ec8674e92c42fcb1",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 512371333.34413904,
+        "mse_rounding_bound_J2": 560.7302526073445
+      }
+    },
+    {
+      "engine": "jolt",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "jolt",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/jolt-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 2.1278845599736087,
+      "log_sha256": "d731f0dbe1b831436fbc8d467f81783d37cc268c010d53e376fdd5db61d654fc",
+      "summary": {
+        "engine": "jolt",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 46.24223,
+        "relative_energy_rmse": 0.00028293344,
+        "max_relative_energy_error": 0.000495023,
+        "position_rmse_m": 0.016948512,
+        "velocity_rmse_m_s": 0.6571488,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.68455446,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "de067ba7da391924458bd4efbc2cd4e760de5d06b180818a71449cd06c78f6df",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 46.242248968349884,
+        "mse_rounding_bound_J2": 0.024475377329536904
+      }
+    },
+    {
+      "engine": "box3d",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 1.4740867859800346,
+      "log_sha256": "daa1aac7d148ef462b26583b1ab5ea311115a619f8ca6bd03bc246d363b6412e",
+      "summary": {
+        "engine": "box3d",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 74172.92,
+        "relative_energy_rmse": 0.011331505,
+        "max_relative_energy_error": 0.019562548,
+        "position_rmse_m": 0.2567019,
+        "velocity_rmse_m_s": 2.5716465,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.404639,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "4494d95d37b64a06133f1e6c5b36a7be5f5736fbaaed6d11ccbac16768744a16",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 74172.92381423943,
+        "mse_rounding_bound_J2": 1.039491758894802
+      }
+    },
+    {
+      "engine": "box3d-native",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "box3d-native",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/box3d-native-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 1.4240502640022896,
+      "log_sha256": "379710c4f872f2a6ad2b97ee6fc5e56e60710f1e65ce3edf36487adf6422966b",
+      "summary": {
+        "engine": "box3d-native",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 74172.92,
+        "relative_energy_rmse": 0.011331505,
+        "max_relative_energy_error": 0.019562548,
+        "position_rmse_m": 0.2567019,
+        "velocity_rmse_m_s": 2.5716465,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 0.38081506,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "4494d95d37b64a06133f1e6c5b36a7be5f5736fbaaed6d11ccbac16768744a16",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 74172.92381423943,
+        "mse_rounding_bound_J2": 1.039491758894802
+      }
+    },
+    {
+      "engine": "sdk-ccd",
+      "requested_dt_s": 0.0005,
+      "command": [
+        "/tmp/phys-engine-reference-build/rf_simbenchmark_bouncing",
+        "sdk-ccd",
+        "0.0005",
+        "/tmp/simbenchmark-final-bouncing-v2-20261001/sdk-ccd-0.0005",
+        "20"
+      ],
+      "binary_sha256": "3a894a578cf270f9a134d22e49ada6700c472da8242ba689b2d8fa07b9ae41b7",
+      "exit_code": 0,
+      "process_wall_s": 2.9878014139831066,
+      "log_sha256": "6cd2a8ad33b5068a8c94572de2500a086142578707eb3f4ed6ff2adca6e5f2fa",
+      "summary": {
+        "engine": "sdk-ccd",
+        "complete": true,
+        "dt_s": 0.0005,
+        "iterations": 20,
+        "frames": 40000,
+        "reference_energy_J": 24034.5,
+        "accuracy_accepted_time_s": 20,
+        "accuracy_accepted_substeps": 40000,
+        "accuracy_rejected_trials": 0,
+        "energy_mse_J2": 46.300434,
+        "relative_energy_rmse": 0.00028311144,
+        "max_relative_energy_error": 0.0004966893,
+        "position_rmse_m": 0.016933855,
+        "velocity_rmse_m_s": 0.6571488,
+        "sampled_max_penetration_m": 0,
+        "timing_accepted_time_s": 20,
+        "timing_accepted_substeps": 40000,
+        "timing_rejected_trials": 0,
+        "timing_pass_wall_s": 1.111326,
+        "bullet_header_version": 305,
+        "sizeof_bullet_scalar": 4
+      },
+      "audit": {
+        "trace_sha256": "94734330628739627578080b6355221c8c9ab6214b177bcb5cd2da6954a073a4",
+        "trace_rows": 40000,
+        "recomputed_energy_mse_J2": 46.30041839679999,
+        "mse_rounding_bound_J2": 0.024557560498959675
+      }
+    }
+  ],
+  "reference_provenance": {
+    "sdk": {
+      "build": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "RF_BUILD_TESTS": "ON",
+        "RF_BUILD_VERIFY": "ON",
+        "RF_LTO": "OFF",
+        "RF_SANITIZE": "OFF",
+        "RF_STRICT_FP": "OFF",
+        "RF_WERROR": "ON"
+      },
+      "rfcore_sha256": "dfefd65ecf364d5842ad3615998ed659ebbaaafd1b1d61a74c62c13678e5398b",
+      "rf_tests_sha256": "f05f45dd659f72c7a7933a152757e14b6b3997e29c17afd03421d633566f51ed"
+    },
+    "bullet": {
+      "package": [
+        "libbullet-dev:amd64\t3.06+dfsg-4build2",
+        "libbullet3.06:amd64\t3.06+dfsg-4build2"
+      ],
+      "header_version": 305,
+      "shared_libraries": {
+        "libBulletDynamics.so": "cc64acf7cc43755a4213afdbc24f4e86843fe8cbfb4b717470c7318a3d7c7a5e",
+        "libBulletCollision.so": "c90573cfb0172379245ab245b05bc8b4ead2f9f7c2198238290a46de63e7c0e0",
+        "libLinearMath.so": "c2cf37d606a9935402f70f935a175de9a8cfe8bd7761e7c78fc38df26d1235a7"
+      }
+    },
+    "jolt": {
+      "head": "0373ec0dd762e4bc2f6acdb08371ee84fa23c6db",
+      "dirty": false,
+      "libraries": {
+        "lib/libJolt.a": "7bd663c06448f0ffbe39f355cffdef0e9ed1d158335111745e0d814437ed7140"
+      },
+      "build": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      }
+    },
+    "box3d": {
+      "head": "9f998c862d54c03a633ecea3831937385c78b532",
+      "dirty": false,
+      "libraries": {
+        "lib/libbox3d.a": "52e13aedea262ef479cbda27a05151b0fa3ab01082b7b061c57fcbe0b766d7ca"
+      },
+      "build": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      }
+    },
+    "profiles": {
+      "common": {
+        "n": 49,
+        "m_kg": 10,
+        "radius_m": 0.1,
+        "height_m": 5,
+        "inertia_kg_m2": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "g_m_s2": [
+          0,
+          -9.81,
+          0
+        ],
+        "floor_half_extents_m": [
+          25,
+          5,
+          25
+        ],
+        "floor_center_m": [
+          0,
+          -5,
+          0
+        ],
+        "restitution": 1,
+        "friction": 0,
+        "damping": 0,
+        "sleep": false,
+        "substeps_per_call": 1
+      },
+      "sdk": {
+        "velocity_iterations": 20,
+        "baumgarte": 0,
+        "block_cfm": 0,
+        "slop_m": 0,
+        "contact_margin_m": 0.01,
+        "ccd": false,
+        "restitution_threshold": 0
+      },
+      "sdk-ccd": {
+        "inherits": "sdk",
+        "ccd": true,
+        "ccd_all_moving": true,
+        "ccd_tolerance_m": 0.002,
+        "max_subdivisions": 16
+      },
+      "bullet": {
+        "velocity_iterations": 20,
+        "erp": 0,
+        "erp2": 0,
+        "cfm": 0,
+        "linear_slop": 0,
+        "ccd": false,
+        "sphere_radius_includes_margin": true,
+        "restitution_threshold": 0
+      },
+      "jolt": {
+        "velocity_iterations": 20,
+        "position_iterations": 0,
+        "baumgarte": 0,
+        "slop_m": 0,
+        "speculative_distance_m": 0.01,
+        "ccd": false,
+        "restitution_threshold_m_s": 1e-06,
+        "single_threaded": true
+      },
+      "box3d": {
+        "restitution_iterations": 20,
+        "normal_solver_passes": "native, not an equal iteration budget",
+        "contact_hertz": 0,
+        "contact_speed": 0,
+        "ccd": false,
+        "worker_count": 1,
+        "restitution_threshold": 0,
+        "note": "Zero hertz disables overlap softness terms; relaxation remains native. This is not identical to Bullet ERP=CFM=0."
+      },
+      "box3d-native": {
+        "inherits": "box3d",
+        "contact_hertz": 30,
+        "contact_speed": 3,
+        "contact_damping_ratio": 10,
+        "note": "Native contact tuning, explicit e=1, zero damping/friction, no sleep, discrete collision."
+      }
+    }
+  },
+  "allowed_logical_cpus": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11
+  ]
+}

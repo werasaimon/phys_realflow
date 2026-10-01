@@ -1,0 +1,2 @@
+  driven chain: 20 s / 2 cycles, minimum lift 69.15 mm, return error 0.172 mm, hold speed 0.000050 rad/s, sampled depth 0.100 mm
+[ OK ] chain drive (strict FP) (52666 ms)

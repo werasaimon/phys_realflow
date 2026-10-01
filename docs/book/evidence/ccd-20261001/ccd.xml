@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="9" failures="0" time="0.078">
+  <testcase classname="rf_tests" name="standard rigid: CCD between moving bodies (no superposition)" time="0.055"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD for a fast-spinning plate" time="0.001"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD bounds contain the full rotation arc" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query analytic impacts" time="0.001"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query statuses and invalid inputs" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD query sliding along large triangle faces" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD primitive separating planes and mixed bullets" time="0.020"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD world propagates uncertainty" time="0.000"/>
+  <testcase classname="rf_tests" name="standard rigid: CCD also checks slow motion when requested" time="0.000"/>
+</testsuite>

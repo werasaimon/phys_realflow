@@ -10,6 +10,7 @@
 #include "spatial/BVH.h"
 #include "math/Math.h"
 #include "rigid/BroadPhase.h"
+#include "rigid/RigidStep.h"
 #include "rigid/TimeOfImpact.h"
 #include "rigid/Joints.h"
 #include "rigid/RigidBody.h"
@@ -22,6 +23,9 @@
 #include <vector>
 
 namespace rf {
+
+class RigidStepCheckpoint;
+class VariationalImpactStep;
 
 enum class RigidSolver {
     XPBD,              // Mueller et al. 2020, "Detailed Rigid Body Simulation with Extended PBD" (experimental)
@@ -50,6 +54,7 @@ struct RigidParams {
     float angularDamping = 0.05f;
     bool collideWithDomain = true;
     bool warmStarting = true;
+    bool measureMotorWork = false; // observational impulse work; reported only for accepted trials
     bool splitImpulse = true;   // penetration recovery on pseudo velocities (no energy gain)
     // Shock propagation (Guendelman, Bridson, Fedkiw 2003): final passes solve contacts level by
     // level from the ground up, treating the lower body as infinitely heavy, so impulses travel
@@ -78,6 +83,10 @@ struct RigidParams {
     bool ccd = true;
     float ccdThreshold = 0.5f;   // CCD when the motion in a step exceeds half of the body's smallest extent (as Bullet)
     float ccdTolerance = 0.002f; // [m] distance at which the time of impact is accepted
+    int ccdMaxIterations = 64;  // per convex/plane query; exhaustion rejects the trial
+    int ccdMaxPasses = 8;       // retained for source compatibility; atomic retries replace clamping passes
+    int ccdMaxSubdivisions = 16; // binary retry depth; exhaustion rejects the whole requested step
+    bool ccdAllMoving = false; // also query slow moving bodies; initial contacts still use the discrete solver
 };
 
 class RigidWorld {
@@ -87,6 +96,7 @@ public:
     // Removes every body and joint and everything remembered about them (contacts, warm start,
     // sleeping, XPBD contacts, CCD flags): the next step starts a new scene.
     void clear();
+    double motorWork() const { return motorWorkTotal_; } // accepted actuator work since clear() [J]
 
     // Holds a body still (static for the solver) until releaseHeld(), e.g. bodies hanging in the air
     // until a scene lets them fall. The same mechanism as the sleeping bodies (see Frozen).
@@ -130,7 +140,12 @@ public:
     size_t pairCount() const { return pairs_.size(); }
     int bodyLevel(int i) const { return i < int(levels_.size()) ? levels_[i] : -1; }
 
-    void step(float dt);
+    void step(float dt); // throws on rejection; the world's mechanical state is restored
+    bool tryStep(float dt); // explicit rejection API; no model time is consumed on failure
+    // Experimental: frictionless elastic spheres, constant loads, static geometry. Unsupported
+    // models and persistent contact reject atomically; see VariationalImpactStep.h.
+    bool tryVariationalStep(float dt);
+    const RigidStepResult& lastStepResult() const { return lastStepResult_; }
     // The solver's impulses, applied thousands of times per step: inline here (as b2Body's), so
     // every file of the solver can fold them into its loops.
     void applyImpulse(int i, const Vector3& J, const Vector3& p) {
@@ -161,7 +176,8 @@ public:
     bool isAlive(int body) const { return body >= 0 && body < int(bodies_.size()) && bodies_[size_t(body)].alive; }
     int bodyCount() const { return int(bodies_.size() - freeBodies_.size()); } // alive bodies
     size_t sleepingCount() const;
-    size_t ccdHits() const { return ccdHits_; } // bodies clamped by CCD in the last step
+    size_t ccdHits() const { return ccdHits_; } // affected bodies summed over rejected CCD trials
+    const CcdDiagnostics& ccdDiagnostics() const { return ccdDiagnostics_; }
 
     // Ray cast against all bodies: nearest hit (body index, distance along the unit direction).
     bool raycast(const Vector3& origin, const Vector3& dir, float maxT, int& body, float& t, Vector3& normal) const;
@@ -227,6 +243,16 @@ public:
     const WatchReport& watchReport() const { return watchReport_; }
 
 private:
+    friend class RigidStep;
+    friend class RigidStepCheckpoint;
+    friend class VariationalImpactStep;
+    void stepUnchecked(float dt, float correctionDt);
+    RigidStepResult lastStepResult_;
+    double trialMotorWork_ = 0;
+    double motorWorkTotal_ = 0;
+    // Reuse snapshot capacities across steps. shared_ptr permits an incomplete private type
+    // without moving this world's implicit constructor/destructor into another translation unit.
+    std::shared_ptr<RigidStepCheckpoint> stepInitial_, stepTrial_;
     struct SolverPoint {
         Vector3 position, normal, localA; // localA: anchor in A's frame, used to match points between steps
         uint64_t id = 0;               // hash of the quantised localA
@@ -381,18 +407,18 @@ private:
     void solveJointPositions();
     void continuousCollision();
     // Its steps (TimeOfImpact.cpp): which bodies are fast, the sweeps of all bodies (once a step) or
-    // of one, the earliest impact of every fast body, and the clamping of the bodies to those times.
+    // of one, and the earliest impact of every selected body for RigidStep's rejection decision.
     bool findFastBodies();
     void sweepBodies();
     void sweepBody(int i);
     AABB coarseSweepBox(int j) const; // surely holds body j's sweep, made without it
     void findTimesOfImpact(std::vector<float>& sMin, bool useTree);
-    bool clampToTimesOfImpact(const std::vector<float>& sMin);
     // Up to this many (fast body, body) box tests the candidates come from a plain scan; beyond,
     // from a tree over the swept boxes (a thousand boxes: ~1 ms to build, a scan ~1 us per body).
     static constexpr size_t kCcdScanLimit = 200000;
     size_t ccdHits_ = 0;
-    std::vector<char> ccdClamped_; // bodies stopped by CCD in the last step (their next contact is an impact)
+    CcdDiagnostics ccdDiagnostics_;
+    std::vector<char> ccdClamped_; // selected bodies requiring rejection in the last trial
     Matrix3x3 grabMass_ = Matrix3x3::zero();
     Vector3 grabBias_;
     float grabGamma_ = 0;
@@ -503,6 +529,7 @@ private:
     size_t contactCount_ = 0;
     WarmStartStats warmStats_;
     float lastDt_ = 1.0f / 600.0f;
+    float correctionDt_ = 1.0f / 600.0f; // caller interval: retries must shrink penetration recovery too
     bool shockFrictionPass_ = false;
     Timings timings_;
 };

@@ -1,0 +1,8 @@
+[ OK ] motor work analytical and observation (4 ms)
+[ OK ] motor work rollback (0 ms)
+  bolt/nut convex pieces 234/80, pitch 12.0 mm
+[ OK ] nut bolt assembly (16 ms)
+  nut: lift 4.508 mm, return 0.037 mm, pitch error 0.032 mm, sampled depth 0.054 mm, unexplained gain 0 J
+[ OK ] nut bolt cycle (81951 ms)
+  driven chain: 20 s / 2 cycles, minimum lift 69.15 mm, return error 0.172 mm, hold speed 0.000050 rad/s, sampled depth 0.100 mm
+[ OK ] chain drive cycle (57101 ms)

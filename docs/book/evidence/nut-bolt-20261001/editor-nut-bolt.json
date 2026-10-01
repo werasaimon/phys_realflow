@@ -1,0 +1,24 @@
+{
+  "pid": 1723352,
+  "window": "0x6a00007",
+  "preset": 43,
+  "binary": "/tmp/phys-realflow-editor-standard-build/realflow",
+  "log": "/tmp/phys-nut-bolt-20261001/editor-nut-bolt.log",
+  "screenshots": [
+    "/tmp/phys-nut-bolt-20261001/editor-nut-bolt-1.png",
+    "/tmp/phys-nut-bolt-20261001/editor-nut-bolt-2.png"
+  ],
+  "running": true,
+  "resources": [
+    {
+      "VmHWM": "173316 kB",
+      "VmRSS": "173316 kB",
+      "Threads": "23"
+    },
+    {
+      "VmHWM": "179548 kB",
+      "VmRSS": "179548 kB",
+      "Threads": "23"
+    }
+  ]
+}

@@ -22,6 +22,9 @@ enum class Preset {
     RigidChains, RigidRace, RigidBowl, RigidTables, RigidCups, TerrainModels,
     RigidTower200, RigidSandbox, TorusChains,
     HangingTorus,
+    ChainWheel,
+    ChainDrive,
+    NutBolt,
     Count
 };
 
@@ -52,5 +55,7 @@ void addLessonSamples(std::vector<SampleEntry>& out);      // LessonScenes.cpp: 
 void addNonConvexSamples(std::vector<SampleEntry>& out);   // NonConvexScenes.cpp: race, bowl, tables, cups, models on terrain
 void addTorusChainSamples(std::vector<SampleEntry>& out); // TorusChainsScene.cpp: long contact-only chains
 void addHangingTorusSample(std::vector<SampleEntry>& out); // HangingTorusScene.cpp: short interactive chain
+void addChainWheelSample(std::vector<SampleEntry>& out); // ChainWheelScene.cpp: stationary wheel and loaded chain
+void addNutBoltSample(std::vector<SampleEntry>& out); // NutBoltScene.cpp: freely translating threaded nut
 
 } // namespace rf

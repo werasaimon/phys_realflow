@@ -1,0 +1,61 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 430' width='760' height='430' role='img'>
+<title>Bouncing: дополнительные контактные профили</title>
+<style>svg{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e4e3df;--axis:#8a8983;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--text:#ffffff;--muted:#c3c2b7;--grid:#33332f;--axis:#6b6a64;--s0:#3987e5;--s1:#d95926;--s2:#199e70;}}text{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;fill:var(--text)}.muted{fill:var(--muted)}.tick{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}.title{font-size:16px;font-weight:600}.cap{font-size:11.5px;fill:var(--muted)}</style>
+<rect width='760' height='430' rx='10' fill='var(--surface)'/>
+<text x='84' y='28' class='title'>Bouncing: дополнительные контактные профили</text>
+<text x='410.0' y='382' text-anchor='middle' class='muted' font-size='13'>Шаг времени, с (логарифмическая шкала)</text>
+<text transform='translate(20 204.0) rotate(-90)' text-anchor='middle' class='muted' font-size='13'>Относительная RMSE, %</text>
+<text x='84' y='416' class='cap'>49 шаров, e=1, 20 с. Из report.json. Различия контактных профилей описаны в главе 13.</text>
+<line x1='84' x2='736' y1='309.5' y2='309.5' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='313.5' text-anchor='end' class='tick'>0,05</text>
+<line x1='84' x2='736' y1='279.2' y2='279.2' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='283.2' text-anchor='end' class='tick'>0,1</text>
+<line x1='84' x2='736' y1='249.0' y2='249.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='253.0' text-anchor='end' class='tick'>0,2</text>
+<line x1='84' x2='736' y1='209.0' y2='209.0' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='213.0' text-anchor='end' class='tick'>0,5</text>
+<line x1='84' x2='736' y1='178.8' y2='178.8' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='182.8' text-anchor='end' class='tick'>1</text>
+<line x1='84' x2='736' y1='148.5' y2='148.5' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='152.5' text-anchor='end' class='tick'>2</text>
+<line x1='84' x2='736' y1='108.6' y2='108.6' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='112.6' text-anchor='end' class='tick'>5</text>
+<line x1='84' x2='736' y1='78.3' y2='78.3' stroke='var(--grid)' stroke-width='1'/>
+<text x='76' y='82.3' text-anchor='end' class='tick'>10</text>
+<line x1='126.3' x2='126.3' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='126.3' y='364' text-anchor='middle' class='tick'>5·10<tspan dy='-6' font-size='10'>-4</tspan></text>
+<line x1='257.6' x2='257.6' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='257.6' y='364' text-anchor='middle' class='tick'>0,001</text>
+<line x1='388.9' x2='388.9' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='388.9' y='364' text-anchor='middle' class='tick'>0,002</text>
+<line x1='562.4' x2='562.4' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='562.4' y='364' text-anchor='middle' class='tick'>0,005</text>
+<line x1='693.7' x2='693.7' y1='344' y2='349' stroke='var(--axis)' stroke-width='1'/>
+<text x='693.7' y='364' text-anchor='middle' class='tick'>0,01</text>
+<line x1='84' x2='736' y1='344' y2='344' stroke='var(--axis)' stroke-width='1'/>
+<line x1='84' x2='84' y1='344' y2='64' stroke='var(--axis)' stroke-width='1'/>
+<polyline points='126.3,334.3 257.6,304.1 388.9,273.8 562.4,115.8 693.7,78.7' fill='none' stroke='var(--s0)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='126.3' cy='334.3' r='3' fill='var(--s0)'/>
+<circle cx='257.6' cy='304.1' r='3' fill='var(--s0)'/>
+<circle cx='388.9' cy='273.8' r='3' fill='var(--s0)'/>
+<circle cx='562.4' cy='115.8' r='3' fill='var(--s0)'/>
+<circle cx='693.7' cy='78.7' r='3' fill='var(--s0)'/>
+<polyline points='126.3,173.3 257.6,151.5 388.9,273.2 562.4,137.8 693.7,200.8' fill='none' stroke='var(--s1)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='7 4'/>
+<circle cx='126.3' cy='173.3' r='3' fill='var(--s1)'/>
+<circle cx='257.6' cy='151.5' r='3' fill='var(--s1)'/>
+<circle cx='388.9' cy='273.2' r='3' fill='var(--s1)'/>
+<circle cx='562.4' cy='137.8' r='3' fill='var(--s1)'/>
+<circle cx='693.7' cy='200.8' r='3' fill='var(--s1)'/>
+<polyline points='126.3,173.3 257.6,143.1 388.9,126.1 562.4,100.1 693.7,73.7' fill='none' stroke='var(--s2)' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' stroke-dasharray='2 3'/>
+<circle cx='126.3' cy='173.3' r='3' fill='var(--s2)'/>
+<circle cx='257.6' cy='143.1' r='3' fill='var(--s2)'/>
+<circle cx='388.9' cy='126.1' r='3' fill='var(--s2)'/>
+<circle cx='562.4' cy='100.1' r='3' fill='var(--s2)'/>
+<circle cx='693.7' cy='73.7' r='3' fill='var(--s2)'/>
+<line x1='84.0' x2='110.0' y1='47' y2='47' stroke='var(--s0)' stroke-width='2.5'/>
+<text x='116.0' y='51' font-size='12.5'>SDK CCD</text>
+<line x1='178.4' x2='204.4' y1='47' y2='47' stroke='var(--s1)' stroke-width='2.5' stroke-dasharray='7 4'/>
+<text x='210.4' y='51' font-size='12.5'>Box3D 0 Hz</text>
+<line x1='294.4' x2='320.4' y1='47' y2='47' stroke='var(--s2)' stroke-width='2.5' stroke-dasharray='2 3'/>
+<text x='326.4' y='51' font-size='12.5'>Box3D native</text>
+</svg>

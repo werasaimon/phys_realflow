@@ -1,0 +1,332 @@
+[
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 42,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 13.9691305,
+      "median_ms": 13.62054,
+      "p95_ms": 17.453686
+    },
+    "snapshot": {
+      "mean_ms": 0.012786144,
+      "median_ms": 0.011522,
+      "p95_ms": 0.021634
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.008448175,
+      "median_ms": 0.008152,
+      "p95_ms": 0.009916
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.09297363,
+      "median_ms": 0.092854,
+      "p95_ms": 0.117137
+    },
+    "rigid/collide ms": {
+      "mean_ms": 5.4732633,
+      "median_ms": 5.269276,
+      "p95_ms": 7.049345
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.09397123,
+      "median_ms": 0.093794,
+      "p95_ms": 0.100337
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0013371027,
+      "median_ms": 0.001328,
+      "p95_ms": 0.001541
+    },
+    "rigid/solve ms": {
+      "mean_ms": 8.197509,
+      "median_ms": 8.146538,
+      "p95_ms": 10.579883
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.003647975,
+      "median_ms": 0.003282,
+      "p95_ms": 0.005757
+    },
+    "variant": "baseline",
+    "exit_code": 0
+  },
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 2,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 12.934314,
+      "median_ms": 12.859461,
+      "p95_ms": 15.942478
+    },
+    "snapshot": {
+      "mean_ms": 0.011466844,
+      "median_ms": 0.010929,
+      "p95_ms": 0.016381
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.008873703,
+      "median_ms": 0.00824,
+      "p95_ms": 0.014979
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.091296114,
+      "median_ms": 0.091929,
+      "p95_ms": 0.114638
+    },
+    "rigid/collide ms": {
+      "mean_ms": 4.5560575,
+      "median_ms": 4.445673,
+      "p95_ms": 5.338929
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.09693168,
+      "median_ms": 0.096598,
+      "p95_ms": 0.103646
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0013859695,
+      "median_ms": 0.001326,
+      "p95_ms": 0.001504
+    },
+    "rigid/solve ms": {
+      "mean_ms": 8.081477,
+      "median_ms": 8.124152,
+      "p95_ms": 10.338555
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.0030094807,
+      "median_ms": 0.002819,
+      "p95_ms": 0.004684
+    },
+    "variant": "grain1",
+    "exit_code": 0
+  },
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 11,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 13.126601,
+      "median_ms": 13.311717,
+      "p95_ms": 16.096527
+    },
+    "snapshot": {
+      "mean_ms": 0.022117497,
+      "median_ms": 0.021308,
+      "p95_ms": 0.032884
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.007507636,
+      "median_ms": 0.006166,
+      "p95_ms": 0.013462
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.09450922,
+      "median_ms": 0.094205,
+      "p95_ms": 0.130558
+    },
+    "rigid/collide ms": {
+      "mean_ms": 6.0720267,
+      "median_ms": 6.048296,
+      "p95_ms": 7.456817
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.07485092,
+      "median_ms": 0.070384,
+      "p95_ms": 0.095363
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.001005925,
+      "median_ms": 0.000901,
+      "p95_ms": 0.001717
+    },
+    "rigid/solve ms": {
+      "mean_ms": 6.7904935,
+      "median_ms": 7.014855,
+      "p95_ms": 8.437414
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.005347603,
+      "median_ms": 0.005212,
+      "p95_ms": 0.008161
+    },
+    "variant": "spin100us",
+    "exit_code": 0
+  },
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 78,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 15.025713,
+      "median_ms": 15.149541,
+      "p95_ms": 20.477463
+    },
+    "snapshot": {
+      "mean_ms": 0.0267288,
+      "median_ms": 0.024847,
+      "p95_ms": 0.043802
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.009084925,
+      "median_ms": 0.007955,
+      "p95_ms": 0.015697
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.11387491,
+      "median_ms": 0.107604,
+      "p95_ms": 0.180672
+    },
+    "rigid/collide ms": {
+      "mean_ms": 6.339423,
+      "median_ms": 6.079799,
+      "p95_ms": 8.94081
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.09061263,
+      "median_ms": 0.087208,
+      "p95_ms": 0.114119
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0013294722,
+      "median_ms": 0.001022,
+      "p95_ms": 0.002776
+    },
+    "rigid/solve ms": {
+      "mean_ms": 8.363377,
+      "median_ms": 8.702332,
+      "p95_ms": 10.995236
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.0068385974,
+      "median_ms": 0.006239,
+      "p95_ms": 0.011589
+    },
+    "variant": "grain1-spin100us",
+    "exit_code": 0
+  },
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 273,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 18.235855,
+      "median_ms": 17.780287,
+      "p95_ms": 23.081928
+    },
+    "snapshot": {
+      "mean_ms": 0.025846787,
+      "median_ms": 0.027098,
+      "p95_ms": 0.041663
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.013195428,
+      "median_ms": 0.012059,
+      "p95_ms": 0.021141
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.12244113,
+      "median_ms": 0.122303,
+      "p95_ms": 0.157951
+    },
+    "rigid/collide ms": {
+      "mean_ms": 7.247317,
+      "median_ms": 6.947026,
+      "p95_ms": 9.390812
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.12151637,
+      "median_ms": 0.122328,
+      "p95_ms": 0.138352
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0019290472,
+      "median_ms": 0.0018,
+      "p95_ms": 0.002742
+    },
+    "rigid/solve ms": {
+      "mean_ms": 10.594572,
+      "median_ms": 10.506245,
+      "p95_ms": 13.883845
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.006281089,
+      "median_ms": 0.006274,
+      "p95_ms": 0.009823
+    },
+    "variant": "baseline",
+    "exit_code": 0
+  },
+  {
+    "threads": 6,
+    "frames": 360,
+    "over_budget_frames": 11,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.00010341408,
+    "trajectory_hash": "b4cf1967da17955c",
+    "physics": {
+      "mean_ms": 13.93217,
+      "median_ms": 13.830582,
+      "p95_ms": 16.230421
+    },
+    "snapshot": {
+      "mean_ms": 0.020880356,
+      "median_ms": 0.020459,
+      "p95_ms": 0.033134
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.007434125,
+      "median_ms": 0.006397,
+      "p95_ms": 0.012795
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.102829345,
+      "median_ms": 0.102428,
+      "p95_ms": 0.1368
+    },
+    "rigid/collide ms": {
+      "mean_ms": 5.7391744,
+      "median_ms": 5.618272,
+      "p95_ms": 6.730885
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.084996924,
+      "median_ms": 0.083036,
+      "p95_ms": 0.100321
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0014010611,
+      "median_ms": 0.001056,
+      "p95_ms": 0.004174
+    },
+    "rigid/solve ms": {
+      "mean_ms": 7.901419,
+      "median_ms": 7.986263,
+      "p95_ms": 9.475026
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.00570505,
+      "median_ms": 0.005536,
+      "p95_ms": 0.009758
+    },
+    "variant": "grain1-spin100us",
+    "exit_code": 0
+  }
+]

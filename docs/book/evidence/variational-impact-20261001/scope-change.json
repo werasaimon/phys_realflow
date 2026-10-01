@@ -1,0 +1,7 @@
+{
+  "reason": "User explicitly stopped tokamak work and requested rigid-body focus",
+  "stopped_queue": "run_checks.py",
+  "interrupted": "fire-determinism",
+  "not_run": ["gas-pressure", "baseline-tokamak", "strict-default", "non-rigid-sanitizers"],
+  "continued_queue": "run_rigid_checks.py"
+}

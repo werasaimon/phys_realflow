@@ -1,0 +1,710 @@
+{
+  "started_utc": "2026-09-30T22:58:12.598087+00:00",
+  "base_commit": "2d0adca5174542df89e9a090e6c26ced96d7a6b1",
+  "binary_sha256": "51f72f8115b550ced1ba5b689a0ec6a0440f89cdaef300d66be24cdb3768498e",
+  "threads": 2,
+  "cpus": "8,9",
+  "address_space_limit_bytes": 2147483648,
+  "runs": [
+    {
+      "name": "impact",
+      "filter": "continuous collision",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-ccd-20261001/final/impact.time",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/rf_tests"
+      ],
+      "tests": 1,
+      "failures": 0,
+      "seconds": 0.007,
+      "failed_cases": [],
+      "maximum_rss_kib": 5120,
+      "selected_log_metrics": [
+        "bullet vs free box: box v=16.14 m/s, bullet v=-133.76 m/s, momentum 80.42 -> 80.37",
+        "cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=0.078/4.890, 5 stops, 1 unresolved, stall 0 substeps"
+      ]
+    },
+    {
+      "name": "ccd",
+      "filter": "CCD",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-ccd-20261001/final/ccd.time",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/rf_tests"
+      ],
+      "tests": 9,
+      "failures": 0,
+      "seconds": 0.078,
+      "failed_cases": [],
+      "maximum_rss_kib": 5504,
+      "selected_log_metrics": [
+        "head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.021, max overlap 0.0000 m, A bounces at -34.5 m/s",
+        "bullets into a stack: max overlap 0.0052 m, stack pushed by 3.89 m"
+      ]
+    },
+    {
+      "name": "presets",
+      "filter": "presets",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-ccd-20261001/final/presets.time",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/rf_tests"
+      ],
+      "tests": 1,
+      "failures": 0,
+      "seconds": 5.858,
+      "failed_cases": [],
+      "maximum_rss_kib": 97752,
+      "selected_log_metrics": []
+    },
+    {
+      "name": "rigid",
+      "filter": "standard rigid:",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-ccd-20261001/final/rigid.time",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/rf_tests"
+      ],
+      "tests": 42,
+      "failures": 0,
+      "seconds": 446.099,
+      "failed_cases": [],
+      "maximum_rss_kib": 40960,
+      "selected_log_metrics": [
+        "120 tori / 117 links / 4 fixed / 0 joints: 600 frames, first break -1, worst broken 0; initial/late overlap 0.000/0.368 mm; max separation 76.464 mm; floor 0.000 mm; energy gain 0.000000/4547.257 J; step median/p95 293.903/318.405 ms",
+        "120 tori, 120 frames, 1/2/2 threads: c9531e8adfaf4bc3 / c9531e8adfaf4bc3 / c9531e8adfaf4bc3",
+        "eight tori, mouse pull/release, 6 s: first break -1, tip excursion 276.0 mm, sampled peak overlap 0.102 mm; step median/p95 16.639/20.281 ms",
+        "seven rings sleep 8.800 / 8.600 s after release; re-grab wakes all, tip moves 339.8 mm",
+        "bullet vs free box: box v=16.14 m/s, bullet v=-133.76 m/s, momentum 80.42 -> 80.37",
+        "cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=0.078/4.890, 5 stops, 1 unresolved, stall 0 substeps",
+        "head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.021, max overlap 0.0000 m, A bounces at -34.5 m/s",
+        "bullets into a stack: max overlap 0.0052 m, stack pushed by 3.89 m",
+        "beam 25 m/s + 40 rad/s onto 6 cubes: max overlap 0.0005 m, beam y=0.030"
+      ]
+    },
+    {
+      "name": "default",
+      "filter": null,
+      "exit_code": 1,
+      "command": [
+        "/usr/bin/time",
+        "-v",
+        "-o",
+        "/tmp/phys-ccd-20261001/final/default.time",
+        "nice",
+        "-n",
+        "15",
+        "taskset",
+        "-c",
+        "8,9",
+        "timeout",
+        "--kill-after=10s",
+        "1800s",
+        "prlimit",
+        "--as=2147483648",
+        "--core=0",
+        "--",
+        "/home/wera_n/GIT/PHYSICS/phys_realflow/build-core/rf_tests"
+      ],
+      "tests": 177,
+      "failures": 1,
+      "seconds": 711.855,
+      "failed_cases": [
+        "particles vs many bodies: the world tree"
+      ],
+      "maximum_rss_kib": 978620,
+      "selected_log_metrics": [
+        "bullet vs free box: box v=16.14 m/s, bullet v=-133.76 m/s, momentum 80.42 -> 80.37",
+        "cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=0.078/4.890, 5 stops, 1 unresolved, stall 0 substeps",
+        "head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.021, max overlap 0.0000 m, A bounces at -34.5 m/s",
+        "bullets into a stack: max overlap 0.0052 m, stack pushed by 3.89 m",
+        "beam 25 m/s + 40 rad/s onto 6 cubes: max overlap 0.0005 m, beam y=0.030"
+      ]
+    }
+  ],
+  "finished_utc": "2026-09-30T23:18:02.444735+00:00",
+  "build": {
+    "configuration": "Release",
+    "RF_WERROR": true,
+    "RF_STRICT_FP": false
+  },
+  "source_sha256": {
+    "CMakeLists.txt": "8649d2e32dc63d73df50ff7df2c67ceae096f9ece71ea47c902874e802d89c91",
+    "tests/Tests.h": "0c6f6362480a045310e4d6667452b22f5633aae01b225cd4bb48c4db12c51411",
+    "src/rigid/FreeRotation.cpp": "360e17b21bef489aa211597778a68cb57327897918698d9a452d14a646c864a1",
+    "src/rigid/ContactSolver.cpp": "ebb334edcec2e923482b75012c0d701568b26fc707df4982c579ca014bf0a85c",
+    "src/rigid/ConservativeAdvancement.h": "8f071a6a0e057e7a802b3b8e848997672efe001ae2d5f46fb4f124d54ddcccff",
+    "src/rigid/ConservativeAdvancement.cpp": "cfb6719f9c8895adc33981400eaf454af8be3fdbb6efc5e33882d019c11afb47",
+    "src/rigid/TimeOfImpact.h": "ed68c278c889b1345e02ff944af5fcaf0110bc6aac3d2906240f4792c860cae9",
+    "src/rigid/TimeOfImpact.cpp": "381135dc407ad7dc749b8f521f477e1cde62f9752147ae05c30575674318255d",
+    "src/rigid/RigidWorld.h": "13c317332c21357107f3d6b8fd5500e54359509d5705dd7047d9c49b558e7247",
+    "src/rigid/RigidWorld.cpp": "134b71ae56df5c8a0bfe8253b48896815c4603963d6b409da2442a6df5424a3c",
+    "tests/CcdQueryTests.cpp": "79b5ed55e79d1fed8a72dbfe9531bcbd8664631d813da1299d123cec86d3d0a5",
+    "tests/RigidTests.cpp": "a0b940e133966fcb550ae7bb84253d2d73f7cba368db63336bccb5eaaf49cddd",
+    "tests/main.cpp": "65536c200f223c728275a45df7ac5e9c9611f4ef8b3815040d54cb4dd05091d5"
+  },
+  "beam_repair": {
+    "failure_before_box_axes": "long beam test produced NaN after repeated zero-progress CCD clamping",
+    "before_binary_sha256": "99e7de37179f178de99b4e6bf4bda0a6634dd46359915045a8f6465bac8efcb3",
+    "original_full_run": "stopped after reproducing failure; not reported as a completed suite",
+    "gjk_upper_distance_m": 0.00302715832,
+    "gap_in_gjk_witness_direction_m": 8.00981343e-06,
+    "gap_in_edge_cross_edge_direction_m": 0.00302714994,
+    "fix": "support-plane fallback through 15 box SAT axes; no physical parameter or tolerance was changed",
+    "new_requirements": "finite energy each substep; peak energy <= 1.05 initial; settles; old penetration bound retained",
+    "scope": "geometric stall fixed in this scene; globally consistent pose/velocity rollback remains unimplemented"
+  },
+  "sphere_box_repair": {
+    "failure": "mixed CCD preset produced NaN in the spinning plate after a sphere/box query stalled",
+    "before_binary_sha256": "d11a84e3221769ba9b97175c8c393ef348c13051c3e1e6279c523423f9a036f9",
+    "fix": "sphere centre to closest box point supplies an additional support-plane direction",
+    "captured_gap_m": 0.00278348289,
+    "new_requirements": "known separating plane in both pair orders; stationary and separating motions; mixed preset finite for six frames",
+    "original_full_run": "stopped on a reproduced failure; no completed-suite result claimed"
+  },
+  "readability": "PASS; 176 files; functions at most 60 lines",
+  "intersection_free_guarantee": false,
+  "limitations": [
+    "float geometry and heuristic roundoff guard are not certified interval arithmetic",
+    "initial contact is delegated to the discrete solver; tolerances allow small penetrations",
+    "world clamps poses without rolling back velocities, forces, solver caches or model time",
+    "joint position corrections and XPBD are outside the CCD query contract",
+    "standard scenes use the default fast-body policy; all-moving mode has a focused slow-body regression only",
+    "Rigid IPC original scenes, strict-FP golden hashes and sanitizers were not run"
+  ],
+  "mesh_fixture_change": {
+    "before": "2 m wide plate, final height assertion mislabels falling around the edge as tunnelling",
+    "observed_old_fixture_final_position_m": [
+      2.28352,
+      -0.742105,
+      -4.18284
+    ],
+    "after": "10 m plate spans the domain; check every substep, contact-zone reach, and no full-frame fast-COM stall",
+    "criterion": "minimum COM y > 0; minimum y < 0.1; contacts and CCD stops observed; stall < substeps",
+    "uncertainty": "counted and reported separately; isolated uncertainty is allowed by the CCD contract"
+  },
+  "performance_repeat": {
+    "filter": "particles vs many bodies",
+    "tests": 1,
+    "failures": 0,
+    "seconds": 7.608,
+    "mean_frame_ms": 125.8,
+    "original_mean_frame_ms": 144.2,
+    "threshold_ms": 140,
+    "settings_unchanged": true,
+    "original_default_suite_still_has_one_failure": true
+  },
+  "timestep_sensitivity": {
+    "cases": [
+      {
+        "scene": "beam",
+        "dt_s": 0.0016666667,
+        "completed_steps": 1200,
+        "expected_steps": 1200,
+        "finite": true,
+        "initial_energy_j": 3445.6846,
+        "peak_energy_j": 3445.6846,
+        "final_energy_j": 25.23917,
+        "max_manifold_depth_m": 0.00047056202,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 5031,
+        "unresolved": 1,
+        "clamped": 12,
+        "ccd_ms": 2.83438,
+        "solve_ms": 29.899767,
+        "wall_seconds": 0.040199734
+      },
+      {
+        "scene": "beam",
+        "dt_s": 0.00083333335,
+        "completed_steps": 2400,
+        "expected_steps": 2400,
+        "finite": true,
+        "initial_energy_j": 3445.6846,
+        "peak_energy_j": 3445.6846,
+        "final_energy_j": 27.580038,
+        "max_manifold_depth_m": 8.940697e-08,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 13983,
+        "unresolved": 1,
+        "clamped": 12,
+        "ccd_ms": 4.304588,
+        "solve_ms": 46.226807,
+        "wall_seconds": 0.06320182
+      },
+      {
+        "scene": "beam",
+        "dt_s": 0.00041666668,
+        "completed_steps": 4800,
+        "expected_steps": 4800,
+        "finite": true,
+        "initial_energy_j": 3445.6846,
+        "peak_energy_j": 3445.6846,
+        "final_energy_j": 36.316116,
+        "max_manifold_depth_m": 0.0008139461,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 2968,
+        "unresolved": 0,
+        "clamped": 10,
+        "ccd_ms": 2.2543,
+        "solve_ms": 75.73634,
+        "wall_seconds": 0.10010863
+      },
+      {
+        "scene": "mixed_bullets",
+        "dt_s": 0.0016666667,
+        "completed_steps": 1200,
+        "expected_steps": 1200,
+        "finite": true,
+        "initial_energy_j": 204366.89,
+        "peak_energy_j": 211729.53,
+        "final_energy_j": 383.37912,
+        "max_manifold_depth_m": 0.014607682,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 22739,
+        "unresolved": 0,
+        "clamped": 83,
+        "ccd_ms": 4.864092,
+        "solve_ms": 29.368256,
+        "wall_seconds": 0.052677646
+      },
+      {
+        "scene": "mixed_bullets",
+        "dt_s": 0.00083333335,
+        "completed_steps": 22,
+        "expected_steps": 2400,
+        "finite": false,
+        "initial_energy_j": 204366.89,
+        "peak_energy_j": 6.3401507e+36,
+        "final_energy_j": null,
+        "max_manifold_depth_m": 0.02363652,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 4693,
+        "unresolved": 8,
+        "clamped": 69,
+        "ccd_ms": 2.164215,
+        "solve_ms": 0.853992,
+        "wall_seconds": 0.003672487
+      },
+      {
+        "scene": "mixed_bullets",
+        "dt_s": 0.00041666668,
+        "completed_steps": 4800,
+        "expected_steps": 4800,
+        "finite": true,
+        "initial_energy_j": 204366.89,
+        "peak_energy_j": 204366.89,
+        "final_energy_j": 362.22272,
+        "max_manifold_depth_m": 0.0011886358,
+        "longest_fast_pose_stall_steps": 0,
+        "queries": 15873,
+        "unresolved": 6,
+        "clamped": 43,
+        "ccd_ms": 6.244027,
+        "solve_ms": 94.92429,
+        "wall_seconds": 0.1590218
+      }
+    ],
+    "binary_sha256": "9b398f514703d242eaa15705d227f88eb9bf4bddd41b31444b7ab82ed1a832d0",
+    "note": "same libraries as tested; isolated diagnostic; manifold depth is not an independent geometric bound; instrumented wall time is not a benchmark"
+  },
+  "known_failure": {
+    "scene": "RigidCcd",
+    "dt_s": 0.0008333333333333334,
+    "energy_nonfinite_at_step": 22,
+    "body": 32,
+    "first_clamp_rotational_energy_before_j": 1706.26538,
+    "first_clamp_rotational_energy_after_j": 4135.71729,
+    "first_clamp_fraction": 0.264102519,
+    "production_fix_in_this_change": false,
+    "next_stage": "consistent full-state timestep rejection and reintegration; initial-contact progress requires separate treatment",
+    "ccd_disabled_control": "finite through 60 steps; does not prove collision safety"
+  },
+  "editor": {
+    "binary": "/tmp/phys-realflow-editor-standard-build/realflow",
+    "binary_sha256": "2901d8c670c53c57c1e7c1ed98be1b79246884ac8b96746d8b70d2d62a009fa0",
+    "sdk_dir": "/home/wera_n/GIT/PHYSICS/phys_realflow",
+    "source_edits": false,
+    "runs": [
+      {
+        "scene": "tori",
+        "preset": 39,
+        "captured_frames": 31,
+        "final_time_s": 0.516666694,
+        "screenshot": "/tmp/phys-ccd-20261001/editor-tori.png",
+        "metrics": {
+          "chains/broken pairs": {
+            "min": 0.0,
+            "max": 0.0,
+            "finite": true
+          },
+          "rigid/bodies": {
+            "min": 120.0,
+            "max": 120.0,
+            "finite": true
+          },
+          "rigid/ccd unresolved": {
+            "min": 0.0,
+            "max": 0.0,
+            "finite": true
+          },
+          "rigid/deepest penetration": {
+            "min": 0.0,
+            "max": 0.000326945388,
+            "finite": true
+          },
+          "scene/mechanical energy": {
+            "min": 4426.52794,
+            "max": 4546.15874,
+            "finite": true
+          }
+        }
+      },
+      {
+        "scene": "bowl",
+        "preset": 33,
+        "captured_frames": 123,
+        "final_time_s": 2.05000011,
+        "screenshot": "/tmp/phys-ccd-20261001/editor-bowl.png",
+        "metrics": {
+          "rigid/bodies": {
+            "min": 61.0,
+            "max": 61.0,
+            "finite": true
+          },
+          "rigid/ccd unresolved": {
+            "min": 0.0,
+            "max": 0.0,
+            "finite": true
+          },
+          "rigid/deepest penetration": {
+            "min": 0.0,
+            "max": 0.00480591133,
+            "finite": true
+          },
+          "scene/mechanical energy": {
+            "min": 61.9591738,
+            "max": 613.066814,
+            "finite": true
+          }
+        }
+      }
+    ],
+    "showcase": [
+      {
+        "scene": "cups",
+        "preset": 35,
+        "exit_code": 0,
+        "wall_seconds": 3.9554869530256838,
+        "threads": 10,
+        "cpus": "1-5,7-11",
+        "command": [
+          "nice",
+          "-n",
+          "10",
+          "taskset",
+          "-c",
+          "1-5,7-11",
+          "timeout",
+          "--kill-after=5s",
+          "120s",
+          "/tmp/phys-realflow-editor-standard-build/realflow",
+          "--preset",
+          "35",
+          "--frames",
+          "120",
+          "--size",
+          "1600x950",
+          "--window",
+          "--screenshot",
+          "/tmp/phys-ccd-20261001/editor-cups.png",
+          "--csv",
+          "/tmp/phys-ccd-20261001/editor-cups.csv"
+        ],
+        "captured_frames": 377,
+        "final_time_s": 6.28333366,
+        "metrics": {
+          "rigid/bodies": {
+            "min": 6.0,
+            "max": 6.0,
+            "mean": 6.0,
+            "finite": true
+          },
+          "rigid/contacts": {
+            "min": 0.0,
+            "max": 1783.0,
+            "mean": 204.78779840848807,
+            "finite": true
+          },
+          "rigid/deepest penetration": {
+            "min": 0.0,
+            "max": 0.000399746932,
+            "mean": 4.35266037265252e-05,
+            "finite": true
+          },
+          "rigid/ccd unresolved": {
+            "min": 0.0,
+            "max": 0.0,
+            "mean": 0.0,
+            "finite": true
+          },
+          "scene/mechanical energy": {
+            "min": 1.21959262,
+            "max": 4.58331605,
+            "mean": 1.3633463837400572,
+            "finite": true
+          },
+          "frame/step ms": {
+            "min": 0.0414570011,
+            "max": 77.4116821,
+            "mean": 6.4004216406262655,
+            "finite": true
+          }
+        }
+      },
+      {
+        "scene": "sandbox",
+        "preset": 38,
+        "exit_code": 0,
+        "wall_seconds": 2.016468911024276,
+        "threads": 10,
+        "cpus": "1-5,7-11",
+        "command": [
+          "nice",
+          "-n",
+          "10",
+          "taskset",
+          "-c",
+          "1-5,7-11",
+          "timeout",
+          "--kill-after=5s",
+          "120s",
+          "/tmp/phys-realflow-editor-standard-build/realflow",
+          "--preset",
+          "38",
+          "--frames",
+          "120",
+          "--size",
+          "1600x950",
+          "--window",
+          "--screenshot",
+          "/tmp/phys-ccd-20261001/editor-sandbox.png",
+          "--csv",
+          "/tmp/phys-ccd-20261001/editor-sandbox.csv"
+        ],
+        "captured_frames": 122,
+        "final_time_s": 2.03333344,
+        "metrics": {
+          "rigid/bodies": {
+            "min": 24.0,
+            "max": 24.0,
+            "mean": 24.0,
+            "finite": true
+          },
+          "rigid/contacts": {
+            "min": 0.0,
+            "max": 167.0,
+            "mean": 58.868852459016395,
+            "finite": true
+          },
+          "rigid/deepest penetration": {
+            "min": 0.0,
+            "max": 0.00397162791,
+            "mean": 0.001248086094815656,
+            "finite": true
+          },
+          "rigid/ccd unresolved": {
+            "min": 0.0,
+            "max": 0.0,
+            "mean": 0.0,
+            "finite": true
+          },
+          "scene/mechanical energy": {
+            "min": 265.977475,
+            "max": 2073.95626,
+            "mean": 778.7068616065571,
+            "finite": true
+          },
+          "frame/step ms": {
+            "min": 0.33129701,
+            "max": 9.98173618,
+            "mean": 2.390098469967213,
+            "finite": true
+          }
+        }
+      },
+      {
+        "scene": "terrain",
+        "preset": 36,
+        "exit_code": 0,
+        "wall_seconds": 2.5003045989433303,
+        "threads": 10,
+        "cpus": "1-5,7-11",
+        "command": [
+          "nice",
+          "-n",
+          "10",
+          "taskset",
+          "-c",
+          "1-5,7-11",
+          "timeout",
+          "--kill-after=5s",
+          "120s",
+          "/tmp/phys-realflow-editor-standard-build/realflow",
+          "--preset",
+          "36",
+          "--frames",
+          "120",
+          "--size",
+          "1600x950",
+          "--window",
+          "--screenshot",
+          "/tmp/phys-ccd-20261001/editor-terrain.png",
+          "--csv",
+          "/tmp/phys-ccd-20261001/editor-terrain.csv"
+        ],
+        "captured_frames": 121,
+        "final_time_s": 2.01666677,
+        "metrics": {
+          "rigid/bodies": {
+            "min": 45.0,
+            "max": 45.0,
+            "mean": 45.0,
+            "finite": true
+          },
+          "rigid/contacts": {
+            "min": 0.0,
+            "max": 1224.0,
+            "mean": 412.7107438016529,
+            "finite": true
+          },
+          "rigid/deepest penetration": {
+            "min": 0.0,
+            "max": 0.000628349546,
+            "mean": 0.0002537831332185951,
+            "finite": true
+          },
+          "rigid/ccd unresolved": {
+            "min": 0.0,
+            "max": 0.0,
+            "mean": 0.0,
+            "finite": true
+          },
+          "scene/mechanical energy": {
+            "min": 4160.79286,
+            "max": 14412.178,
+            "mean": 9223.332888512394,
+            "finite": true
+          },
+          "frame/step ms": {
+            "min": 0.270527989,
+            "max": 24.426548,
+            "mean": 10.746422424595043,
+            "finite": true
+          }
+        }
+      }
+    ],
+    "earlier_visible_launches": "both exited cleanly before later verification; persistent visibility not established",
+    "visible_verified_launch": {
+      "pid": 1517541,
+      "preset": 35,
+      "threads": 10,
+      "cpus": "1-5,7-11",
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "taskset",
+        "-c",
+        "1-5,7-11",
+        "/tmp/phys-realflow-editor-standard-build/realflow",
+        "--preset",
+        "35",
+        "--size",
+        "1600x950"
+      ],
+      "windows": [
+        "0x2600007 \"PhysRealFlow\": (\"realflow\" \"PhysRealFlow\")  1850x1016+0+37  +70+64",
+        "0x2600009 \"PhysRealFlow\": ()  1x1+0+0  +0+0"
+      ],
+      "affinity": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "exit_code_at_check": null
+    }
+  }
+}

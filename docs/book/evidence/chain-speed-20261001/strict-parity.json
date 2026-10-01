@@ -1,0 +1,114 @@
+[
+  {
+    "threads": 2,
+    "frames": 360,
+    "over_budget_frames": 360,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.000101643614,
+    "trajectory_hash": "b869337af9b31b85",
+    "physics": {
+      "mean_ms": 29.148102,
+      "median_ms": 27.578745,
+      "p95_ms": 39.998425
+    },
+    "snapshot": {
+      "mean_ms": 0.027274705,
+      "median_ms": 0.026856,
+      "p95_ms": 0.041712
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.013592781,
+      "median_ms": 0.012126,
+      "p95_ms": 0.023798
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.14817059,
+      "median_ms": 0.147197,
+      "p95_ms": 0.198353
+    },
+    "rigid/collide ms": {
+      "mean_ms": 16.432829,
+      "median_ms": 15.971702,
+      "p95_ms": 23.179728
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.12118872,
+      "median_ms": 0.120714,
+      "p95_ms": 0.151786
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0014060194,
+      "median_ms": 0.00131,
+      "p95_ms": 0.002018
+    },
+    "rigid/solve ms": {
+      "mean_ms": 12.296403,
+      "median_ms": 11.528938,
+      "p95_ms": 16.748625
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.0071783583,
+      "median_ms": 0.006651,
+      "p95_ms": 0.012202
+    },
+    "version": "before",
+    "exit_code": 0,
+    "comparison": "strict-FP trajectory parity only; concurrent regression suite, do not benchmark timing"
+  },
+  {
+    "threads": 2,
+    "frames": 360,
+    "over_budget_frames": 360,
+    "broken_pairs": 0,
+    "sampled_overlap_m": 0.000101643614,
+    "trajectory_hash": "b869337af9b31b85",
+    "physics": {
+      "mean_ms": 32.004105,
+      "median_ms": 34.733467,
+      "p95_ms": 45.458412
+    },
+    "snapshot": {
+      "mean_ms": 0.02933122,
+      "median_ms": 0.029871,
+      "p95_ms": 0.044646
+    },
+    "rigid/ccd ms": {
+      "mean_ms": 0.013537469,
+      "median_ms": 0.013542,
+      "p95_ms": 0.023222
+    },
+    "rigid/checkpoint ms": {
+      "mean_ms": 0.15538521,
+      "median_ms": 0.16721,
+      "p95_ms": 0.214463
+    },
+    "rigid/collide ms": {
+      "mean_ms": 17.404068,
+      "median_ms": 18.111012,
+      "p95_ms": 24.828255
+    },
+    "rigid/integrate ms": {
+      "mean_ms": 0.13133445,
+      "median_ms": 0.136571,
+      "p95_ms": 0.163031
+    },
+    "rigid/islands ms": {
+      "mean_ms": 0.0016084417,
+      "median_ms": 0.001592,
+      "p95_ms": 0.00207
+    },
+    "rigid/solve ms": {
+      "mean_ms": 14.140751,
+      "median_ms": 14.987277,
+      "p95_ms": 20.314617
+    },
+    "scene/controllers ms": {
+      "mean_ms": 0.007776536,
+      "median_ms": 0.007276,
+      "p95_ms": 0.013961
+    },
+    "version": "after",
+    "exit_code": 0,
+    "comparison": "strict-FP trajectory parity only; concurrent regression suite, do not benchmark timing"
+  }
+]

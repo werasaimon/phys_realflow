@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="0" time="130.438">
+  <testcase classname="rf_tests" name="standard rigid: torus chains: determinism on 1, 2 and all threads" time="130.438"/>
+</testsuite>

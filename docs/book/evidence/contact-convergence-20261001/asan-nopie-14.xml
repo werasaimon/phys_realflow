@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="0" time="65.231">
+  <testcase classname="rf_tests" name="standard rigid: short torus chain survives mouse pulls" time="65.231"/>
+</testsuite>

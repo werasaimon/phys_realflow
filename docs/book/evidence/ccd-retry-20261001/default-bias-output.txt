@@ -1,0 +1,538 @@
+  cold two-torus replay: initial/final penetration 14.101/4.000 mm, first contacts 1, slop 4.000 mm
+[ OK ] standard rigid: torus chains: intersecting stationary pair retains contacts (65 ms)
+[ OK ] probe: channels, counters, timers, debug drawing (4 ms)
+[ OK ] math: vectors, matrices, quaternions, N x N solvers (0 ms)
+  A^a_bc B^bc: einstein vs loops 5.6e-17; trace T^a_a 0.876982 (einstein 0.876982, trace() 0.876982); raise(lower(A)) - A 1.1e-16; sym + antisym - S 5.6e-17, sym part symmetric to 0.0e+00; outer rank 5
+  refused: "einstein/tensor: индекс a дважды сверху: свёртка по Эйнштейну требует одного верхнего и одного нижнего; опустите индекс метрикой / index a is up twice: Einstein summation needs one upper and one lower index; lower one with the metric"
+[ OK ] math: tensors - Einstein summation vs loops, raise / lower / trace, refusals (0 ms)
+  outer (2,1) 15; tr(B x C) - trB trC 3.3e-16; (BxC)(DxB) - (BD)x(CB) 1.1e-16; QR: |QR - A| 4.4e-16, |Q^TQ - I| 4.4e-16, below R 0.0e+00; SVD: |USV^T - A| 4.4e-16, orthogonality 4.4e-16, sorted 1
+  expm: skew -> Rodrigues 1.1e-16, -> our float quaternion 1.1e-07; diag(10, -4, 2) relative 8.7e-15; nilpotent 2.2e-16
+[ OK ] math: outer, Kronecker, QR, SVD, matrix exponential (0 ms)
+[ OK ] primitives (1 ms)
+[ OK ] bvh (734 ms)
+[ OK ] mass properties (0 ms)
+[ OK ] gjk / epa / sat (0 ms)
+[ OK ] rigid bodies (10 ms)
+  stack: top y=2.7500 (expect 2.7500)  x drift=0.0000  speed=0.0000  contacts=0
+[ OK ] box stack (19 ms)
+  convex: cylinder y=0.2000 v=0.0000 | cone on box y=0.7000 v=0.0000
+[ OK ] convex bodies at rest (10 ms)
+  AABB tree: 672 objects, height 11 (full tree 12, log2 n = 9.4), re-insertions: 39004 drifting, 7 jiggling in place
+[ OK ] dynamic AABB tree (insert, move, remove, query) (15 ms)
+  sweep and prune: 200 frames, 0 mismatches, 2044 endpoint swaps per frame (2400 endpoints)
+[ OK ] broad phase BVH, SAP, AABB tree == brute force (122 ms)
+  10-stack: top y=4.7500 (expect 4.7500) x=0.0100  max|w|=0.0000  contacts=0 pairs=9
+[ OK ] tall stack (10 boxes) (24 ms)
+  100-stack: top y=19.9000 (expect 19.9000)  drift=0.0044  max|v|=0.0000 max|w|=0.0000  contacts=0
+[ OK ] standard rigid: stack of 100 boxes dropped from 1 cm (248 ms)
+  200-stack: top y=39.8996 (expect 39.9000)  sideways 0.0017 m  max tilt 0.00e+00 rad  max|v|=0.0000 max|w|=0.0000  asleep 200/200  mean step 0.11 ms
+[ OK ] standard rigid: stack of 200 boxes dropped from 1 cm (689 ms)
+  1000 cubes, 10 threads, medians per 1/60 s frame:
+  fall 0-60      step  17.37 ms = collide  3.09 + solve 11.33 + integrate  0.84 (of it ccd  0.21);  4253 contacts, 1002 awake
+  settle 60-180  step   1.09 ms = collide  0.12 + solve  0.08 + integrate  0.20 (of it ccd  0.01);     0 contacts,    1 awake
+  rest 180-300   step   1.10 ms = collide  0.12 + solve  0.08 + integrate  0.20 (of it ccd  0.01);     0 contacts,    1 awake
+[ OK ] standard rigid: rigid perf: 1000 cubes fall (1263 ms)
+  grab: anchor (-0.000 1.490 0.000) target (0 1.5 0)
+[ OK ] ray cast + mouse joint (3 ms)
+  pendulum: T=2.0083 s (theory 2.0061)  anchor drift=1.59e-05 m
+  hinge: off-axis |w|=1.79e-07 rad/s  anchor drift=5.34e-07 m  angle=0.980 rad
+  motor: w=3.000 rad/s (target 3)
+  slider: travel=-0.5000 (limit -0.50)  off-rail=2.46e-05 m  |w|=4.09e-02
+  fixed: max relative offset change=7.42e-04 m
+  distance rod: max length error=1.31e-06 m
+[ OK ] standard rigid: joints: ball, hinge+motor, slider, fixed, distance (39 ms)
+  bullet 300 m/s vs 2 cm wall, furthest x: without CCD 5.268, with CCD -0.085
+  bullet vs free box: box v=16.14 m/s, bullet v=-133.76 m/s, momentum 80.42 -> 80.37
+  cube 200 m/s vs 1 cm domain-wide mesh plate: minimum/final y=0.080/1.652, 10 stops, 2 unresolved, stall 0 substeps
+  TOI: s=0.6666 (exact 0.6667), 2 iterations
+[ OK ] standard rigid: continuous collision (GJK conservative advancement) (2 ms)
+  head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.108, max overlap 0.0000 m, A bounces at -34.5 m/s
+  bullets into a stack: max overlap 0.0045 m, stack pushed by 3.81 m
+[ OK ] standard rigid: CCD between moving bodies (no superposition) (23 ms)
+  GJK vs exact distance on 300 thin-box poses (tol 1 mm): 0 wrong
+[ OK ] GJK robustness on thin boxes (3 ms)
+  spinning plate 200 rad/s vs 2 cm post: without CCD w_y=66.2 |L| 33% overlap 0.0159 m; with CCD w_y=66.6 |L| 33% overlap 0.0000 m, 3 CCD stops
+[ OK ] standard rigid: CCD for a fast-spinning plate (0 ms)
+[ OK ] standard rigid: CCD bounds contain the full rotation arc (0 ms)
+  100 analytic sphere impacts, plane and sub-1e-6 impact fractions checked
+[ OK ] standard rigid: CCD query analytic impacts (0 ms)
+[ OK ] standard rigid: CCD query statuses and invalid inputs (0 ms)
+[ OK ] standard rigid: CCD query sliding along large triangle faces (0 ms)
+[ OK ] standard rigid: CCD primitive separating planes and mixed bullets (24 ms)
+[ OK ] standard rigid: CCD world propagates uncertainty (0 ms)
+[ OK ] standard rigid: CCD also checks slow motion when requested (0 ms)
+[ OK ] standard rigid: CCD retry integrates external loads once (0 ms)
+[ OK ] standard rigid: CCD retry restores the whole requested interval (1 ms)
+  allMoving=0 dt=1/600: E0=204366.895 peak=204366.895 final=364.551845 J; manifold=6.27652 wall=1.55798 mm; accepted=1275 rejected=75
+  allMoving=0 dt=1/1200: E0=204366.895 peak=204366.895 final=372.931181 J; manifold=21.6183 wall=21.6183 mm; accepted=2442 rejected=42
+  allMoving=0 dt=1/2400: E0=204366.895 peak=204366.895 final=389.109884 J; manifold=3.0449 wall=3.0449 mm; accepted=4823 rejected=23
+  allMoving=1 dt=1/600: E0=204366.895 peak=204366.895 final=370.695083 J; manifold=0.602379 wall=0 mm; accepted=1317 rejected=117
+  allMoving=1 dt=1/1200: E0=204366.895 peak=204366.895 final=372.687771 J; manifold=0.601508 wall=0 mm; accepted=2492 rejected=92
+  allMoving=1 dt=1/2400: E0=204366.895 peak=204366.895 final=411.862251 J; manifold=0.316404 wall=0.00113249 mm; accepted=4845 rejected=45
+[ OK ] standard rigid: CCD retry mixed scene energy at three time steps (1062 ms)
+[ OK ] standard rigid: CCD retry reduces initial penetration recovery (0 ms)
+  relative=1 boost=0: outgoing relative to boost 0.25/0.75 m/s
+  relative=1 boost=99: outgoing relative to boost 0.25/0.75 m/s
+  relative=100 boost=0: outgoing relative to boost 25/75 m/s
+  relative=100 boost=99: outgoing relative to boost 25/75 m/s
+[ OK ] standard rigid: CCD contact impulse uses relative velocity (0 ms)
+  four feet: 4 loaded points, support / (m g dt) 0.999510, spin 0.000000 rad/s
+[ OK ] standard rigid: floor contacts retain the loaded support region (0 ms)
+  tilted cup / plane: support depth 0.999998 mm, contact depth 0.999999 mm
+[ OK ] standard rigid: floor contacts include the extreme hull witness (574 ms)
+  moving support, 1 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 2 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 2 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 1 threads: 64dce28d4f796531, serial 64dce28d4f796531
+  moving support, 10 threads: 64dce28d4f796531, serial 64dce28d4f796531
+[ OK ] standard rigid: shock pass with a shared moving support is deterministic (84 ms)
+  beam 25 m/s + 40 rad/s onto 6 cubes: max overlap 0.0011 m, y=0.030; spin at 2/3 s 2.17659/1.44322e-10 rad/s
+[ OK ] standard rigid: long beam onto cubes (no pass-through) (66 ms)
+  edge on edge (beams crossed at 90/60/30/10 deg, SAT and GJK/EPA): point off by 1.2e-07 m, depth off by 5.6e-09 m, normal . (0,-1,0) >= 1.00000
+  cube on cube turned 10 deg (SAT): 4 points, all inside both faces: yes, depth off by 9.3e-09, support area 0.852 m^2
+  cube on cube turned 45 deg (SAT): 4 points, all inside both faces: yes, depth off by 9.3e-09, support area 0.586 m^2 (octagon 0.828, best 4 points 0.586)
+  cube on cube turned 10 deg (GJK/EPA): 4 points, all inside both faces: yes, depth off by 9.3e-09, support area 0.852 m^2
+  cube on cube turned 45 deg (GJK/EPA): 4 points, all inside both faces: yes, depth off by 9.3e-09, support area 0.586 m^2 (octagon 0.828, best 4 points 0.586)
+  2 cm box on a 20 m block (SAT): 4 points, farthest corner 5.7e-07 m from its contact
+  2 cm box on a 20 m block (GJK/EPA): 4 points, farthest corner 0.0e+00 m from its contact
+  deep penetration, 216 random box pairs with a unique answer: wrong SAT 0 (depth above the minimum <= 5.5e-02, face bias), wrong EPA 0 (depth off <= 4.2e-07)
+[ OK ] hard contacts: edge-edge, rotated faces, 1:1000, deep EPA vs SAT (2 ms)
+  box sliding over 512 floor triangles: max |vy| 0.0000 m/s, max |w| 0.0000 rad/s, height 0.1000..0.1000 m (0.1), speed 4.08 m/s
+  Jenga tower 16 x 3 blocks after 5 s: max drift 0.0002 m, top at 2.3251 (start 2.3250), max speed 0.0000 m/s, max overlap 0.0001 m, 0 contacts
+  diamond beam dropped across a ridge: max overlap 0.0010 m, energy max/start 1.0000, beam comes to y 0.554 m
+[ OK ] standard rigid: hard contacts in motion: triangle seams, Jenga tower, edge drop (254 ms)
+  quickhull: grid sphere 7153 pts -> 241 verts in 1.3 ms
+  teapot: 6 convex parts, 380 vertices, 38 ms; covers 98.3% of the solid, excess 2.2%
+[ OK ] convex hull + convex decomposition (teapot) (119 ms)
+  100 teapots, 7 s: 5.2 ms/frame (peak 17), worst part overlap 0.0022 m, max |v| 0.000 m/s, sleeping 100, outside 0
+[ OK ] standard rigid: 100 non-convex teapots (2759 ms)
+  ring: 13 parts in 55 ms, reach into the hole 2.9 mm; cup: 24 parts in 114 ms, reach 18.1 mm, 0 of 120 points of its hollow inside a part
+[ OK ] standard rigid: non-convex: the parts of a ring and a cup keep the hole and the hollow (209 ms)
+  ring on the floor sinks: as one hull -0.00 mm, as its parts 0.25 mm (asleep 1 1)
+[ OK ] non-convex: a ring lying on the floor does not sink (59 ms)
+  chain of 8 rings after 10 s: neighbours 71.3..81.0 mm apart (tubes touching: 76.0 mm); energy never above the start by more than 0.0000 J; of the 2.377 J the drop gave, 0.0007 J still moving
+[ OK ] standard rigid: non-convex: a chain of rings hangs interlocked (251 ms)
+  ring over a peg: rests with its centre at 11.8 mm (on the floor: 12.0 mm, on the peg's top: 312 mm)
+[ OK ] standard rigid: non-convex: a ring dropped over a peg slides down to the floor (60 ms)
+  ball dropped into a cup: rests 1.5 mm above its bottom
+  box tilted 17 deg dropped into a cup: rests -1.5 mm above its bottom
+  box tilted 40 deg dropped into a cup: rests 0.4 mm above its bottom
+[ OK ] standard rigid: non-convex: a ball and boxes dropped into a cup land on its bottom (133 ms)
+  ball                  k 0.400: 2 s down the slope 3.296 m at 3.262 m/s, its law 3.326 m/s (-1.9 %), slip 0.0 %
+  cylinder of 48 sides  k 0.499: 2 s down the slope 2.602 m at 2.355 m/s, its law 2.372 m/s (-0.7 %), slip 0.1 %
+  wheel of 48 segments  k 0.727: 2 s down the slope 2.375 m at 2.219 m/s, its law 2.184 m/s (+1.6 %), slip 0.6 %
+[ OK ] non-convex: a ball, a cylinder and a wheel of boxes roll down a slope, each by its law (34 ms)
+  bowl, 6 s: 0 of 60 outside, 0 awake, the lowest point 43.0 mm above the floor (the inner bottom 40 mm), energy gain 0.0000 J
+[ OK ] standard rigid: non-convex: 60 bodies poured into a bowl stay in it and sleep (736 ms)
+  8 tables, 4 s: top 3.5200 m (stacked 3.5200 m), sideways at most 0.6 mm, 0 awake
+[ OK ] standard rigid: non-convex: a stack of eight tables stands and sleeps (26 ms)
+  six cups: the parts nest 30.3 mm apart (exact cups 20.4 mm), stack 249.4 mm (from the parts 251.3 mm), 0 awake, kinetic energy after 1.5 s at most 0.00e+00 J
+[ OK ] standard rigid: non-convex: six cups nest as their parts allow and sleep (2567 ms)
+  45 models on the terrain, 10 s: 0 awake, 0 under the surface, the deepest point 1.0 mm below it
+[ OK ] standard rigid: non-convex: teapots, bunnies and rings on the terrain mesh (5377 ms)
+[ OK ] particles rest (452 ms)
+[ OK ] particles floating (1280 ms)
+  curtain 41x41: max stretch 0.01%
+  soft cube (512 particles, 2058 tetrahedra): deformation at impact 22.2%, sag under its weight 1.73%, unloaded 0.00%
+  foam cube on a canvas trampoline: cube bottom y 0.809 (cloth plane 0.8), max |v| 0.058 m/s
+  soft cube (500 kg/m3) in water: centre y 0.286, water surface 0.292
+  curtain waved gently: threads loaded to 36% of their strength at most, cloth cut into 8 small steps
+  curtain on a rod: torn while hanging 0, while waved 0; pulled down: 96 weft (vertical) + 49 warp threads
+  sewn panels hanging, the seam loaded to 1.5 x what it holds: 41 of 41 seam stitches gave, 248 other threads
+  soft body grab: centre rises 0.359 m (target 0.36 m); skin at rest error 1.5e-08 m
+  soft bodies colliding in zero g: momentum x 0.9882 -> 0.9882 kg m/s
+[ OK ] soft bodies and cloth (unified particles) (15655 ms)
+  six soft barrels: deepest overlap of two barrels 0.00 d0 while stacked (3 checks), 0.02 d0 at any time; particle layers cross by 0.43 d0 and skins by 0.14 d0 while stacked; after 2.5 s 0 pairs deeper than 0.05 d0; highest rise of a barrel 31 mm
+[ OK ] soft bodies: six barrels stacked do not sink into each other (4805 ms)
+  two soft cubes thrown together at 2 m/s: deepest overlap 0.00 d0, after 1 s centres 1.353 m apart (size 0.120), separating at 1.18 m/s, 0 pairs still deeper than 0.05 d0
+  rigid box laid on a soft cube: after 3 s its bottom is -0.5 mm above the jelly's surface (box at y 0.285 m)
+  rigid box dropped from 0.5 m on a soft cube: after 3 s its bottom is -0.5 mm above the jelly's surface (box at y 0.285 m); hit at 3.10 m/s, rebounded at 1.35 m/s (restitution 0.44)
+[ OK ] soft bodies: two thrown together bounce apart, a box rests on a jelly (3001 ms)
+  4 particles across: tip drops 21.73 mm; Timoshenko for the elastic core 25.16 mm (ratio 0.864), for the solid section 8.18 mm (ratio 2.657); 0.3 s of CPU for 2 s
+  6 particles across: tip drops 16.05 mm; Timoshenko for the elastic core 16.64 mm (ratio 0.964), for the solid section 8.18 mm (ratio 1.962); 1.3 s of CPU for 2 s
+  8 particles across: tip drops 13.56 mm; Timoshenko for the elastic core 13.75 mm (ratio 0.986), for the solid section 8.18 mm (ratio 1.658); 2.2 s of CPU for 2 s
+[ OK ] soft benchmark: cantilever under its own weight vs Timoshenko, three grids (3881 ms)
+  first variation / weight's work scale: 7.67e-03 5.96e-06 1.50e-04 5.75e-05 4.94e-03 6.72e-06 3.09e-03
+  virtual work at rest: the unbalanced force is 13.00 % of the weight; second variations bend 2.09e-03 J twist 2.29e-06 J stretch 5.65e-03 J shear 1.44e-02 J
+[ OK ] soft benchmark: virtual work - the rest state balances the weight and is an energy minimum (1723 ms)
+  first bending mode: 6.79 rad/s over 4 swings, Euler-Bernoulli for the core 6.97 rad/s (ratio 0.975); w^2 d / g 1.443, theory 1.545
+[ OK ] soft benchmark: first bending frequency of the cantilever (5992 ms)
+  nu 0.30: bar of 0.46 m stretches 34.64 mm, theory for the core 32.43 mm (ratio 1.068; solid section 20.76 mm); mid-height lateral strain -0.0232, -nu x axial -0.0221; volume change 0.0287
+  nu 0.49: bar of 0.46 m stretches 34.14 mm, theory for the core 32.43 mm (ratio 1.053; solid section 20.76 mm); mid-height lateral strain -0.0374, -nu x axial -0.0361; volume change 0.0017
+[ OK ] soft benchmark: hanging bar - extension, Poisson, no volume locking at nu 0.49 (994 ms)
+  spinning box: |P| 1.88e-08 -> 1.88e-07 kg m/s, L (0.0003 0.0275 0.0010) -> (0.0003 0.0275 0.0010) kg m^2/s, change 0.001% in 2 s
+[ OK ] soft benchmark: a spinning box keeps its momentum and angular momentum (882 ms)
+  dragged through its clamped half: up to 96 of 2058 tetrahedra inside out; 3 s after letting go shape error 0.00%, smallest volume ratio 1.000, finite 1
+[ OK ] soft benchmark: a cube dragged inside out through its clamped half comes back to its shape (777 ms)
+  jelly cube at rest from 2 s to 5 s: every particle stays within 0.000 mm
+[ OK ] soft benchmark: a jelly at rest on the floor neither jitters nor creeps (1145 ms)
+  Courant 1 / 0.5 / 0.25: tip drops 16.052 / 16.054 / 16.055 mm (spread 0.02%)
+  undamped beam: total energy -0.003074 J after 1.5 s (the swing trades up to 0.00621 J of kinetic energy)
+[ OK ] soft benchmark: the static answer does not depend on the step; energy never grows (8974 ms)
+  jelly asleep after 2 s 1, still to the bit 1; a box dropped on it wakes it 1 and rests on it: gap -0.6 mm; asleep again 1; the mouse wakes it 1; asleep on a static slope and finite 1
+[ OK ] soft bodies sleep: still to the bit, woken by a box dropped on them and by the mouse (622 ms)
+  sheet 1 x 1 m swinging 3 s (strength 4000 / 3000 N/m); pendulum pull 3 M g = 8.8 N/m, whip v sqrt(k mu) = 512 N/m at the edge's 5.4 m/s
+    cotton (default): 0 threads torn; near the pin while swinging down 4.8 N/m; anywhere max 257 N/m, 99th percentile 208 N/m
+    card            : 0 threads torn; near the pin while swinging down 40.7 N/m; anywhere max 1392 N/m, 99th percentile 1186 N/m
+[ OK ] cloth: a sheet swinging on its pinned edge loses no thread (10395 ms)
+  sheet hanging with 0.8 x its strength: links under the rod carry 1424.5 N of its 1404.9 N weight (+1.40%), threads 100% of it; middle top thread 2364 N/m; 0 torn
+  with 1.3 x (threads' share 3884 N/m vs strength 3000 N/m): 41 threads torn, 41 of them in the top row
+[ OK ] cloth: threads carry the static load and tear at their strength (2353 ms)
+[ OK ] grid uniform flow (58 ms)
+  sphere: Cd(avg)=0.678  Cl=-0.000  iters=4  residual=4.5e-05
+[ OK ] grid sphere drag (3365 ms)
+  sphere, 2208 triangles (wetted 0.7826 m2, exact 0.7854): stagnation Cp 0.90; Cd 0.427 = pressure 0.422 + friction 0.005; pressure force triangles 5.25 N vs voxel faces 6.69 N; Cl 0.001
+[ OK ] surface loads per triangle (Cp, Cf, forces) (3529 ms)
+  wing NACA2412: Cl(0)=-0.027  Cl(8)=0.140
+[ OK ] grid wing lift (5535 ms)
+  smoke box: t=4.43 s  max|div|=7.27e-04  smoke 0.0510 -> 0.2747 m^3  v_above=1.754 m/s  iters=3
+[ OK ] smoke closed box (2939 ms)
+  smoke + bodies: max gas speed 9.91 m/s, worst div*dx/U 9.4e-05, bodies at rest (max |v| 0.000), 734 solid cells
+  block at 1 m/s: gas ahead 0.81 m/s, beside -0.11 m/s, drag (-0.142, -0.000, 0.000) N
+  sphere rho 200 in gas rho 50 after 0.5 s: vy -4.88 (one-way) vs -2.69 m/s (two-way), free fall -4.86
+[ OK ] gas <-> rigid bodies (moving solids, two-way) (8982 ms)
+  gas + particles: worst div*dx/U 5.7e-05, curtain torn 0, foam cube y -1.119 (floor -1.20)
+  handkerchief after 2 s: centre y 0.30 with the gas drag, -1.15 without
+[ OK ] gas + soft bodies + cloth + rigid bodies (10218 ms)
+  hydro: 7623 water particles; box y 0.20, plank y 0.15, teapot y 0.26, heavy ball y 0.06; div*dx/U 9.7e-04
+  flag (pole at x 0.65), centre x over the last second: 0.7855 in the wind, 0.7532 in still air
+[ OK ] hydrodynamics: water + air + bodies (12881 ms)
+[ OK ] disturbance brush (7 ms)
+  radiative cooling from 1500 K over 0.5 s: 732.31 K (1 step) vs 732.31 K (5000 steps)
+  rich cell: burnt 1.0000 of 10 fuel units, products 1.0000, T rise 1800.0 K (heatRelease 1800)
+[ OK ] combustion: exact radiative cooling, oxygen limit, energy (0 ms)
+  gas: heat 105.859468 -> 105.859469, d<r^2>/dt 6.006e-03 vs 6 alpha 6.000e-03
+  cloth: heat 100.0006 K-patches (100 at start), hot patch now 99.59 K, neighbour 0.103 K
+[ OK ] heat conduction (Fourier) in the gas and along cloth (232 ms)
+  100 kW/m^2: half decomposed after 2.43 s (at 688 K); 8 kW/m^2: intact after 30 s, patch at 369 K
+[ OK ] cotton pyrolysis (Arrhenius) under radiant flux (1 ms)
+  curtain ignites at 1.70 s, fire reaches y 0.77 (rod at 0.55); 73 threads burnt through; flame Tmax 1564 K, peak power 190 kW
+[ OK ] fire: burner ignites a curtain, it burns through (25658 ms)
+  wall part of the kernel: 0.5000 at the wall, 0.0000 inside
+  water tank over 4 s: max density 1104 kg/m^3 (rest 1000; 10 279 in the corners before the fix)
+[ OK ] liquid walls in the density (no corner jets) (22743 ms)
+  beach ball: max |v| 2.60 m/s, max |w| 15.2 rad/s; centre at the end 0.436 m, water level ~0.324 m (radius 0.08)
+[ OK ] light body in a wave (no kicks, floats) (34985 ms)
+  resistive decay: B/B0 0.85488 after 2.0 ms, exp(-eta k^2 t) = 0.85474
+  torsional Alfven wave: v_A 8.921 m/s, period 0.2246 s vs 2L/v_A 0.2242 s (4 zero crossings); energy kept 98.42 % (whole-field measure 98.42 %; wave 2.618e-06 J in a field of 9.947e+00 J)
+  vortex winding the field: max |B| 0.0781 T (from 0.0206), max |div B| dx / |B| 1.1e-06
+[ OK ] MHD: resistive decay, Alfven wave, div B = 0 (445 ms)
+  magnetosphere after 1.01 s: flow slowed to half at 0.32 m upstream (theory 0.29-0.37 m), sideways flow at the flank 0.75 m/s, div B 1.7e-07
+[ OK ] plasma wind vs magnet (magnetopause) (13224 ms)
+  Alfvénic state, 32 cells, nu = eta = 0.01, 1.0 s: cells (1,1) / (2,2) kept 0.8121 / 0.4092 of their start, exact 0.8209 / 0.4540 (worst error 9.87 %), |v - b| / |v + b| = 2.2e-02; the same flow without the field: 0.8285 / -0.3471 (worst error 176.4 %)
+[ OK ] MHD: an Alfvénic state v = b is an exact nonlinear solution (Elsässer) (1818 ms)
+[ OK ] presets (3279 ms)
+  sliding box stops after 0.830 m (Coulomb 0.837 m)
+[ OK ] coherence: scene switches, one gravity, Coulomb friction, burnt cloth (639 ms)
+  rigid: pyramid + projectile: 90 frames, fingerprints 61aee10b99df5000 / 61aee10b99df5000 equal
+  particles: dam break: 30 frames, fingerprints 1007fbfedfd4be6f / 1007fbfedfd4be6f equal
+  gas: smoke in a closed box: 8 frames, fingerprints 1d10a9de2ca10af5 / 1d10a9de2ca10af5 equal
+[ OK ] determinism: two runs agree to the bit (rigid, particles, gas) (2008 ms)
+  threads in the pool: 10
+  gas: smoke in a closed box: 1 thread 92bed10f59909108, 2 threads 92bed10f59909108, all 92bed10f59909108 equal
+    (8 frames, 1.1 s for the three runs)
+  fire: burner and cotton curtain: 1 thread 214917787db88a0a, 2 threads 214917787db88a0a, all 214917787db88a0a equal
+    (30 frames, 10.1 s for the three runs)
+  plasma: solar wind against a magnet: 1 thread d8698d0cd27bcf84, 2 threads d8698d0cd27bcf84, all d8698d0cd27bcf84 equal
+    (3 frames, 3.0 s for the three runs)
+  rigid: pyramid and projectile: 1 thread a48f9703efe9e465, 2 threads a48f9703efe9e465, all a48f9703efe9e465 equal
+    (90 frames, 0.5 s for the three runs)
+  rigid: a hundred teapots (parallel narrow phase): 1 thread 5acfab78d2051d7d, 2 threads 5acfab78d2051d7d, all 5acfab78d2051d7d equal
+    (30 frames, 0.6 s for the three runs)
+  rigid: 150 bodies on a terrain mesh (BVH): 1 thread 977abf098a7a2642, 2 threads 977abf098a7a2642, all 977abf098a7a2642 equal
+    (60 frames, 0.6 s for the three runs)
+  particles: dam break: 1 thread 7d27b317b3db0328, 2 threads 7d27b317b3db0328, all 7d27b317b3db0328 equal
+    (10 frames, 1.4 s for the three runs)
+  particles: cloth and soft bodies: 1 thread 2aaef7506187d58e, 2 threads 2aaef7506187d58e, all 2aaef7506187d58e equal
+    (5 frames, 0.7 s for the three runs)
+  MHD: torsional Alfven wave, 60 steps: 1 thread ad218a8c5964eacc, 2 threads ad218a8c5964eacc, all ad218a8c5964eacc equal
+[ OK ] determinism: the same bits on 1, 2 and all threads (17971 ms)
+  rigid benchmark scene after 10 s: hash c48c7854e537abeb; 16 bodies, 12 asleep, chain end at (1.3788, 2.3062, 1.0000)
+  default build (-march=native, FMA): printed only; the constant is checked in the RF_STRICT_FP build
+[ OK ] determinism: golden hash of the rigid benchmark scene (21 ms)
+  rf::sin, cos, atan, atan2, exp, acos, asin, pow: 0 of 320008 results differ from std:: in any bit
+[ OK ] determinism: rf::sin, cos, atan2 ... equal std:: to the bit (step 1 of 2) (3 ms)
+  cylinder Re 100, 12.5% blockage: St = 0.154 (Williamson 0.164 unbounded, ~0.17 confined), Cl amplitude 0.33, Cd mean 1.42 (2D reference ~1.3), 12 zero crossings in 18 s, residual 7.7e-05
+[ OK ] benchmark: cylinder vortex street, Strouhal number at Re 100 (Williamson 1996) (47032 ms)
+  elastic ball: E0 = 41.0920 J; after 5 bounces 41.2431 J (+0.37%) after 10 bounces 41.2431 J (+0.37%) after 15 bounces 41.2431 J (+0.37%) after 20 bounces 41.2431 J (+0.37%); worst drift 0.37% over 20 bounces
+  glancing collision: worst |P| drift 2.7e-07 / 2.0e-08, worst |L| drift 1.4e-05 at dt = 1/600, 3.4e-05 at 1/1200 (spin of the hit box 4.06 rad/s)
+  Dzhanibekov: I = (0.1333 0.0333 0.1133) kg m^2, sigma 6.00 1/s, 6 flips in 10 s, period 3.40 s (20.4 / sigma); |L| drift 4.5e-06, energy drift 4.9e-05
+[ OK ] Noether: energy, momentum and angular momentum of rigid bodies (41 ms)
+  Newton's cradle on the floor: last ball 2.0000 m/s (expected 2), others at most 0.0000 m/s
+[ OK ] standard rigid: Newton's cradle on the floor: the hit passes down the row (6 ms)
+  heat spot, exact peak 0.0584 K: grids 16/32/64, RMS error 1.65e-04 / 3.80e-05 / 8.23e-06, order 2.12 then 2.21; peak 0.0479 / 0.0557 / 0.0577 (order 1.97, GCI fine 1.48%), max dt 0.004 s
+  smoke blob advected 0.5 m: grids 32/64/128, RMS error 8.45e-03 / 2.62e-03 / 7.20e-04, order 1.69 then 1.87; peak 0.8038 / 0.9236 / 0.9707 (exact 1, order 1.35, GCI fine 3.91%), max dt 0.0437 / 0.0219 / 0.0109 s
+[ OK ] grid convergence of the gas solver (Richardson order) (40072 ms)
+  48^3, tolerance 1e-7: Jacobi 238 iterations, multigrid 10; the flows differ by at most 2.4e-07 m/s (inflow 1 m/s), max |div| 7.2e-06 / 7.2e-06 1/s
+   32^3 cold start to 1e-4, the projection: Jacobi PCG  122 iterations    15.8 ms | multigrid PCG   6 iterations   10.3 ms (1.5x faster)
+   64^3 cold start to 1e-4, the projection: Jacobi PCG  247 iterations   278.9 ms | multigrid PCG   7 iterations   71.9 ms (3.9x faster)
+  128^3 cold start to 1e-4, the projection: Jacobi PCG  496 iterations 10340.8 ms | multigrid PCG   8 iterations 1088.7 ms (9.5x faster)
+[ OK ] gas: multigrid pressure matches PCG and converges in few iterations (14533 ms)
+  inviscid Taylor-Green, 32 cells, 2 s: energy kept 0.8683 with the projection, 0.9872 with the reflection (lost 13.17% vs 1.28%); 3.69 vs 6.51 ms per step (x1.76)
+  empty tunnel at 2 m/s with the reflection: mean u 2.00000 m/s at the inlet, 2.00000 m/s everywhere
+[ OK ] gas: advection-reflection keeps the inviscid Taylor-Green energy (1430 ms)
+  dam break: 8000 particles, column 20 x 40 particles; the column at rest grows by 4.3% in height
+      T    Z(sim)  Z(ref)  H(back wall)
+     0.00    1.05    1.00    1.00
+     0.30    1.15    1.08    1.05
+     0.59    1.25    1.16    1.09
+     0.89    1.45    1.25    1.10
+     1.19    1.70    1.44    1.09
+     1.49    2.00    1.73    1.06
+     1.78    2.30    2.06    1.00
+     2.08    2.70    2.41    0.93
+     2.38    3.05    2.79    0.83
+     2.67    3.45    3.20    0.71
+     2.97    3.90    3.63    0.57
+  dam break front: mean |Z - Z_ref| / Z_ref = 12.2% over T in [0.5, 3] (literature 3-8%), late slope dZ/dT = 1.30 (experiment ~1.7, Ritter 2), back wall rises to 1.10 of the height (experiment: falls), max speed 2.90 m/s
+[ OK ] benchmark: dam break front vs Martin & Moyce 1952 (2677 ms)
+  terrain: 51200 triangles
+  terrain: 150 bodies, 0 below the surface, 150 asleep after 12 s, max speed 0.000 m/s; 5.96 ms/frame (worst 39.47)
+[ OK ] standard rigid: terrain: 150 bodies on a static mesh of 51 200 triangles (4336 ms)
+  box, 40 uniform seeds: 40 seeds -> 40 cells in 2.9 ms; volume 0.180000 vs hull 0.180000 (1.2e-07 rel), cells 1.56e-03 .. 9.48e-03 m^3, leaky 0, concave 0, seed errors 0, bad shapes 0
+  sphere, 25 impact seeds: 25 seeds -> 25 cells in 10.5 ms; volume 0.063602 vs hull 0.063602 (0.0e+00 rel), cells 6.50e-07 .. 1.16e-02 m^3, leaky 0, concave 0, seed errors 0, bad shapes 0
+  impact seeds within 0.2 m of the hit: 18 of 25
+[ OK ] Voronoi fracture: cells fill the body, convex and watertight (16 ms)
+  many bodies: 30118 particles, 150 bodies
+  many bodies: 73.8 ms per frame, up to 1574 particle-body contacts in a pass, tree queries 451770 per frame
+[ OK ] particles vs many bodies: the world tree (4495 ms)
+  destroy the ball: bodies 5, contacts 1 -> 0, stack drift 0.00e+00 m
+  destroy the top box: stack drift 6.90e-08 m; the next body takes slot 4 (the top box was 4), rests at y 0.1000
+  100 add/destroy cycles: 6 slots before, 6 after; 40 allocations per frame before, 40 after
+[ OK ] rigid: destroy one body, reuse its slot (66 ms)
+  capsule r 0.1 h 0.15: volume 0.013614 (grid 0.013639), unit inertia side 0.018538 axis 0.004692 (grid 0.018538 0.004701)
+  lying capsule: centre y 0.0500 m (expected 0.0500), drift 0.0007 m, speed 0.0000 m/s, 2 contacts
+  capsule stood on its end, tilted 2 deg: after 6 s axis y 0.000, centre y 0.0500 m, speed 0.0000 m/s
+  capsule rays: side 1, top 1, cap off the axis 1 (t 0.81000, expected 0.81000)
+[ OK ] rigid: a capsule - mass, lying on 2 contacts, falling over, raycasts (30 ms)
+  e = 0, sphere 1 m, floor        hit  4.39 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, sphere 5 m, floor        hit  9.82 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, box 1 m, floor           hit  4.39 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, box 5 m, floor           hit  9.82 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, sphere 5 m, static slab  hit  9.82 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, box 5 m, static slab     hit  9.82 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0, box 1 m onto a stack     hit  4.39 m/s, rebound 0.0000 m/s, rise 0.00 mm, rests 0.00 mm above
+  e = 0.5, sphere 1 m, floor    hit  4.39 m/s, rebound 2.1972 m/s (expected 2.1973)
+[ OK ] rigid: restitution 0 - a dropped body stops at the touch (58 ms)
+  1 m, e 0, world floor              turned   0.00 deg (tilt   0.00, yaw  -0.00), drift    0.00 mm, spin up to 0.000 rad/s
+  5 m, e 0, world floor              turned   0.00 deg (tilt   0.00, yaw  -0.00), drift    0.00 mm, spin up to 0.000 rad/s
+  1 m, e 0.5, world floor            turned   0.00 deg (tilt   0.00, yaw   0.00), drift    0.00 mm, spin up to 0.000 rad/s
+  5 m, e 0.5, world floor            turned   0.00 deg (tilt   0.00, yaw   0.00), drift    0.00 mm, spin up to 0.005 rad/s
+  1 m, e 0, editor plate             turned   0.00 deg (tilt   0.00, yaw  -0.00), drift    0.00 mm, spin up to 0.000 rad/s
+  5 m, e 0.5, editor plate           turned   0.00 deg (tilt   0.00, yaw   0.00), drift    0.00 mm, spin up to 0.002 rad/s
+  1 m, e 0.2, editor scene           turned   0.00 deg (tilt   0.00, yaw  -0.00), drift    0.00 mm, spin up to 0.000 rad/s
+  5 m, e 0.5, editor scene           turned   0.00 deg (tilt   0.00, yaw   0.00), drift    0.00 mm, spin up to 0.002 rad/s
+  1 m, e 0.2, plate, tilted 2 deg    turned   0.00 deg (tilt   0.00, yaw  -0.00), drift   49.90 mm, spin up to 31.019 rad/s
+[ OK ] rigid: a cube dropped flat lands without turning or sliding (70 ms)
+  barrel touching a 3.6 m floor, 1000 poses (gap -0.2 .. 0.2 mm): 0 lost, 0 normals off by > 5 mrad (worst 2.54e-03 rad), 0 depths off by > 20 um (worst 8.51e-07 m)
+[ OK ] rigid: a barrel touching a wide floor gets the floor's normal and its true depth (2 ms)
+  sleeping on:  50 of 50 barrels asleep at t = 8 s, all asleep at t = 4.65 s, hash 31da2c69b637fe9b
+  sleeping off: t = 5 .. 8 s the longest way a barrel went 1.67 mm, the fastest 1.23e-03 m/s and 8.83e-03 rad/s, warm start 99.84 % of 97078 points
+[ OK ] standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps (3073 ms)
+  remove the soft cube: 4148 -> 4084 particles (its 64), soft bodies 0, cloth rod moved 0.0e+00 m, finite 1
+  remove the liquid: 784 particles left (fluid 0), cloth 28 x 28
+  a new soft ball afterwards: 8 particles, lowest at y 0.015 (floor 0)
+[ OK ] particles: remove one group (soft body, liquid) (1429 ms)
+  massive, Kerr a = 0.9, RK45 tol 1e-12, lambda 20000 M (35950 steps, r in the end 10.05 M): dE 0.0e+00, dL 0.0e+00, dQ 5.6e-10, H -5.00e-01 -> -5.00e-01
+  same orbit, RK4 h = 2.0: dE 0.0e+00, dL 0.0e+00, dQ 8.2e-06
+  same orbit, RK4 h = 0.5: dE 0.0e+00, dL 0.0e+00, dQ 7.8e-09
+  photon, Kerr a = 0.9: escaped after 746 steps (r 10000.7 M, phi 0.41 turns): dE 0.0e+00, dL 0.0e+00, dQ 9.6e-12, H -3.0e-14
+[ OK ] geodesics: E, L and Carter's Q along a Kerr orbit (RK45 vs RK4) (271 ms)
+  deflection at b = 200 M: 0.0202999 rad, theory 4M/b + 15 pi M^2 / 4b^2 = 0.0202945 (first order alone 0.0200000); 2450 steps, r_min reached
+[ OK ] light deflection by a mass: 4M/b + second order (13 ms)
+  photon sphere: tangential start at r = 3 M stays within 1% for 4.73 revolutions (b = L/E = 5.196152, 3 sqrt 3 = 5.196152)
+  ISCO: circular orbit at 6 M (E 0.942809, L 3.464102) over 11.6 turns: |r/6M - 1| <= 3.5e-11
+  inside the ISCO: circular orbit at 5.9 M with an inward nudge fell in after 4.5 turns (lambda 238 M)
+[ OK ] photon sphere at 3M and the ISCO at 6M (11 ms)
+  perihelion precession, a = 100 M, e = 0.2: 0.206085 rad per orbit over 11 orbits; exact quadrature 0.205974 (0.054%), Einstein's first order 6 pi M / p = 0.196350 (4.7% below the exact)
+[ OK ] perihelion precession: 6 pi M / (a (1 - e^2)) (15 ms)
+  shadow: 96 x 96 rays in 2727 ms, 1804 black pixels (0 lost): angular radius 0.00519 rad, Bardeen 3 sqrt(3) M / r0 = 0.00520 (-0.15%)
+[ OK ] shadow of a Schwarzschild hole: 3 sqrt(3) M (ray tracer) (2727 ms)
+  Eddington-Finkelstein: r 10 M -> 0.100 M in 99 steps, v = -3.83e-15 (constant), lambda 9.900 M, H 9.7e-15
+  Boyer-Lindquist: r 10 M -> 2.000002013 M closest in 750 steps, t there 38.4 M and growing like 2 M ln(1 / (r/2M - 1)) = 27.6; end 1
+[ OK ] horizon crossing: Eddington-Finkelstein vs Boyer-Lindquist (3 ms)
+  flat spherical: Gamma^r_thth -3.0000000000 (-r = -3), max |Riemann| 1.2e-10; Cartesian 0.0e+00; 2-sphere R = 0.5000000000 (2/R^2 = 0.5)
+  loops vs einstein(): Gamma 0.0e+00, Riemann 4.4e-16, Ricci 0.0e+00, K 0.0e+00 (K = 4.079933e-04)
+[ OK ] curvature: flat space in spherical coordinates, the 2-sphere, loops vs einstein() (2 ms)
+  Schwarzschild r = 7M: 9 Christoffels vs closed form 1.6e-11 (relative); max |Ricci| 4.6e-11; K 4.0799326803e-04 vs 48M^2/r^6 4.0799326811e-04
+  step h / (coordinate size) -> relative error of Gamma, of K: 3e-02: 1.3e-05, 1.2e-05; 1e-02: 1.5e-07, 1.5e-07; 3e-03: 1.2e-09, 1.2e-09; 1e-03: 1.6e-11, 2.0e-10; 3e-04: 1.1e-12, 2.0e-09; 1e-04: 8.2e-13, 7.1e-09; 3e-05: 7.6e-12, 1.5e-07;
+  Kerr a = 0.9, r = 7M, theta 1.1: K 3.7943990106e-04 vs Henry 2000 3.7943990107e-04 (2.9e-11); max |Ricci| 1.3e-10
+  Reissner-Nordstrom Q = 0.6: R 4.5e-13, max |Ricci| 7.347e-03 (Q^2/r^4 = 1.499e-04), G^t_t -1.49937526e-04 vs -Q^2/r^4 -1.49937526e-04, K 3.67287197e-04 vs 3.67287197e-04
+[ OK ] curvature: Schwarzschild, Kerr, Reissner-Nordstrom (Christoffels, Ricci, Kretschmann) (11 ms)
+  de Sitter Lambda = 0.03: R 0.1200000000 (4 Lambda = 0.12), max |G + Lambda g| 4.3e-11
+  flat FLRW a = t^(2/3), t = 2: Gamma^x_tx 0.3333333333 vs H 0.3333333333; G_tt 0.3333333333 vs 3H^2 0.3333333333
+  Ellis wormhole b0 = 1, at the throat: rho = G_tt / 8pi -0.0397887358 vs -1/(8 pi b0^2) -0.0397887358 (negative: exotic matter)
+[ OK ] curvature: de Sitter, Friedmann, a wormhole's exotic matter (3 ms)
+  tides at r = 10M: radial 1.9999999998e-03 (2M/r^3 = 2.0000000000e-03), sideways -1.0000000000e-03 (-M/r^3)
+  Kerr orbit, lambda 50 M: Gamma form vs Hamilton form, max |dx| 4.2e-11 (r 10.907451 M, phi 1.792866)
+[ OK ] curvature: tides of a static observer, geodesics with Gamma vs Hamilton (24 ms)
+  Carter's form vs the metric: H off by 2.2e-16, the gradient off by 5.0e-13 (the finite differences' own error)
+[ OK ] symplectic geodesics: the exact Kerr gradient matches the metric (0 ms)
+  Kerr a = 0.9, r 8..15 M, Q = 4, radial period 274.45 M, 2000 orbits:
+    RK4, h = 1 M                     max|dH| 2.74e-06, trend/excursion 1.00, max|dQ/Q| 7.06e-05, E and L exact,  4.0 gradients a step, 0.1 s
+    RK4, h = 1/3 M (cost of Tao-4)   max|dH| 1.13e-08, trend/excursion 1.00, max|dQ/Q| 2.90e-07, E and L exact,  4.0 gradients a step, 0.4 s
+    implicit midpoint, h = 1 M       max|dH| 1.22e-05, trend/excursion 0.00, max|dQ/Q| 1.27e-04, E and L exact,  9.0 gradients a step, 0.4 s
+    Tao-4, h = 1 M, omega = 0.1      max|dH| 6.90e-06, trend/excursion 0.00, max|dQ/Q| 2.18e-04, E and L exact, 12.0 gradients a step, 0.4 s
+    RK4 at Tao-4's cost passes Tao-4's excursion after ~1220888 orbits
+[ OK ] symplectic geodesics: energy bounded over thousands of orbits, RK4 drifts (455 ms)
+  error at T = 256 M for h = 1, 1/2, 1/4 M:
+    implicit midpoint 2.52e-03 6.29e-04 1.57e-04 -> order 2.00 (theory 2)
+    Tao-2             1.21e-03 3.04e-04 7.62e-05 -> order 2.00 (theory 2)
+    Tao-4             1.29e-04 7.94e-06 4.95e-07 -> order 4.01 (theory 4)
+    RK4               2.19e-06 1.16e-07 6.63e-09 -> order 4.19 (theory 4)
+[ OK ] symplectic geodesics: order 2 (midpoint, Tao-2) and 4 (Tao-4, RK4) (7 ms)
+  2000 steps of 1 M out and back: midpoint 7.5e-14, Tao-2 4.1e-13, Tao-4 8.8e-14 from the start; RK4 1.1e-05 (not symmetric)
+[ OK ] symplectic geodesics: forward then back returns to the start (7 ms)
+  scene file: 2355 bytes, 9 entities; save -> load -> save identical
+  a bad line: line 4: cannot read 'bouncy'
+[ OK ] scene graph: save -> load -> save gives the same text (1 ms)
+  C library in ru_RU.UTF-8: the file is the same, it loads
+[ OK ] scene graph: the file does not depend on the locale (decimal comma) (1 ms)
+  coaxial: F = -0.006000 N (theory -0.006000, pulls); side by side: F = 0.003000 N (theory +0.003000, pushes)
+  field on the axis 2.0000e-04 T (theory 2.0000e-04), torque on a crossed needle -2.0000e-04 N m
+[ OK ] magnets: dipole force and torque (Jackson 5.56, Yung et al. 1998) (0 ms)
+  two magnets 10 cm apart: max speed 0.313 m/s, final centre gap 0.0200 m (boxes 0.02), gap change over the last 0.5 s 2.43e-05 m, worst |P| 8.99e-10 kg m/s
+[ OK ] magnets: two free magnets pull together, momentum conserved (10 ms)
+  graph scene: 4 rigid bodies, 1 soft bodies, 462 liquid particles, 1937 particles in all after 60 frames
+[ OK ] scene graph: every role and shape builds and runs (876 ms)
+  100 spheres, 28 m, in a 3 m room: the top one fell 4.880 m in 1.00 s (free fall 4.905); lowest below free fall 0.0016 m. A ball rolled off the floor at 3 m/s: x = 5.46 m, y = 0.100 m after 2 s
+[ OK ] scene graph: no invisible walls (a 28 m column in a 3 m room, a ball off the floor) (51 ms)
+  jellies a third inside each other, weightless: fastest centre 0.0000 m/s in 2 s; a jelly 10 cm inside another: rose 0.0983 m, energy gain 3.871 J (allowed 3.973 J)
+[ OK ] scene graph: soft bodies inside each other are pushed apart, not thrown (3371 ms)
+  cloth 0.6 x 0.6 m, standing, pinned at the top: rod at y 1.800, hangs 0.600 m, 0 threads torn; level, pinned along one edge: swings, lowest point 0.596 m below the edge, 0 threads torn
+[ OK ] scene graph: a plane made cloth hangs from its pinned edge (2841 ms)
+  smoky box thrown at 2 m/s: box at x 0.95 m, smoke centre x -0.92 m at 0.17 s -> 0.21 m at 1 s, smoke 483 (was 51.9)
+[ OK ] scene graph: a smoke emitter on a thrown box leaves a trail (1104 ms)
+  flammable curtain over a 600 K emitter: hottest fabric 350 K above ambient, least unburnt 0.989, caught fire at 2.48 s
+[ OK ] scene graph: a flammable curtain over a hot emitter catches fire (20377 ms)
+  model as rigid: 2 bodies, cube centre at y 0.1600 m (expected 0.1600), speed 0.0000 m/s
+[ OK ] scene graph: a model from a file as rigid, soft and (not) cloth (38 ms)
+  geometry only: 1 bodies, ball at y 0.050 m (floor 0.05, block top 0.7), block mesh 12 triangles, box (-0.20 0.30 -0.20)..(0.20 0.70 0.20)
+[ OK ] scene graph: a shape with no role is geometry only (3 ms)
+  a sphere on a box collider slid 0.232 m (v^2 / 2 mu g = 0.229); a box on a sphere collider rolled 2.496 m; the sphere is drawn with 528 triangles, collides as shape type 1
+[ OK ] scene graph: the collider apart from the look (box collider slides, sphere collider rolls) (12 ms)
+  model on a fitted capsule: lowest collider point 0.0100 m (floor top 0.0100), speed 0.0000 m/s; off-centre collider body before / after a rebuild (1.1000 0.1100 -0.0000) / (1.1000 0.1100 -0.0000); round trip 1
+[ OK ] scene graph: a capsule fitted to a model, collider round trip, off-centre rebuild (10 ms)
+  collider only: a static body (inverse mass 0.0) moved 0.000000 m; the ball bounced up at 2.18 m/s, rests at y 0.4500 (the obstacle's top 0.40 + 0.05)
+[ OK ] scene graph: a collider alone is a static obstacle (4 ms)
+  lights: spot turned 90 deg about x shines (0.000 -0.000 -1.000); camera forward.up 4.0e-10, |f|,|u| off by 0.0e+00
+[ OK ] scene graph: lights and cameras round trip, a spot's direction, a camera's frame (0 ms)
+  switch 1 -> jelly: 343 particles out, 343 in, centre moved 0.087 m
+  switch 2 -> water: 343 particles out, 343 in, centre moved 0.014 m
+  switch 3 -> jelly: 343 particles out, 343 in, centre moved 0.095 m
+  the resting box: jump at the switches 0.0e+00 m, drift over the run 2.9e-13 m
+[ OK ] meta-objects: water -> jelly -> water -> jelly in place, the rest untouched (477 ms)
+  pose read back from the body: rotation off by 4.8e-06 deg, position by 0.0e+00 m
+  sheet: body slot 1 -> cloth (2 bodies, 1 cloths) -> the ball took slot 1, the sheet is body 3 again (4 bodies, 0 cloths)
+[ OK ] meta-objects: a plane rigid -> cloth -> rigid, body slots reused (760 ms)
+  right magnet's speed change in one frame: 0.00e+00 m/s with the left one plain, 6.120e-05 m/s with it a magnet again (theory 6.118e-05 at 0.160 m); frame 5 -> 7 (no reload)
+[ OK ] meta-objects: a magnet role off and on without a reload (0 ms)
+  50 changes: allocations per frame 63.0 -> 58.1, body slots 2 -> 2, particles 216 -> 216
+[ OK ] meta-objects: fifty changes leave no trace in memory (206 ms)
+  file: 1560 bytes, 4 entities, 1 groups, 1 arrays; round trip identical
+  child of the turned group: world (1.0000 0.0000 -1.0000), yaw 90.00 deg (expected (1 0 -1), 90)
+  instance chain B -> A -> Master: shape sphere, density 700, own position y 3.0, own id 4
+[ OK ] scene graph: groups, instances and arrays round trip; a child of a turned group (1 ms)
+  line: 5 copies, worst spacing error 0.0e+00 m; grid: 12 copies, last at (0.40 0.30 0.40); circle: 8, worst radius error 1.2e-07 m; jitter same seed same, other seed differs
+[ OK ] array: line, grid and circle copies where the pattern puts them, seeded jitter (0 ms)
+  array 5x2x5: 52 bodies (floor, box, 50 copies), 51 of 51 asleep after 5 s; grown to 8x2x5 during play: 82 bodies, resting box moved 0.0e+00 m, the 50 old copies at most 0.0e+00 m
+[ OK ] array: fifty cubes fall and sleep, the array grows to eighty during play (266 ms)
+  10 bodies of one master: mass 0.500..0.500 kg, after doubling the master's density 1.000..1.000 kg
+[ OK ] array: ten instances of one master all get heavier with it (8 ms)
+  glued L of 3 boxes: one body yes, fell 1.41 m, spin up to 8.98 rad/s, parts moved apart by at most 1.0e-07 m
+[ OK ] array: a glued group of three boxes falls and tumbles as one body (8 ms)
+  layers on: 6958 primitives a frame; off: 400 allocations in 10 frames (reference 400)
+  the drawn tower vs the plain one: largest difference of a body's position 0.0e+00 m
+[ OK ] debug layers: all off draws nothing and allocates nothing more (100 boxes) (318 ms)
+  24 contact points, 24 points drawn, 72 normal segments
+[ OK ] debug layers: one point per contact point, contacts in the snapshot (47 ms)
+  GJK 3 simplices, EPA 10 faces, depth 0.10000 (contact 0.10000, arrow 0.10000)
+[ OK ] debug layers: watched pair, GJK simplices, EPA depth == contact depth (0 ms)
+[ OK ] debug layers: world AABB tree has 2 n - 1 nodes (0 ms)
+  3280 threads, 3280 lines
+[ OK ] debug layers: one line per cloth thread (115 ms)
+  grid 74, velocity 3369, gradient 3369, divergence 1123, vorticity 3336, labels 4
+  field lines B 2276 segments, current density 6183
+[ OK ] debug layers: gas slice (grid, u, -grad p / rho, div u, curl u) and field lines B (1319 ms)
+[ OK ] debug layers: a layer stops at its cap with a label (1 ms)
+  scene                             allocs mean   allocs max      step ms        limit
+  rigid tower (100 boxes)                    40           40         6.40          150
+  100 teapots                               101          145        16.53          200
+  water: wave in a pool                    1031         1400       115.79         2500
+  fire: burning curtain                     210          211        53.73         1100
+  magnetosphere                             101          101       147.96         1300
+  terrain: 150 bodies on a mesh             242          774         3.56          250
+[ OK ] memory: allocations per frame of every scene (11733 ms)
+  scene                               step ms   timed ms   covered   the three longest stages
+  rigid tower (100 boxes)                5.65       5.59     99.0 %   rigid/solve ms 5.03  rigid/collide ms 0.34  rigid/integrate ms 0.10
+  100 teapots                           14.17      14.08     99.4 %   rigid/solve ms 7.21  rigid/collide ms 6.27  rigid/integrate ms 0.39
+  joints                                 0.60       0.58     95.6 %   rigid/solve ms 0.36  rigid/collide ms 0.12  rigid/integrate ms 0.05
+  water: wave in a pool                111.73     111.55     99.8 %   particles/density ms 47.83  particles/bodies ms 21.34  particles/neighbors ms 21.04
+  cloth and soft bodies                 40.47      40.25     99.5 %   particles/contacts ms 14.02  particles/cloth ms 11.55  particles/density ms 5.80
+  cloth in the wind                     44.42      43.88     98.8 %   gas/advect ms 15.51  gas/pressure ms 11.98  particles/cloth ms 4.12
+  smoke and bodies                      28.90      28.28     97.8 %   gas/advect ms 15.74  gas/pressure ms 10.44  gas/forces ms 0.95
+  wind tunnel: sphere                  113.61     111.65     98.3 %   gas/advect ms 71.51  gas/pressure ms 37.04  gas/sources ms 1.14
+  fire: burning curtain                 56.39      55.72     98.8 %   gas/advect ms 26.62  gas/pressure ms 11.41  gas/solids ms 3.83
+  magnetosphere                        156.58     153.87     98.3 %   gas/advect ms 93.72  gas/pressure ms 33.95  gas/mhd ms 13.09
+  terrain: 150 bodies on a mesh          5.28       5.21     98.7 %   rigid/collide ms 3.56  rigid/solve ms 1.21  rigid/integrate ms 0.31
+[ OK ] profiler: the stage timers add up to the whole step, none inside another (14894 ms)
+  friction: lost 72.000 J, mu m g s = 71.884 J (balance 0.16%); slid 0.7633 m, v0^2 / 2 mu g = 0.7645 m
+[ OK ] action: friction takes mu m g per metre slid (15 ms)
+  damped pendulum: E0 3.4408 J, lost 3.1357 J, integral 2R dt = 3.1247 J (balance 0.35%), joint drift 3.2e-05 m
+[ OK ] action: a damped pendulum loses the damping's work, the joint none (19 ms)
+  viscous: K0 0.03819 J; after 1.00 s lost 0.01397 J, integral 2 nu rho |S|^2 = 0.01204 J, exact loss 0.01246 J; viscous ledger vs exact -3.4%, numerical dissipation 13.8% of the loss
+[ OK ] action: viscous dissipation 2 nu |S|^2 of a Taylor-Green vortex (306 ms)
+  Joule: W0 2.5645e-02 J, lost 6.4069e-03 J (25.0%), integral J^2 / sigma over the free edges 6.3997e-03 J (balance 0.113%); jouleHeating (the heat the gas gets) 6.3997e-03 J (-0.11%)
+[ OK ] action: magnetic energy turns into Joule heat J^2 / sigma (18 ms)
+  free spin 20 s at 1/600 s: 4 flips, energy drift 1.3e-05, |L - L0| / |L0| 6.9e-06 (target 1e-3: met)
+  drift over 5 s:  dt 1/60: L 1.9e-06, E 3.5e-04  dt 1/120: L 1.2e-06, E 8.9e-05 (energy order 1.99)  dt 1/240: L 4.6e-06, E 1.8e-05 (energy order 2.28)
+[ OK ] action: a free spinning box keeps its energy and L (Noether) (32 ms)
+  free fall 0.50 s: energy 205.4602 -> 205.2920 J, drop 0.16813 J vs integrator's m g^2 h t / 2 = 0.16796 J; |P| 20.54599 vs m g t 20.54602 N s; ball speed 4.90499 vs g t 4.90500 m/s
+[ OK ] channels: free fall keeps energy (up to the integrator) and gains m g t of momentum (1 ms)
+  collision: momentum 65.34513 -> 65.34512 N s, energy 65.34513 -> 65.34513 J, struck ball 2.0000 m/s, pair's centre moved 1.00000 m (P/M t = 1.00000 m), group momentum 65.34512
+[ OK ] channels: an elastic collision keeps momentum and energy; the pair's centre moves on (2 ms)
+  friction: lost 72.000 J (its energy channel), mu m g * distance = 71.884 J (its centre channels), balance 0.16%
+[ OK ] channels: friction takes mu m g per metre, read from the slab's own channels (10 ms)
+  stack of 4 x 39.24 N: ground feels -155.26 N (-4 m g = -156.96), bottom box 39.08 N, top box 38.62 N (m g = 39.24); ground touches 4 points
+  asleep (1): bottom box 39.240 N, top box 39.240 N (m g = 39.240); the ground 0.00 N (no solved contacts)
+[ OK ] channels: Newton's third law - the ground feels the stack, each box its weight (65 ms)
+  Taylor-Green: gas kinetic energy 0.03819 -> 0.02422 J after 1.00 s, exact 0.02573 J (-5.88%)
+[ OK ] channels: the gas energy of a Taylor-Green vortex decays as exp(-4 nu pi^2 t) (273 ms)
+  Poiseuille probe: 16 points across, worst |u - 6 U eta (1 - eta)| = 5.77e-03 U, centre 1.4884 U (exact 1.5)
+[ OK ] channels: a probe line across a channel reads Poiseuille's parabola (1271 ms)
+  hydrostatics: p(bottom) - p(top) = 11.2662 Pa over 0.9375 m, rho g h = 11.2662 Pa (+0.00%); gas speed 1.2e-06 m/s
+[ OK ] channels: a probe line down a heavy gas reads p = rho g h (4 ms)
+  cost: state hash 2652a5756b2014c6 vs 2652a5756b2014c6 (measured), 49 measurements a frame; nothing asked: silent 1, 0 allocations; 1 thread vs all: same bits 1
+[ OK ] channels: nothing asked costs nothing; measuring changes no bit; same bits on any threads (330 ms)
+  catalog: 19 scene channels, 12 probe quantities, all with id, unit and name: 1
+[ OK ] channels: every name card has an id, a unit and a name (0 ms)
+  0.1 added 1e7 times: float 1087937.0 (error 8.79%), double 999999.999838975 (error 1.6e-10); a wave of 2.618e-06 J on 9.947 J: float sees 2.861e-06 J (error 9%), double 2.618000e-06 J (error 3.9e-11)
+[ OK ] mathbook: float and double - what survives a long sum and a small difference (12 ms)
+  Lorentz circle: radius 1.00000 ... 1.00063 m, theory m v / (q B) = 1.00000 m, speed kept 1.0000004; push off centre: omega (0.0000, 0.0000, 1.1250) rad/s vs I^-1 (r x J), error 0.0e+00
+[ OK ] mathbook: vectors - a charge circles in a field, a push off centre spins a body (0 ms)
+  free fall 2 s at dt = 1/60 s: height error -0.1635 m; errors at dt = 1/15 ... 1/120: 0.6540 0.3270 0.1635 0.0817 m, observed order 1.000
+[ OK ] mathbook: the slope of the height is the speed; the step is first order (1 ms)
+  pendulum 60 deg, h = 0.05 s, 20 s: energy E/E0 at the end - Euler 11.359; worst |E/E0 - 1| - symplectic Euler 0.0785, Runge-Kutta 4 5.7e-05
+[ OK ] mathbook: a pendulum by Euler, symplectic Euler and Runge-Kutta 4 (0 ms)
+  32 x 32 pressure system: CG reaches 1e-6 in 76 steps, Jacobi after 300 sweeps is at 2.56e-01; inertia of a turned box: eigenvalues 13.6000 10.4000 4.0000 vs moments 13.6000 10.4000 4.0000 kg m^2 (worst 0.0e+00)
+[ OK ] mathbook: a big linear system by Jacobi and CG; inertia eigenvalues (3 ms)
+  tennis-racket box, 20 s: turned over 3 times in the engine, 3 times by Euler's equations (exact); |q| - 1 at worst 9.2e-08
+[ OK ] mathbook: the tennis-racket flip in quaternions, engine vs Euler's equations (39 ms)
+  divergence along the middle row: largest 3.133 1/s before the projection, 1.9e-04 1/s after (6e-05 of it)
+[ OK ] mathbook: div u before and after the pressure projection (5 ms)
+  averages of N dice: spread vs 1/sqrt(12 N) at worst 6.3% off; N = 1024: 71.7% within 1 sigma, 94.7% within 2 sigma (theory 68.3%, 95.4%)
+[ OK ] mathbook: the spread of an average falls as 1 / sqrt(N) (3 ms)
+unblind toy refused: нет записи freeze: сначала rf_verify --freeze toy
+frozen: toy, |E|/|D| ≤ 0.1; предупреждение ≤ 0.2, commit test123
+[BLIND] toy                      2.6 (reference sealed)  0.0 s
+unblinded toy: S = 2.6 ± 0.05 ± 0 (UQ); D = 2.5 ± 0.1; E = 0.1; u_val = 0.112; z = +0.89; вердикт PASS
+z = +0.9 σ: согласие (|z| < 2)
+WARNING: the acceptance of toy changed (|E|/|D| ≤ 0.1; предупреждение ≤ 0.2 -> |E|/|D| ≤ 0.2; предупреждение ≤ 0.2); written into /tmp/rf_verify_blind_test/log.md
+  rigid-projectile: 1 (reference 1), PASS
+  rigid-incline-slide: 2.359 (reference 2.356), PASS
+[ OK ] verification: registry runs quick and writes a board (24 ms)
+
+ALL PASSED

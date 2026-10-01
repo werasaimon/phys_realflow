@@ -1,0 +1,28 @@
+{
+  "motor-final": {
+    "tests": "2",
+    "failures": "0",
+    "time": "0.004"
+  },
+  "nut-final": {
+    "tests": "2",
+    "failures": "0",
+    "time": "83.965"
+  },
+  "chain-final": {
+    "tests": "1",
+    "failures": "0",
+    "time": "46.631"
+  },
+  "default": {
+    "tests": "191",
+    "failures": "0",
+    "time": "479.585"
+  },
+  "strict-tests": {
+    "tests": "5",
+    "failures": "0",
+    "time": "139.072"
+  },
+  "note": "Full native default suite; strict-FP is five focused cases, not the full strict suite."
+}

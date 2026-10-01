@@ -1,0 +1,25 @@
+{
+  "pid": 1659013,
+  "window": "0x6c00007",
+  "preset": 40,
+  "binary": "/tmp/phys-realflow-editor-standard-build/realflow",
+  "log": "/tmp/phys-chain-speed-20261001/editor-chain.log",
+  "screenshots": [
+    "/tmp/phys-chain-speed-20261001/editor-chain-1.png",
+    "/tmp/phys-chain-speed-20261001/editor-chain-2.png"
+  ],
+  "running": true,
+  "visual_verification": {
+    "window_visible": true,
+    "title": "Одна цепь: 8 торов — потяните звено мышью",
+    "simulation_time_s": [
+      3.23,
+      6.37
+    ],
+    "status_frames": [
+      194,
+      382
+    ],
+    "note": "Read from the two captured GUI images; not a frame-rate benchmark."
+  }
+}

@@ -1,4 +1,9 @@
 #pragma once
+void testRigidStepLoads();
+void testRigidStepRollback();
+void testRigidStepMixedEnergy();
+void testRigidStepRecovery();
+void testRigidStepRelativeImpact();
 // Every test, by module. Each is a numerical experiment with an exact answer or a hard physical
 // criterion; see the files for what they check.
 
@@ -41,6 +46,13 @@ void testTorusChainStress();
 void testTorusChainDeterminism();
 void testHangingTorusMouse();
 void testHangingTorusSleep();
+void testChainWheelAssembly();
+void testChainWheelLoaded();
+void testChainDriveCycle();
+void testMotorWork();
+void testMotorWorkRollback();
+void testNutBoltAssembly();
+void testNutBoltCycle();
 void testRigidPerfThousandCubes(); // PerfTests.cpp: 1000 cubes fall, ms per stage
 void testRaycastGrab();
 void testJoints();
@@ -48,6 +60,12 @@ void testCcd();
 void testCcdBodies();
 void testCcdSpinningPlate();
 void testCcdSweptBounds();
+void testCcdQueryAnalytic();
+void testCcdQueryStatuses();
+void testCcdQuerySliding();
+void testCcdQueryBoxSeparation();
+void testCcdWorldUncertainty();
+void testCcdAllMoving();
 void testWallSupportRegion();
 void testWallExtremeWitness();
 void testShockSharedSupport();
@@ -220,3 +238,8 @@ void testMathBookSigma();
 // verification registry (VerificationTests.cpp, only with RF_BUILD_VERIFY): the formulas on exact
 // sequences, two fast cases through the runner, the board written into a scratch copy
 void testVerificationSmoke();
+void testVariationalFlight();
+void testVariationalBounce();
+void testVariationalImpacts();
+void testVariationalRejections();
+void testVariationalCurvedCcd();

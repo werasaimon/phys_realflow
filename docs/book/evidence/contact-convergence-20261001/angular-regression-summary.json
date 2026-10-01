@@ -1,0 +1,143 @@
+[
+  {
+    "file": "angular-regression-00.xml",
+    "testcases": [
+      {
+        "name": "Noether: energy, momentum and angular momentum of rigid bodies",
+        "failed": false
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-01.xml",
+    "testcases": [
+      {
+        "name": "box stack",
+        "failed": false
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-02.xml",
+    "testcases": [
+      {
+        "name": "tall stack (10 boxes)",
+        "failed": false
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-03.xml",
+    "testcases": [
+      {
+        "name": "standard rigid: mixed non-convex sandbox, sleep on and off",
+        "failed": true
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-04.xml",
+    "testcases": [
+      {
+        "name": "standard rigid: non-convex: six cups nest as their parts allow and sleep",
+        "failed": true
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-05.xml",
+    "testcases": [
+      {
+        "name": "standard rigid: rigid: a pile of 50 barrels settles, stands still and sleeps",
+        "failed": true
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-06.xml",
+    "testcases": [
+      {
+        "name": "standard rigid: short torus chain survives mouse pulls",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: short torus chain sleeps and wakes on re-grab",
+        "failed": false
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-07.xml",
+    "testcases": [
+      {
+        "name": "standard rigid: continuous collision (GJK conservative advancement)",
+        "failed": false
+      }
+    ]
+  },
+  {
+    "file": "angular-regression-08.xml",
+    "testcases": [
+      {
+        "name": "variational: CCD follows acceleration between identical endpoints",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD between moving bodies (no superposition)",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD for a fast-spinning plate",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD bounds contain the full rotation arc",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD query analytic impacts",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD query statuses and invalid inputs",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD query sliding along large triangle faces",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD primitive separating planes and mixed bullets",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD world propagates uncertainty",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD also checks slow motion when requested",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD retry integrates external loads once",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD retry restores the whole requested interval",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD retry mixed scene energy at three time steps",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD retry reduces initial penetration recovery",
+        "failed": false
+      },
+      {
+        "name": "standard rigid: CCD contact impulse uses relative velocity",
+        "failed": false
+      }
+    ]
+  }
+]

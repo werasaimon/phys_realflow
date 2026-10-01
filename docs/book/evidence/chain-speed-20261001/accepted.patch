@@ -1,0 +1,20 @@
+--- a/src/rigid/ContactSolver.cpp
++++ b/src/rigid/ContactSolver.cpp
+@@ -345,6 +345,8 @@
+     for (int k = 0; k < np; ++k)
+         if (bodies_[pairs_[size_t(k)].first].invMass > 0 || bodies_[pairs_[size_t(k)].second].invMass > 0) pairWork_.push_back(k);
+     parallelFor(int(staticWork_.size()), [&](int t) { const int i = staticWork_[size_t(t)]; collideStatic(i, slots_[size_t(i)]); }, 4);
++    // One pair per minimum chunk keeps short compound chains from leaving workers idle.
++    // Slots still merge by pair index; only scheduling changes, not contact/solver order.
+     parallelFor(int(pairWork_.size()), [&](int t) {
+         const int k = pairWork_[size_t(t)];
+         auto [i, j] = pairs_[size_t(k)];
+@@ -353,7 +355,7 @@
+         cm.points.clear();
+         if (A.type() == ShapeType::Compound || B.type() == ShapeType::Compound) collideCompoundPair(i, j, slots_[size_t(nb) + k]);
+         else if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
+-    }, 2);
++    }, 1);
+     for (size_t s = 0; s < size_t(nb) + np; ++s)
+         for (const Manifold& m : slots_[s]) manifolds_.push_back(m);
+     timings_.narrow = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t1).count();

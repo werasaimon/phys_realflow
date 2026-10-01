@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="5" failures="0" time="0.855">
+  <testcase classname="rf_tests" name="variational: exact action and variable-step free flight" time="0.010"/>
+  <testcase classname="rf_tests" name="variational: elastic bounce at five steps and adaptive cadence" time="0.834"/>
+  <testcase classname="rf_tests" name="variational: unequal masses, boost and simultaneous impact" time="0.000"/>
+  <testcase classname="rf_tests" name="variational: unsupported physics and persistent contact roll back" time="0.010"/>
+  <testcase classname="rf_tests" name="variational: CCD follows acceleration between identical endpoints" time="0.000"/>
+</testsuite>

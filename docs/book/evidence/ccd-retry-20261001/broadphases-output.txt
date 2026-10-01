@@ -1,0 +1,4 @@
+brute force: 60 subsequent states compared
+BVH: 60 subsequent states compared
+AABB tree: 60 subsequent states compared
+sweep and prune: 60 subsequent states compared

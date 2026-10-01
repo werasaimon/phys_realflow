@@ -1,0 +1,4 @@
+[ OK ] standard rigid: motor work matches analytical energy and leaves dynamics unchanged (4 ms)
+[ OK ] standard rigid: motor work counts accepted CCD subdivisions only (0 ms)
+
+ALL PASSED

@@ -1,0 +1,24 @@
+  head-on plates 2x200 m/s: without CCD min gap -100.192; with CCD min gap 0.108, max overlap 0.0000 m, A bounces at -34.5 m/s
+  bullets into a stack: max overlap 0.0045 m, stack pushed by 3.84 m
+[ OK ] standard rigid: CCD between moving bodies (no superposition) (52 ms)
+  spinning plate 200 rad/s vs 2 cm post: without CCD w_y=66.2 |L| 33% overlap 0.0159 m; with CCD w_y=66.6 |L| 33% overlap 0.0000 m, 3 CCD stops
+[ OK ] standard rigid: CCD for a fast-spinning plate (1 ms)
+[ OK ] standard rigid: CCD bounds contain the full rotation arc (0 ms)
+  100 analytic sphere impacts, plane and sub-1e-6 impact fractions checked
+[ OK ] standard rigid: CCD query analytic impacts (0 ms)
+[ OK ] standard rigid: CCD query statuses and invalid inputs (0 ms)
+[ OK ] standard rigid: CCD query sliding along large triangle faces (0 ms)
+[ OK ] standard rigid: CCD primitive separating planes and mixed bullets (45 ms)
+[ OK ] standard rigid: CCD world propagates uncertainty (0 ms)
+[ OK ] standard rigid: CCD also checks slow motion when requested (0 ms)
+[ OK ] standard rigid: CCD retry integrates external loads once (0 ms)
+[ OK ] standard rigid: CCD retry restores the whole requested interval (2 ms)
+  allMoving=0 dt=1/600: E0=204366.895 peak=204366.895 final=364.960876 J; manifold=6.27652 wall=1.31041 mm; accepted=1275 rejected=75
+  allMoving=0 dt=1/1200: E0=204366.895 peak=204366.895 final=371.252552 J; manifold=21.6183 wall=21.6183 mm; accepted=2442 rejected=42
+  allMoving=0 dt=1/2400: E0=204366.895 peak=204366.895 final=389.109884 J; manifold=3.0449 wall=3.0449 mm; accepted=4823 rejected=23
+  allMoving=1 dt=1/600: E0=204366.895 peak=204366.895 final=370.695083 J; manifold=0.602379 wall=0 mm; accepted=1317 rejected=117
+  allMoving=1 dt=1/1200: E0=204366.895 peak=204366.895 final=372.687771 J; manifold=0.601508 wall=0 mm; accepted=2492 rejected=92
+  allMoving=1 dt=1/2400: E0=204366.895 peak=204366.895 final=411.862251 J; manifold=0.316404 wall=0.00113249 mm; accepted=4845 rejected=45
+[ OK ] standard rigid: CCD retry mixed scene energy at three time steps (2304 ms)
+
+ALL PASSED

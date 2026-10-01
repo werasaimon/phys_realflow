@@ -345,6 +345,8 @@ void RigidWorld::collide() {
     for (int k = 0; k < np; ++k)
         if (bodies_[pairs_[size_t(k)].first].invMass > 0 || bodies_[pairs_[size_t(k)].second].invMass > 0) pairWork_.push_back(k);
     parallelFor(int(staticWork_.size()), [&](int t) { const int i = staticWork_[size_t(t)]; collideStatic(i, slots_[size_t(i)]); }, 4);
+    // One pair per minimum chunk keeps short compound chains from leaving workers idle.
+    // Slots still merge by pair index; only scheduling changes, not contact/solver order.
     parallelFor(int(pairWork_.size()), [&](int t) {
         const int k = pairWork_[size_t(t)];
         auto [i, j] = pairs_[size_t(k)];
@@ -353,7 +355,7 @@ void RigidWorld::collide() {
         cm.points.clear();
         if (A.type() == ShapeType::Compound || B.type() == ShapeType::Compound) collideCompoundPair(i, j, slots_[size_t(nb) + k]);
         else if (narrow_.collide(A.posed(), B.posed(), cm)) addManifold(slots_[size_t(nb) + k], i, j, cm);
-    }, 2);
+    }, 1);
     for (size_t s = 0; s < size_t(nb) + np; ++s)
         for (const Manifold& m : slots_[s]) manifolds_.push_back(m);
     timings_.narrow = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t1).count();
@@ -477,7 +479,11 @@ void RigidWorld::prepareContactPoints(Manifold& m, float dt) {
             p.positionBias = 0;
         } else {
             p.velocityBias = 0;
-            p.positionBias = params.baumgarte / dt * std::max(p.depth - params.slop, 0.0f);
+            // Keep the Baumgarte recovery rate on the caller's interval during CCD retries.
+            // beta * depth / h moves beta * depth even as h -> 0, defeating subdivision.
+            // With rate beta * depth / H the trial displacement tends to zero with h.
+            // See docs/book/11-atomic-rigid-step.md for the numerical recovery contract.
+            p.positionBias = params.baumgarte / correctionDt_ * std::max(p.depth - params.slop, 0.0f);
             if (!params.splitImpulse) {
                 p.velocityBias = std::max(p.velocityBias, p.positionBias);
                 p.positionBias = 0;

@@ -1,0 +1,19 @@
+[1/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/Samples.cpp.o
+[2/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/LiquidScenes.cpp.o
+[3/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/SoftBodyScenes.cpp.o
+[4/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/RigidScenes.cpp.o
+[5/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/NonConvexScenes.cpp.o
+[6/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/TorusChainsScene.cpp.o
+[7/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/HangingTorusScene.cpp.o
+[8/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/ChainWheelScene.cpp.o
+[9/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/WindTunnelScenes.cpp.o
+[10/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/FireScene.cpp.o
+[11/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/SmokeScenes.cpp.o
+[12/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/plasma/MagnetosphereScene.cpp.o
+[13/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/HydroScene.cpp.o
+[14/19] Building CXX object phys_realflow/CMakeFiles/rfsamples.dir/samples/LessonScenes.cpp.o
+[15/19] Linking CXX static library phys_realflow/librfsamples.a
+[16/19] Building CXX object CMakeFiles/realflow.dir/src/MainWindowStart.cpp.o
+[17/19] Building CXX object CMakeFiles/realflow.dir/src/ExamplesGallery.cpp.o
+[18/19] Building CXX object CMakeFiles/realflow.dir/src/MainWindow.cpp.o
+[19/19] Linking CXX executable realflow

@@ -1,0 +1,6 @@
+  many bodies: 30118 particles, 150 bodies
+  many bodies: 166.5 ms per frame, up to 1574 particle-body contacts in a pass, tree queries 451770 per frame
+  FAIL /home/wera_n/GIT/PHYSICS/phys_realflow/tests/ParticleTests.cpp:608: stepMs < 140.0f  a frame of 30 000 particles and 150 bodies costs 166.5 ms (tree: 69, brute force: 220)
+[FAIL] particles vs many bodies: the world tree (10056 ms)
+
+1 FAILURE(S)

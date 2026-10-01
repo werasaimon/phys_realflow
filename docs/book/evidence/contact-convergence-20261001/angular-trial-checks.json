@@ -1,0 +1,226 @@
+[
+  {
+    "name": "angular-chain-baseline",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/angular-chain-baseline"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 34.872819261974655
+  },
+  {
+    "name": "angular-sandbox-baseline",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/angular-sandbox-baseline",
+      "substeps20-slop0.1mm"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 10.437676865025423
+  },
+  {
+    "name": "angular-chain-candidate",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/angular-chain-candidate"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 32.702043333032634
+  },
+  {
+    "name": "angular-sandbox-candidate",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/angular-sandbox-candidate",
+      "substeps20-slop0.1mm"
+    ],
+    "environment": {},
+    "exit_code": 0,
+    "seconds": 10.563328328018542
+  },
+  {
+    "name": "angular-regression-00",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "Noether:",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-00.xml"
+    },
+    "exit_code": 0,
+    "seconds": 0.06477372598601505
+  },
+  {
+    "name": "angular-regression-01",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "box stack",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-01.xml"
+    },
+    "exit_code": 0,
+    "seconds": 0.06448311603162438
+  },
+  {
+    "name": "angular-regression-02",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "tall stack",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-02.xml"
+    },
+    "exit_code": 0,
+    "seconds": 0.06459343899041414
+  },
+  {
+    "name": "angular-regression-03",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "mixed non-convex sandbox",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-03.xml"
+    },
+    "exit_code": 1,
+    "seconds": 10.709616498963442
+  },
+  {
+    "name": "angular-regression-04",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "six cups",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-04.xml"
+    },
+    "exit_code": 1,
+    "seconds": 6.087501794972923
+  },
+  {
+    "name": "angular-regression-05",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "pile of 50",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-05.xml"
+    },
+    "exit_code": 1,
+    "seconds": 4.484005489037372
+  },
+  {
+    "name": "angular-regression-06",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "short torus chain",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-06.xml"
+    },
+    "exit_code": 0,
+    "seconds": 55.63566839398118
+  },
+  {
+    "name": "angular-regression-07",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "continuous",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-07.xml"
+    },
+    "exit_code": 0,
+    "seconds": 0.00804226502077654
+  },
+  {
+    "name": "angular-regression-08",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "taskset",
+      "-c",
+      "2-5",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/rf_tests"
+    ],
+    "environment": {
+      "RF_TEST": "CCD",
+      "RF_JUNIT": "/tmp/phys-impact-research-20261001/angular-regression-08.xml"
+    },
+    "exit_code": 0,
+    "seconds": 1.1666673910222016
+  }
+]

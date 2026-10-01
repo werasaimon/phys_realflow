@@ -1,0 +1,146 @@
+[
+  {
+    "name": "native-final-sandbox",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 6.565657193947118
+  },
+  {
+    "name": "native-final-determinism",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 29.53035227500368
+  },
+  {
+    "name": "native-final-presets",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 8.780202428984921
+  },
+  {
+    "name": "native-final-coherence",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "build-core/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 1.0698085880139843
+  },
+  {
+    "name": "strict-final-sandbox",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 23.76010516396491
+  },
+  {
+    "name": "strict-final-determinism",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 59.253442941990215
+  },
+  {
+    "name": "strict-final-presets",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 10.094989835983142
+  },
+  {
+    "name": "strict-final-coherence",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "/tmp/phys-impact-research-20261001/build-strict/rf_tests"
+    ],
+    "exit_code": 0,
+    "seconds": 1.2727846610359848
+  },
+  {
+    "name": "final-readability",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "python3",
+      "tools/readability.py",
+      "."
+    ],
+    "exit_code": 0,
+    "seconds": 0.11804356798529625
+  },
+  {
+    "name": "final-diff-check",
+    "command": [
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5,7-11",
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03285895404405892
+  }
+]

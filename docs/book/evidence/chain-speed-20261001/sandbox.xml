@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="1" failures="0" time="4.965">
+  <testcase classname="rf_tests" name="standard rigid: mixed non-convex sandbox, sleep on and off" time="4.965"/>
+</testsuite>

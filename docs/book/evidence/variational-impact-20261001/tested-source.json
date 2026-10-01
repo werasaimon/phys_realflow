@@ -1,0 +1,10 @@
+{
+  "build-core/rf_tests": "8aa399456daae8380214cf3dd969d4b171f63c2d1c7d315b3d8d9c14dd7d6163",
+  "build-core/librfcore.a": "8a15f2dad19adeddc5bba7c537350dabd02111818bf9be2aafa90a65e51c744f",
+  "src/rigid/TimeOfImpact.cpp": "c70b24ed172dc99597e6af0efa6a185d6035827d9dd50ae8b6396747643021f1",
+  "src/rigid/TimeOfImpact.h": "396cd7562552851f0833744c0b310b384781cd47036d76e5bb2cad97efe35323",
+  "src/rigid/ConservativeAdvancement.cpp": "1f4d862333a15ddceca6e1cbfd4e72eb500c1008313e06d8b726afb614b03170",
+  "src/rigid/ConservativeAdvancement.h": "50672608a41961b768675c38ccaec79ace0af4305fcb22253e1dad9847b340d6",
+  "src/rigid/VariationalImpactStep.cpp": "24b93f195950bf7678549e960d0b49dd9c5659caad526040ac9f168e2e26207f",
+  "src/rigid/VariationalFlight.cpp": "3fc5a2fd4f0d37a591cf0f9fae08fd0adf9d74a74b4d2c656cb568de7a489f67"
+}

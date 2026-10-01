@@ -1,0 +1,26 @@
+{
+  "baseline": {
+    "runs": 4,
+    "median_run_mean_ms": 16.1286925,
+    "median_run_p95_ms": 20.368900500000002,
+    "median_collision_mean_ms": 8.004856,
+    "hashes": [
+      "b4cf1967da17955c"
+    ],
+    "broken": 0,
+    "sampled_overlap_m": 0.00010341408
+  },
+  "grain1": {
+    "runs": 4,
+    "median_run_mean_ms": 14.2257295,
+    "median_run_p95_ms": 18.0316295,
+    "median_collision_mean_ms": 5.9319327,
+    "hashes": [
+      "b4cf1967da17955c"
+    ],
+    "broken": 0,
+    "sampled_overlap_m": 0.00010341408
+  },
+  "speedup_percent": 11.798619137912137,
+  "note": "Headless fixed-gesture comparison. Timings vary with system load/frequency; this is not measured GUI FPS."
+}

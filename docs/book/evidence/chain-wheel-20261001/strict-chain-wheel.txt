@@ -1,0 +1,4 @@
+  16 rings, wheel radius 0.223736 m, initial sampled depth 0.000 mm, 15 links
+[ OK ] chain wheel assembly (strict FP) (129 ms)
+  wheel: 12 s, excursion 98.73 mm, sampled overlap 0.100 mm, passive gain 0 J, late T 1.47263e-07 J, step median/p95 33.429/36.433 ms
+[ OK ] chain wheel loaded, pulled and released (strict FP) (24215 ms)

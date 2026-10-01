@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="rf_tests" tests="5" failures="0" time="139.072">
+  <testcase classname="rf_tests" name="motor work analytical and observation" time="0.004"/>
+  <testcase classname="rf_tests" name="motor work rollback" time="0.000"/>
+  <testcase classname="rf_tests" name="nut bolt assembly" time="0.016"/>
+  <testcase classname="rf_tests" name="nut bolt cycle" time="81.951"/>
+  <testcase classname="rf_tests" name="chain drive cycle" time="57.101"/>
+</testsuite>

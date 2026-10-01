@@ -1,0 +1,110 @@
+[
+  {
+    "label": "baseline",
+    "command": [
+      "c++",
+      "-std=c++17",
+      "-O3",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-fno-access-control",
+      "-Isrc",
+      "/tmp/phys-impact-research-20261001/angular_lock_probe.cpp",
+      "/tmp/phys-impact-research-20261001/build-strict/librfcore.a",
+      "-pthread",
+      "-o",
+      "/tmp/phys-impact-research-20261001/angular_lock_baseline"
+    ],
+    "results": [
+      {
+        "case": "zero normal speed",
+        "delta_energy_J": 0.0011337865,
+        "impulse_Nms": 0.04761904,
+        "expected_Nms": 0,
+        "normal_speed_after": 0.04761904,
+        "delta_angular_momentum": 0.047619037
+      },
+      {
+        "case": "normal spin",
+        "delta_energy_J": -0.07959184,
+        "impulse_Nms": -0.42857143,
+        "expected_Nms": -0.4,
+        "normal_speed_after": -0.028571427,
+        "delta_angular_momentum": 0.42857143
+      },
+      {
+        "case": "dynamic pair",
+        "delta_energy_J": -0.08836167,
+        "impulse_Nms": -0.3404762,
+        "expected_Nms": -0.3,
+        "normal_speed_after": -0.08095242,
+        "delta_angular_momentum": 7.450581e-09
+      },
+      {
+        "case": "clamped pair",
+        "delta_energy_J": -0.005900001,
+        "impulse_Nms": -0.01,
+        "expected_Nms": -0.01,
+        "normal_speed_after": 0.58000004,
+        "delta_angular_momentum": 2.2351742e-08
+      }
+    ]
+  },
+  {
+    "label": "candidate",
+    "command": [
+      "c++",
+      "-std=c++17",
+      "-O3",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-fno-access-control",
+      "-Isrc",
+      "/tmp/phys-impact-research-20261001/angular_lock_probe.cpp",
+      "/tmp/phys-impact-research-20261001/build-angular-trial/librfcore.a",
+      "-pthread",
+      "-o",
+      "/tmp/phys-impact-research-20261001/angular_lock_candidate"
+    ],
+    "results": [
+      {
+        "case": "zero normal speed",
+        "delta_energy_J": 0,
+        "impulse_Nms": 0,
+        "expected_Nms": 0,
+        "normal_speed_after": 0,
+        "delta_angular_momentum": 0
+      },
+      {
+        "case": "normal spin",
+        "delta_energy_J": -0.08,
+        "impulse_Nms": -0.4,
+        "expected_Nms": -0.4,
+        "normal_speed_after": 0,
+        "delta_angular_momentum": 0.4
+      },
+      {
+        "case": "dynamic pair",
+        "delta_energy_J": -0.09,
+        "impulse_Nms": -0.3,
+        "expected_Nms": -0.3,
+        "normal_speed_after": -1.4901161e-08,
+        "delta_angular_momentum": 1.6660005e-08
+      },
+      {
+        "case": "clamped pair",
+        "delta_energy_J": -0.005900001,
+        "impulse_Nms": -0.01,
+        "expected_Nms": -0.01,
+        "normal_speed_after": 0.58000004,
+        "delta_angular_momentum": 2.2351742e-08
+      }
+    ]
+  }
+]

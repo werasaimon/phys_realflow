@@ -1,0 +1,10 @@
+  scene                             allocs mean   allocs max      step ms        limit
+  rigid tower (100 boxes)                    40           40         4.28          150
+  100 teapots                               103          152        10.29          200
+  water: wave in a pool                    1033         1400        77.03         2500
+  fire: burning curtain                     210          211        38.13         1100
+  magnetosphere                             101          101       105.00         1300
+  terrain: 150 bodies on a mesh             244          783         2.43          250
+[ OK ] memory: allocations per frame of every scene (7846 ms)
+
+ALL PASSED

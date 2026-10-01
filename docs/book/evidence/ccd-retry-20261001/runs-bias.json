@@ -1,0 +1,14 @@
+[
+  {
+    "name": "default-bias",
+    "filter": null,
+    "exit_code": 0,
+    "elapsed_s": 435.3969397500041
+  },
+  {
+    "name": "standard-bias",
+    "filter": "standard rigid:",
+    "exit_code": 0,
+    "elapsed_s": 479.61408376903273
+  }
+]

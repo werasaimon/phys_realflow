@@ -1,8 +1,8 @@
-// Independent sampled-pose SAT audit of the actual convex children of sample 39.
+// Independent sampled-pose SAT audit of the actual convex children of torus-chain samples.
 // Double precision, triangle face normals and all edge cross products; no GJK/EPA/seam filter.
 // SAT theorem: https://www.geometrictools.com/Documentation/MethodOfSeparatingAxes.pdf
 // Usage: rf_torus_geometry_audit NEW_DIRECTORY [POSES_CSV [CHECKPOINT [PRESET]]]
-// PRESET defaults to 39; use 40 for the short hanging chain.
+// PRESET defaults to 39; 40 hanging chain, 41 fixed wheel, 42 drive, 43 threaded nut/bolt.
 // Pair CSV: body 67/68 at defect substeps. Body CSV: all pairs at selected frame checkpoints.
 // CHECKPOINT=-2 audits every body frame, writing positive overlaps plus per-frame summaries.
 #include "samples/Samples.h"
@@ -216,8 +216,10 @@ int main(int argc, char** argv) {
         if (!csv) throw std::runtime_error("cannot write audit");
         csv << "substep,body_a,body_b,overlapping_child_pairs,max_child_sat_depth_m,over_0_1mm,over_0_5mm\n";
         const int preset=argc==5 ? std::stoi(argv[4]) : int(rf::Preset::TorusChains);
-        if(preset!=int(rf::Preset::TorusChains) && preset!=int(rf::Preset::HangingTorus))
-            throw std::runtime_error("expected torus-chain preset 39 or 40");
+        if(preset!=int(rf::Preset::TorusChains) && preset!=int(rf::Preset::HangingTorus)
+            && preset!=int(rf::Preset::ChainWheel) && preset!=int(rf::Preset::ChainDrive)
+            && preset!=int(rf::Preset::NutBolt))
+            throw std::runtime_error("expected contact fixture preset 39..43");
         rf::Simulation sim; rf::loadSample(sim,rf::Preset(preset));
         std::vector<std::vector<Poly>> shapes;
         for (const auto& b : sim.rigid.bodies()) shapes.push_back(geometry(b));

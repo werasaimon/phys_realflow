@@ -1,0 +1,12 @@
+{
+  "src/rigid/ContactSolver.cpp": "75a84440a9f4fbeeaf2318e24d3ddf0e07d1405d0e5fb5da4e90d326aa7933a9",
+  "src/rigid/RigidWorld.h": "5c02710b58bd9607fc48b7bc21eb520bba2d0ac9237f89e7f93645e95515b2a4",
+  "src/core/Parallel.cpp": "141c0cddef823074557fc246735c7c9624dd2dba5c479925e563844b83826370",
+  "samples/HangingTorusScene.cpp": "abf0f01b7a977b529583097b1b237b06251da3074548f346533494d3b1914d7b",
+  "build-core/rf_tests": "1455c460cb92190604ded1800689d47c21dbd6759d23eca017cfb41160634af5",
+  "build-core/librfcore.a": "cc7021cac016b6d10a038ff7266008aa4832366d214fe5803d9e7123eea94b9b",
+  "build-core/librfsamples.a": "1233fd55013a42422d7fb9bde62fb46b47bda4b1c6610a132696c9eb6a396530",
+  "/tmp/phys-chain-speed-20261001/chain_profile_before": "18a39cd103ecf2202a435285d0598d2964ddd9d8212310b6f2a982e19151783d",
+  "/tmp/phys-chain-speed-20261001/grain1/chain_profile": "4c3189d9dbf0bacb4ad00dde12b12b9957a89ac407cb164741324ecaba0f8eb9",
+  "/tmp/phys-realflow-editor-standard-build/realflow": "162469072e26e7052b17f520841eb83f9acca23e94123cedc04c29b493ce0ff9"
+}

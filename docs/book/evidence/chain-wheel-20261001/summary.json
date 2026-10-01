@@ -1,0 +1,46 @@
+{
+  "trajectory_hash_1_2_5_threads": "76768679d173803d",
+  "refinement": [
+    {
+      "substeps": [
+        40,
+        80
+      ],
+      "max_position_difference_m": 0.0004487944981374119,
+      "tip_difference_m": 0.0004464823523860336,
+      "energy_difference_J": 0.01111500000000376,
+      "dynamic_com_difference_m": 0.00012135532798191714,
+      "dynamic_com_height_difference_m": 6.228750000003558e-05,
+      "max_orientation_difference_rad": 0.004384997134543032
+    },
+    {
+      "substeps": [
+        80,
+        160
+      ],
+      "max_position_difference_m": 0.0007071399861248191,
+      "tip_difference_m": 0.0007071399861248191,
+      "energy_difference_J": 0.009229999999988081,
+      "dynamic_com_difference_m": 0.00013576715574424537,
+      "dynamic_com_height_difference_m": 5.1696249999899635e-05,
+      "max_orientation_difference_rad": 0.021035529754078415
+    },
+    {
+      "substeps": [
+        40,
+        160
+      ],
+      "max_position_difference_m": 0.0006714731213328832,
+      "tip_difference_m": 0.0005859195072545516,
+      "energy_difference_J": 0.020344999999991842,
+      "dynamic_com_difference_m": 0.00011999695678029575,
+      "dynamic_com_height_difference_m": 0.00011398374999993521,
+      "max_orientation_difference_rad": 0.019767371976424492
+    }
+  ],
+  "refinement_note": "Position differences are not monotonically decreasing; asymptotic convergence is not demonstrated.",
+  "sat_checkpoints": 14,
+  "sat_initial_max_depth_m": 0.0,
+  "sat_sampled_max_depth_m": 0.00010048895,
+  "sat_note": "Sampled poses only, maximum convex-child SAT depth; not swept CCD or exact union depth."
+}
