@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-01",
+  "sdk_base": "18c1e1fe2c16a14df1366c1fb56dae88816a70c9",
+  "scope": "recorded C++ simulation, visualization only; no new trajectory",
+  "commands": [
+    "sh tools/plot_chain_jitter.sh"
+  ],
+  "versions": {
+    "gnuplot": "gnuplot 5.4 patchlevel 2",
+    "graphviz": "dot - graphviz version 2.43.0 (0)"
+  },
+  "inputs": {
+    "docs/book/evidence/chain-jitter-20261001/rest.csv": "5b71e135301350f2581ff1f7ca69c8a51881f2f782f4a5912ba3fce81d9fb7b3",
+    "docs/book/evidence/chain-jitter-20261001/rp3-rest.csv": "51c2d3d5275155e50fad9ffaeb0aa8ba46a8e80bc03b66963a97cd2f4f9e7b5e",
+    "docs/book/evidence/chain-jitter-20261001/rp3-iter24-rest.csv": "881711251b5bc8817b74886083f648fbddc8b58c5d61a0db13ea97004928104e",
+    "docs/book/evidence/chain-jitter-20261001/pull.csv": "50e9e8385091b007bd81e4ff4cf3e56c242591b5e3ff35624e607e2b8e17ad01",
+    "docs/book/evidence/chain-jitter-20261001/rp3-pull.csv": "966b10704c73d1a2e6704b8f60503bb0608fad50df077e0aca07f15e31f61c64",
+    "docs/book/evidence/chain-jitter-20261001/rp3-iter24-pull.csv": "bf8f09a42b7631c5f845652ff282f3ec5ef1b57d517b144428f7fd258af14c54",
+    "docs/book/evidence/chain-jitter-20261001/counterfactual-785.csv": "fddead98465092130482d45318e8a07db2944eddefd744844554c99585ad9533"
+  },
+  "generators": {
+    "tools/plot_chain_jitter.gnuplot": "eab2426a2ed3c08146a784b6fa668d2318cc463934aae0cfe596e4774a813f6a",
+    "docs/images/chain-jitter-20261001/split-energy.dot": "b6a6d5233652474fc838a7d5ec7128ad82879960f2dc8470e8934c7fefeae121",
+    "tools/plot_chain_jitter.sh": "b5a727ea08135be33e92113ab52fbaefd325d085ec65c97269347dea60088c7b"
+  },
+  "outputs": {
+    "docs/images/chain-jitter-20261001/rest-kinetic.svg": "3768e4a345471fef31d7c19fb76aee6ff527321639697e6a1d556b92620a7d89",
+    "docs/images/chain-jitter-20261001/positive-energy.svg": "609e197194327a2725d50c2a8bdcbbef79bc8f80e437ac482672d65d0ab6ab54",
+    "docs/images/chain-jitter-20261001/frame-785-budget.svg": "f30c94dada47909251868f702e18ded1119b0ab880b8c117c63a71caddd4e3d2",
+    "docs/images/chain-jitter-20261001/split-energy.svg": "a0dc40aa160e05d5d3f58dade5e0b3f82f5ceb478f6dad599de2b4221bd8b122",
+    "docs/images/chain-jitter-20261001/plot-values.txt": "cd4e229c3170e79c27855dca78bf4dacac1364c0e0b752dc96dd03f94e37770e"
+  }
+}

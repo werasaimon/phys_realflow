@@ -1,0 +1,47 @@
+{
+  "replay": "/tmp/phys-chain-contacts-_1wuqcoc",
+  "command": "python3 docs/book/evidence/chain-jitter-20261001/reproduce_contacts.py",
+  "comparisons": [
+    {
+      "file": "late-contacts-1399.json",
+      "identical": true,
+      "sha256": "7d2bc3d8a99bd21c04a763e76099049d7d32ae2c228bca9b1cee273a3f2bcc26"
+    },
+    {
+      "file": "late-contacts-1399-energy.csv",
+      "identical": true,
+      "sha256": "4e657482fe984ce3bbd8c7cd2a4cae155fed1f69dd4531e6e6e1a3787246890b"
+    },
+    {
+      "file": "late-contacts-1399-contacts.csv",
+      "identical": true,
+      "sha256": "58ff10126e79e212bb8d852a72faddb20cada38c294670a3633345240436c32c"
+    },
+    {
+      "file": "late-contacts-1399-summary.json",
+      "identical": true,
+      "sha256": "f4deeabddd10d56b1b431a2f73c027409ba99353815a99ae7910a929e3cfdf1c"
+    },
+    {
+      "file": "late-contacts-1728.json",
+      "identical": true,
+      "sha256": "405017b1b4c65d44efbc0ea846f1c926ec07019ab563dadb585f7ebe041779e7"
+    },
+    {
+      "file": "late-contacts-1728-energy.csv",
+      "identical": true,
+      "sha256": "25ac18bb4893909e0b20ecfbd9b190daddaeb3ac434f4f8d09ff1dc7a5801c94"
+    },
+    {
+      "file": "late-contacts-1728-contacts.csv",
+      "identical": true,
+      "sha256": "bcc95ecbd255d67eade233ee2e190ef16468c4ac79f3e459b4d740edb08bb6df"
+    },
+    {
+      "file": "late-contacts-1728-summary.json",
+      "identical": true,
+      "sha256": "def1824e4134074af38959d9bd2f2e6c04a3bb40e07600f04911015870bdf769"
+    }
+  ],
+  "scope": "two selected frames of isolated candidate; not full regression"
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "name": "beta005-rest",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/beta005-rest.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab",
+      "1800",
+      "0",
+      "5",
+      "/tmp/phys-chain-jitter-20261001/beta005-rest.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 21.717431067023426
+  },
+  {
+    "name": "beta005-pull",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/beta005-pull.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab",
+      "1800",
+      "1",
+      "5",
+      "/tmp/phys-chain-jitter-20261001/beta005-pull.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 28.226360202010255
+  },
+  {
+    "name": "iter24-rest",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/iter24-rest.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab",
+      "1800",
+      "0",
+      "6",
+      "/tmp/phys-chain-jitter-20261001/iter24-rest.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 34.38164057803806
+  },
+  {
+    "name": "iter24-pull",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/iter24-pull.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab",
+      "1800",
+      "1",
+      "6",
+      "/tmp/phys-chain-jitter-20261001/iter24-pull.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 38.537225655978546
+  }
+]

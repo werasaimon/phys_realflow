@@ -1,0 +1,4 @@
+  wheel: 12 s, excursion 98.19 mm, sampled overlap 0.101 mm, passive gain 0 J, late T 1.62444e-07 J, step median/p95 33.585/40.931 ms
+[ OK ] standard rigid: chain wheel loaded, pulled and released (25460 ms)
+
+ALL PASSED

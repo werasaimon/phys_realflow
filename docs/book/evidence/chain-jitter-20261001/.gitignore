@@ -1,0 +1,4 @@
+# Deliberately published observations referenced by the book and plot generators.
+!*.csv
+# Published regression logs, including the explicitly incomplete default run.
+!rp3-*.log

@@ -1,0 +1,2 @@
+frame785_stage_delta_E_J=0.000159468327
+frame785_split_local_delta_U_J=0.001692310465

@@ -658,7 +658,7 @@ void RigidWorld::warmStartManifold(Manifold& m, const CachedPair& old, float cel
 // Block solver (Box2D's 2-point block solver generalised to <= 4 points): the normal impulses of
 // the manifold are found together as the exact solution of the small LCP by enumerating active
 // sets, largest first (ContactLcp.h). A small CFM on the diagonal makes 4 coplanar points (rank-3 K)
-// well posed and selects the minimum-energy, i.e. symmetric, load distribution.
+// well posed by regularizing the impulse norm; symmetric loading needs symmetric geometry.
 void RigidWorld::blockNormalSolve(Manifold& m) {
     RigidBody& A = bodies_[m.a];
     RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
@@ -797,7 +797,7 @@ float RigidWorld::solveNormalImpulses(Manifold& m) {
 }
 
 // Split impulse (Catto 2006): penetration is pushed out through separate pseudo velocities that
-// move the bodies but never enter their real velocities - no energy from the position correction.
+// move the bodies without directly changing real velocities; potential energy can change.
 // Never warm started.
 void RigidWorld::solveSplitImpulse(Manifold& m) {
     const RigidBody& A = bodies_[m.a];

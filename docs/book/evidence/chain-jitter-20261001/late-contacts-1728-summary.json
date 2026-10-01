@@ -1,0 +1,79 @@
+{
+  "frame": 1728,
+  "time_s": 28.8,
+  "actual": {
+    "frame": 1728,
+    "pull": 1,
+    "matched_substeps": 40,
+    "delta_E_J": 1.9951449e-05,
+    "delta_T_J": 8.38604e-10,
+    "delta_U_J": 1.995061e-05
+  },
+  "warm_rows": 8800,
+  "patch_observations": 2800,
+  "patches_with_reused_old": 2080,
+  "excess_assignments": 4480,
+  "loaded_rows_in_reused_groups": 1132,
+  "hash_multi_hits": 6960,
+  "chosen_not_nearest": 4480,
+  "max_chosen_distance_m": 0.006228029,
+  "max_normal_angle_deg": 0.03625627653217468,
+  "stage_totals": {
+    "start": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "gravity-kick": {
+      "delta_T_J": 0.0027110317169999998,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0027110317169999998
+    },
+    "collide": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "warm-start": {
+      "delta_T_J": -0.0022999415440000002,
+      "delta_U_J": 0.0,
+      "delta_E_J": -0.0022999415440000002
+    },
+    "contact-iteration": {
+      "delta_T_J": -0.0004110066538944101,
+      "delta_U_J": 0.0,
+      "delta_E_J": -0.0004110066539163396
+    },
+    "restitution": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "shock": {
+      "delta_T_J": -8.252088750000003e-08,
+      "delta_U_J": 0.0,
+      "delta_E_J": -8.252088420000001e-08
+    },
+    "rest-damping": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "pose-drift": {
+      "delta_T_J": -1.6844154090000004e-10,
+      "delta_U_J": 1.9950609839999995e-05,
+      "delta_E_J": 1.9950441255782605e-05
+    },
+    "split-counterfactual": {
+      "delta_T_J": 1.3115684958999998e-14,
+      "delta_U_J": 7.464853099999996e-05,
+      "delta_E_J": 7.464853099999996e-05
+    },
+    "finish": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    }
+  },
+  "scope": "two chosen frames; reused old points observed, causal effect not isolated"
+}

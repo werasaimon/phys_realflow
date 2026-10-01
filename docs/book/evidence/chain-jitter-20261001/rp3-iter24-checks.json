@@ -1,0 +1,52 @@
+[
+  {
+    "name": "rp3-iter24-rest",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-iter24-rest.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab-rp3",
+      "1800",
+      "0",
+      "6",
+      "/tmp/phys-chain-jitter-20261001/rp3-iter24-rest.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 31.828567671997007
+  },
+  {
+    "name": "rp3-iter24-pull",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-iter24-pull.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-ab-rp3",
+      "1800",
+      "1",
+      "6",
+      "/tmp/phys-chain-jitter-20261001/rp3-iter24-pull.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 38.873073620023206
+  }
+]

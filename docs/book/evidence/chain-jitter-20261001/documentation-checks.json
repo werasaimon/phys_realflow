@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-01",
+  "cpp_examples": {
+    "passed": 3,
+    "source": "tools/BookContactChecks.cpp",
+    "command": "c++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/BookContactChecks.cpp build-core/librfcore.a -pthread -o /tmp/rf_book_contact_checks",
+    "output": "pose correction: delta_U_J=0.009810001, T_before_J=0.5, T_after_J=0.75\nzero-target split: impulse_Ns=0.4, relative_pseudo_velocity_m_s=7.450581e-09\nRayleigh: viscous_power_W=-12, dry_power_W=-4\nPASS: 3 book examples; scope excludes complete simulation\n",
+    "scope": "local book examples, not complete contact simulation"
+  },
+  "existing_python_examples": 6,
+  "local_links_valid": 513,
+  "readability_passed": true,
+  "diff_check_passed": true,
+  "replay_identical_files": 8,
+  "sdk_changes": "comments only; no executed formulas changed",
+  "svg_valid": 4,
+  "generated_reference_block_unchanged": true,
+  "guide_unchanged": true,
+  "graph_energy_deltas_checked": true,
+  "graph_manifest": "docs/images/chain-jitter-20261001/manifest.json",
+  "markdown_files_checked": 73,
+  "all_local_links_valid": 1254,
+  "all_markdown_links_report": "docs/book/evidence/chain-jitter-20261001/markdown-link-checks.json"
+}

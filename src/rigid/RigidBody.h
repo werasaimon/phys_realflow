@@ -24,7 +24,7 @@ struct RigidBody {
     // collider itself is drawn. The solver never reads it; it is for viewers only.
     std::shared_ptr<const TriMesh> visualMesh;
     Vector3 force, torque; // accumulated external loads for the next step
-    // Split-impulse pseudo velocities: move the body out of penetration without adding momentum.
+    // Split pseudo velocities correct poses without directly changing physical velocities.
     Vector3 biasVel, biasAngVel;
     // Island sleeping (Box2D-style): time spent below the sleep thresholds, and the state.
     float sleepTimer = 0;

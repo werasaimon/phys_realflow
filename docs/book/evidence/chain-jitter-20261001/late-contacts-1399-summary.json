@@ -1,0 +1,79 @@
+{
+  "frame": 1399,
+  "time_s": 23.316666666666666,
+  "actual": {
+    "frame": 1399,
+    "pull": 0,
+    "matched_substeps": 40,
+    "delta_E_J": 1.6837994e-05,
+    "delta_T_J": -6.187903e-07,
+    "delta_U_J": 1.7456783e-05
+  },
+  "warm_rows": 8240,
+  "patch_observations": 2560,
+  "patches_with_reused_old": 2000,
+  "excess_assignments": 4040,
+  "loaded_rows_in_reused_groups": 925,
+  "hash_multi_hits": 6320,
+  "chosen_not_nearest": 4040,
+  "max_chosen_distance_m": 0.006257962,
+  "max_normal_angle_deg": 0.025655819925572122,
+  "stage_totals": {
+    "start": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "gravity-kick": {
+      "delta_T_J": 0.0037229069580000003,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0037229069580000003
+    },
+    "collide": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "warm-start": {
+      "delta_T_J": 0.004544081771,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.004544081771
+    },
+    "contact-iteration": {
+      "delta_T_J": -0.008242042772779993,
+      "delta_U_J": 0.0,
+      "delta_E_J": -0.008242042772909993
+    },
+    "restitution": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "shock": {
+      "delta_T_J": -2.5562518740000004e-05,
+      "delta_U_J": 0.0,
+      "delta_E_J": -2.5562518770000004e-05
+    },
+    "rest-damping": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "pose-drift": {
+      "delta_T_J": -2.199224277e-09,
+      "delta_U_J": 1.745678372e-05,
+      "delta_E_J": 1.7454584178114996e-05
+    },
+    "split-counterfactual": {
+      "delta_T_J": 1.6106967181e-14,
+      "delta_U_J": 0.001072179018,
+      "delta_E_J": 0.001072179018
+    },
+    "finish": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    }
+  },
+  "scope": "two chosen frames; reused old points observed, causal effect not isolated"
+}

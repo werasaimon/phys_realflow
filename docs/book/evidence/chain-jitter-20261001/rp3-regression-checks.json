@@ -1,0 +1,112 @@
+[
+  {
+    "name": "default",
+    "filter": null,
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-default.resources",
+      "/tmp/phys-chain-jitter-20261001/rf-tests-rp3"
+    ],
+    "exit_code": 124,
+    "seconds": 180.0029687359929
+  },
+  {
+    "name": "hanging",
+    "filter": "short torus chain",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-hanging.resources",
+      "/tmp/phys-chain-jitter-20261001/rf-tests-rp3"
+    ],
+    "exit_code": 0,
+    "seconds": 28.63414862699574
+  },
+  {
+    "name": "wheel",
+    "filter": "chain wheel loaded",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-wheel.resources",
+      "/tmp/phys-chain-jitter-20261001/rf-tests-rp3"
+    ],
+    "exit_code": 0,
+    "seconds": 25.467327825026587
+  },
+  {
+    "name": "drive",
+    "filter": "chain drive lifts",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-drive.resources",
+      "/tmp/phys-chain-jitter-20261001/rf-tests-rp3"
+    ],
+    "exit_code": 0,
+    "seconds": 45.100173446000554
+  },
+  {
+    "name": "nut",
+    "filter": "nut bolt lifts",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rp3-nut.resources",
+      "/tmp/phys-chain-jitter-20261001/rf-tests-rp3"
+    ],
+    "exit_code": 0,
+    "seconds": 72.30463599599898
+  }
+]

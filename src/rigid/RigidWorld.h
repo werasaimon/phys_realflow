@@ -55,7 +55,7 @@ struct RigidParams {
     bool collideWithDomain = true;
     bool warmStarting = true;
     bool measureMotorWork = false; // observational impulse work; reported only for accepted trials
-    bool splitImpulse = true;   // penetration recovery on pseudo velocities (no energy gain)
+    bool splitImpulse = true;   // pseudo-velocity recovery; potential energy can change
     // Shock propagation (Guendelman, Bridson, Fedkiw 2003): final passes solve contacts level by
     // level from the ground up, treating the lower body as infinitely heavy, so impulses travel
     // in one direction only and tall stacks behave like short ones.

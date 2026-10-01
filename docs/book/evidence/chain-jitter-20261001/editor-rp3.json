@@ -1,0 +1,23 @@
+{
+  "pid": 1758052,
+  "window": "0x6c00007",
+  "preset": 40,
+  "command": [
+    "nice",
+    "-n",
+    "5",
+    "taskset",
+    "-c",
+    "1-5",
+    "/tmp/phys-chain-jitter-20261001/realflow-rp3",
+    "--preset",
+    "40",
+    "--size",
+    "1400x900"
+  ],
+  "running": false,
+  "log": "/tmp/phys-chain-jitter-20261001/editor-rp3.log",
+  "screenshot": "/tmp/phys-chain-jitter-20261001/editor-rp3.png",
+  "solver": "RP3D zero-target split rows; 12 iterations; sleeping off",
+  "exit_code": 0
+}

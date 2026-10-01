@@ -1,0 +1,52 @@
+[
+  {
+    "name": "late-contacts-1399",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "120s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1399.resources",
+      "/tmp/phys-chain-jitter-20261001/late-contact-rp3",
+      "1399",
+      "0",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1399-energy.csv",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1399-contacts.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 15.835203070018906
+  },
+  {
+    "name": "late-contacts-1728",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "120s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1728.resources",
+      "/tmp/phys-chain-jitter-20261001/late-contact-rp3",
+      "1728",
+      "1",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1728-energy.csv",
+      "/tmp/phys-chain-jitter-20261001/late-contacts-1728-contacts.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 26.44868306000717
+  }
+]

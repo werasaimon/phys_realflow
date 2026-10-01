@@ -69,6 +69,9 @@ nice -n 15 cmake --build build-core --parallel 2
 python3 tools/check_book_math.py
 python3 tools/contact_projection_reference.py --output /tmp/contact-book-new.json
 python3 tools/readability.py .
+c++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/BookContactChecks.cpp \
+    build-core/librfcore.a -pthread -o /tmp/rf_book_contact_checks
+/tmp/rf_book_contact_checks
 ```
 
 Затем **последовательно**, без второго тяжёлого процесса:
@@ -99,6 +102,22 @@ nice -n 15 env RF_THREADS=2 RF_TEST="standard rigid:" \
 ```sh
 nice -n 15 env RF_THREADS=2 RF_TEST="short torus chain" build-core/rf_tests
 ```
+
+## Приращения энергии и проверка стадий
+
+[Новый протокол](evidence/chain-jitter-20261001/README.md) вычисляет малые
+приращения в double **до** сериализации. Вычитание округлённых столбцов
+полной энергии около 33 Дж не воспроизводит микроджоулевые изменения.
+Из локальных сравнений split/без split получаем вклад коррекции из одинаковых
+входных состояний; их результаты не передаются следующему подшагу и не
+прибавляются повторно к сумме стадий.
+
+Поэтапный повтор проверяется против обычного атомарного шага по позам и
+физическим скоростям. Совпадение в отдельных выбранных кадрах подтверждает
+их разбор, но не является доказательством всех траекторий или всех кэшей.
+Python-обвязка запускает C++-зонды и читает CSV; физический решатель остаётся
+в SDK на C++17. [Графики](../../tools/plot_chain_jitter.gnuplot) читают те же
+CSV и могут быть перестроены без запуска новой симуляции.
 
 ## Что сохранять вместе с выводом
 

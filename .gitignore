@@ -25,3 +25,9 @@ compile_commands.json
 # Python caches and editors' temporary files
 __pycache__/
 *.tmp.*
+
+# Local agent guidance and workspace configuration
+/AGENTS.md
+/.agents/
+/.codex/
+/CLAUDE.local.md

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "rest",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/rest.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-probe",
+      "1800",
+      "0",
+      "0",
+      "/tmp/phys-chain-jitter-20261001/rest.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 22.76991456601536
+  },
+  {
+    "name": "pull",
+    "command": [
+      "timeout",
+      "--kill-after=5s",
+      "180s",
+      "nice",
+      "-n",
+      "10",
+      "taskset",
+      "-c",
+      "1-5",
+      "/usr/bin/time",
+      "-v",
+      "-o",
+      "/tmp/phys-chain-jitter-20261001/pull.resources",
+      "/tmp/phys-chain-jitter-20261001/jitter-probe",
+      "1800",
+      "1",
+      "0",
+      "/tmp/phys-chain-jitter-20261001/pull.csv"
+    ],
+    "exit_code": 0,
+    "seconds": 27.328496671980247
+  }
+]

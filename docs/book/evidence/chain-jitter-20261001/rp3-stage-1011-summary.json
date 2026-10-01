@@ -1,0 +1,75 @@
+{
+  "actual": {
+    "frame": 1011,
+    "pull": 1,
+    "matched_substeps": 40,
+    "delta_E_J": 7.50329e-05,
+    "delta_T_J": 1.7144062e-06,
+    "delta_U_J": 7.331849e-05
+  },
+  "stage_totals": {
+    "start": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "gravity-kick": {
+      "delta_T_J": 0.0030504244220000004,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0030504244220000004
+    },
+    "collide": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "warm-start": {
+      "delta_T_J": 0.011625204870000001,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.011625204870000001
+    },
+    "contact-iteration": {
+      "delta_T_J": -0.014668617521092997,
+      "delta_U_J": 0.0,
+      "delta_E_J": -0.014668617520810992
+    },
+    "restitution": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "shock": {
+      "delta_T_J": -5.288972525999999e-06,
+      "delta_U_J": 0.0,
+      "delta_E_J": -5.2889725259999985e-06
+    },
+    "rest-damping": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    },
+    "pose-drift": {
+      "delta_T_J": -8.467071609999998e-09,
+      "delta_U_J": 7.331849088000005e-05,
+      "delta_E_J": 7.331002413217998e-05
+    },
+    "split-counterfactual": {
+      "delta_T_J": 8.367871888999999e-12,
+      "delta_U_J": 0.0004340920174,
+      "delta_E_J": 0.00043409202580000007
+    },
+    "finish": {
+      "delta_T_J": 0.0,
+      "delta_U_J": 0.0,
+      "delta_E_J": 0.0
+    }
+  },
+  "counterfactual_split_delta": {
+    "delta_T_J": 8.367871888999999e-12,
+    "delta_U_J": 0.0004340920174,
+    "delta_E_J": 0.00043409202580000007
+  },
+  "local_no_split_delta_E_J": -0.0003590591258000001,
+  "predicted_split_U_J": 0.0004514167304,
+  "max_corrected_points": 13
+}

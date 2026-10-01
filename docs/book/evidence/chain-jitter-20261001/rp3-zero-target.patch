@@ -1,0 +1,11 @@
+--- a/src/rigid/ContactSolver.cpp
++++ b/src/rigid/ContactSolver.cpp
+@@ -802,7 +802,7 @@ void RigidWorld::solveSplitImpulse(Manifold& m) {
+     const RigidBody& A = bodies_[m.a];
+     const RigidBody* B = m.b >= 0 ? &bodies_[m.b] : nullptr;
+     for (SolverPoint& p : m.points) {
+-        if (p.positionBias <= 0) continue;
++        if (p.depth < 0) continue; // Keep zero-target rows for touching contacts (RP3D-style).
+         Vector3 bvA = A.biasVel + cross(A.biasAngVel, p.position - A.pos);
+         Vector3 bvB = B ? B->biasVel + cross(B->biasAngVel, p.position - B->pos) : Vector3(0.0f);
+         float vb = dot(bvA - bvB, p.normal);
